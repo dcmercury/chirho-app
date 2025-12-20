@@ -13,7 +13,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "ai.chirho.app",
+      "bundleIdentifier": "com.thepines.chirho",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
