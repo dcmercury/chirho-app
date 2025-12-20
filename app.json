@@ -31,7 +31,6 @@
       }
     },
     "owner": "thepines",
-    "newArchEnabled": false,
     "plugins": [
       "expo-asset"
     ]
