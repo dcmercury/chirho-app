@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "ChiRho",
+    "slug": "chirho",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FDF8F3"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.dailyoffice.chirho",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FDF8F3"
+      },
+      "package": "com.dailyoffice.chirho"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "8fb89930-41e6-4912-809b-eee74fdd71a9"
+      }
+    },
+    "owner": "thepines"
+  }
+}
