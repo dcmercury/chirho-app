@@ -212,7 +212,7 @@ eas submit --platform android
 
 ---
 
-## Configuration Reference
+## Configuration References
 
 ### app.json - Key Settings
 
