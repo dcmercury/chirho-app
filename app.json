@@ -13,7 +13,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.dailyoffice.chirho",
+      "bundleIdentifier": "ai.chirho.app",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -23,7 +23,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FDF8F3"
       },
-      "package": "com.dailyoffice.chirho"
+      "package": "ai.chirho.app"
     },
     "extra": {
       "eas": {
