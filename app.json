@@ -31,6 +31,9 @@
         "projectId": "8fb89930-41e6-4912-809b-eee74fdd71a9"
       }
     },
-    "owner": "thepines"
+    "owner": "thepines",
+    "plugins": [
+      "expo-asset"
+    ]
   }
 }
