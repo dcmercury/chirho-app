@@ -17,7 +17,10 @@
       "distribution": "internal"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "ios": {
+        "image": "macos-ventura-14.3-xcode-15.2"
+      }
     }
   },
   "submit": {
