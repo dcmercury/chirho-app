@@ -2,18 +2,18 @@
   "expo": {
     "name": "ChiRho",
     "slug": "chirho",
-    "version": "1.0.0",
+    "version": "1.1.0",
+    "scheme": "chirho",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#FDF8F3"
-    },
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.thepines.chirho",
+      "associatedDomains": [
+        "applinks:chirho.ai",
+        "applinks:www.chirho.ai"
+      ],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -23,16 +23,93 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FDF8F3"
       },
-      "package": "ai.chirho.app"
+      "package": "ai.chirho.app",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "chirho.ai",
+              "pathPrefix": "/prayercards"
+            },
+            {
+              "scheme": "https",
+              "host": "chirho.ai",
+              "pathPrefix": "/groups"
+            },
+            {
+              "scheme": "https",
+              "host": "www.chirho.ai",
+              "pathPrefix": "/prayercards"
+            },
+            {
+              "scheme": "https",
+              "host": "www.chirho.ai",
+              "pathPrefix": "/groups"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-asset",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#8B4513",
+          "sounds": []
+        }
+      ],
+      "expo-status-bar",
+      "expo-font",
+      "expo-image",
+      "expo-video",
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "backgroundColor": "#FDF8F3",
+          "resizeMode": "contain"
+        }
+      ],
+      "@clerk/expo",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow ChiRho to choose a profile photo.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
     },
     "extra": {
       "eas": {
         "projectId": "8fb89930-41e6-4912-809b-eee74fdd71a9"
+      },
+      "router": {
+        "origin": false
       }
     },
-    "owner": "thepines",
-    "plugins": [
-      "expo-asset"
-    ]
+    "owner": "thepines"
   }
 }

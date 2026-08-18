@@ -1,0 +1,85 @@
+{
+  "steps": [
+    {
+      "type": "info",
+      "title": "ChiRho",
+      "subtitle": "AI Prayer",
+      "description": "Ancient prayer for a new world.",
+      "backgroundImage": "/intro.png",
+      "video": "/intro.mp4",
+      "footerLabel": "Welcome",
+      "overlayOpacity": 0.6,
+      "logo": "/chirho.svg"
+    },
+    {
+      "type": "info",
+      "title": "Prayer Cards",
+      "subtitle": "Scripture-rooted",
+      "description": "AI-crafted prayers grounded in Scripture for whatever burdens your heart.",
+      "backgroundImage": "/intro.png",
+      "video": null,
+      "footerLabel": "Discover",
+      "overlayOpacity": 0.65,
+      "cards": [
+        {
+          "title": "Morning Prayer",
+          "verse": "Psalm 5:3",
+          "text": "In the morning, LORD, you hear my voice; in the morning I lay my requests before you and wait expectantly.",
+          "image": "/cover1.jpg"
+        },
+        {
+          "title": "Evening Rest",
+          "verse": "Psalm 4:8",
+          "text": "In peace I will lie down and sleep, for you alone, LORD, make me dwell in safety.",
+          "image": "/cover2.jpg"
+        },
+        {
+          "title": "Strength & Courage",
+          "verse": "Isaiah 41:10",
+          "text": "So do not fear, for I am with you; do not be dismayed, for I am your God.",
+          "image": "/cover3.jpg"
+        }
+      ]
+    },
+    {
+      "type": "info",
+      "title": "Loved Ones",
+      "subtitle": "Pray for Others",
+      "description": "Add the people you care about and receive personalized daily prayers for each one.",
+      "backgroundImage": "/intro.png",
+      "video": null,
+      "footerLabel": "Community",
+      "overlayOpacity": 0.65,
+      "lovedOnes": [
+        { "name": "Mom", "avatar": "/avatar1.png", "intention": "Healing & peace" },
+        { "name": "David", "avatar": "/avatar2.png", "intention": "New job guidance" },
+        { "name": "Sarah", "avatar": "/avatar3.png", "intention": "Safe travels" }
+      ]
+    },
+    {
+      "type": "info",
+      "title": "Pray Together",
+      "subtitle": "Groups",
+      "description": "Create or join prayer groups. Share intentions and lift each other up.",
+      "backgroundImage": "/intro.png",
+      "video": null,
+      "footerLabel": "Get Started",
+      "overlayOpacity": 0.6,
+      "groups": [
+        { "name": "Grace Chapel", "members": 24, "image": "/cover4.jpg" },
+        { "name": "Evening Prayer Circle", "members": 12, "image": "/cover5.jpg" },
+        { "name": "Men's Fellowship", "members": 8, "image": "/cover6.jpg" }
+      ]
+    },
+    {
+      "type": "signin",
+      "title": "Welcome Back",
+      "subtitle": "Sign In",
+      "description": "Enter your phone number to continue.",
+      "backgroundImage": "/intro.png",
+      "video": null,
+      "footerLabel": "Sign In",
+      "overlayOpacity": 0.8
+    }
+  ]
+}
