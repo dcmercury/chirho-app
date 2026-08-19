@@ -14,7 +14,7 @@ import type {
   PrayerGroup,
   PrayerIntensity,
 } from "../types";
-import { ArrowIcon, PlusIcon } from "./Icons";
+import { PlusIcon } from "./Icons";
 import { GroupAvatar } from "./GroupAvatar";
 import { PrayerRequestForm } from "./PrayerRequestForm";
 import { Stagger } from "./Stagger";
@@ -22,6 +22,7 @@ import { Stagger } from "./Stagger";
 interface GroupOverviewProps {
   group: PrayerGroup;
   members: GroupMember[];
+  prayerRequestCount: number;
   refreshing: boolean;
   requestOpen: boolean;
   requestText: string;
@@ -41,6 +42,7 @@ interface GroupOverviewProps {
 export function GroupOverview({
   group,
   members,
+  prayerRequestCount,
   refreshing,
   requestOpen,
   requestText,
@@ -69,7 +71,7 @@ export function GroupOverview({
         styles.content,
         {
           paddingTop: Math.max(insets.top + 24, height * 0.1),
-          paddingBottom: insets.bottom + 40,
+          paddingBottom: insets.bottom + 128,
         },
       ]}
       refreshControl={
@@ -135,11 +137,7 @@ export function GroupOverview({
         </Stagger>
         <Stagger delay={700}>
           <View style={styles.memberActions}>
-            <Pressable
-              accessibilityLabel="Open members and group settings"
-              onPress={onOpenMembers}
-              style={styles.avatars}
-            >
+            <View style={styles.avatars}>
               {activeMembers.map((member, index) => {
                 const name =
                   member.profile?.firstName || member.firstName || "Member";
@@ -153,10 +151,21 @@ export function GroupOverview({
                   />
                 );
               })}
-              <View style={[styles.circle, styles.inviteCircle, activeMembers.length ? styles.overlap : undefined]}>
-                <PlusIcon color={colors.mutedSoft} size={14} />
-              </View>
-            </Pressable>
+              {group.canInvite ? (
+                <Pressable
+                  accessibilityLabel="Open group members and invite someone"
+                  accessibilityRole="button"
+                  onPress={onOpenMembers}
+                  style={[
+                    styles.circle,
+                    styles.inviteCircle,
+                    activeMembers.length ? styles.overlap : undefined,
+                  ]}
+                >
+                  <PlusIcon color={colors.mutedSoft} size={14} />
+                </Pressable>
+              ) : null}
+            </View>
             {!requestOpen ? (
               <View style={styles.rightActions}>
                 <Pressable
@@ -167,22 +176,17 @@ export function GroupOverview({
                   <PlusIcon color={colors.accent} size={14} />
                 </Pressable>
                 <Pressable
-                  accessibilityLabel="View prayer requests"
+                  accessibilityLabel={`View ${prayerRequestCount} prayer ${
+                    prayerRequestCount === 1 ? "request" : "requests"
+                  }`}
                   onPress={onOpenPrayers}
                   style={styles.circle}
                 >
-                  <ArrowIcon color={colors.mutedStrong} size={15} />
+                  <Text style={styles.requestCount}>{prayerRequestCount}</Text>
                 </Pressable>
               </View>
             ) : null}
           </View>
-        </Stagger>
-        <Stagger delay={800}>
-          <Pressable onPress={onOpenMembers} style={styles.adminAction}>
-            <Text style={styles.adminText}>
-              {group.isAdmin ? "Group Admin" : "Leave Group"}
-            </Text>
-          </Pressable>
         </Stagger>
       </View>
     </ScrollView>
@@ -202,7 +206,11 @@ function splitPurpose(purpose: string, scripture?: string | null) {
 }
 
 const styles = StyleSheet.create({
-  content: { flexGrow: 1, paddingHorizontal: 24 },
+  content: {
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
   body: { gap: 12 },
   label: {
     color: colors.accent,
@@ -262,6 +270,11 @@ const styles = StyleSheet.create({
   avatars: { flexDirection: "row", alignItems: "center", flex: 1 },
   overlap: { marginLeft: -8 },
   rightActions: { flexDirection: "row", gap: 5 },
+  requestCount: {
+    color: colors.mutedStrong,
+    fontFamily: fonts.monoMedium,
+    fontSize: 12,
+  },
   circle: {
     width: 36,
     height: 36,
@@ -280,13 +293,6 @@ const styles = StyleSheet.create({
   newCircle: {
     borderColor: "rgba(249,115,22,0.4)",
     backgroundColor: "rgba(249,115,22,0.15)",
-  },
-  adminAction: { alignSelf: "center", padding: 12 },
-  adminText: {
-    color: "#94a3b8",
-    fontFamily: fonts.body,
-    fontSize: 12,
-    textDecorationLine: "underline",
   },
   error: { color: colors.error, fontFamily: fonts.body, fontSize: 11 },
 });

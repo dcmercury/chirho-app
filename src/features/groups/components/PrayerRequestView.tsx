@@ -36,7 +36,7 @@ interface PrayerRequestViewProps {
   sendingPrayer: boolean;
   hasMoreMessages: boolean;
   loadingOlder: boolean;
-  currentUserAvatar?: string | null;
+  groupAvatar?: string | null;
   actionError: string | null;
   onBack: () => void;
   onPrevious: () => void;
@@ -46,7 +46,7 @@ interface PrayerRequestViewProps {
   onSendGenerated: (message: GroupMessage) => void;
   onDismissGenerated: () => void;
   onNewRequest: () => void;
-  onCenterAvatar: () => void;
+  onOpenGroupDrawer: () => void;
 }
 
 export function PrayerRequestView({
@@ -62,7 +62,7 @@ export function PrayerRequestView({
   sendingPrayer,
   hasMoreMessages,
   loadingOlder,
-  currentUserAvatar,
+  groupAvatar,
   actionError,
   onBack,
   onPrevious,
@@ -72,7 +72,7 @@ export function PrayerRequestView({
   onSendGenerated,
   onDismissGenerated,
   onNewRequest,
-  onCenterAvatar,
+  onOpenGroupDrawer,
 }: PrayerRequestViewProps) {
   const insets = useSafeAreaInsets();
   const safeIndex = Math.min(currentIndex, Math.max(messages.length - 1, 0));
@@ -269,10 +269,15 @@ export function PrayerRequestView({
             loading={loadingOlder}
             onPress={onPrevious}
           />
-          <Pressable onPress={onCenterAvatar} style={styles.center}>
+          <Pressable
+            accessibilityLabel={`Open ${groupName} members and settings`}
+            accessibilityRole="button"
+            onPress={onOpenGroupDrawer}
+            style={styles.center}
+          >
             <GroupAvatar
-              uri={currentUserAvatar}
-              name="You"
+              uri={groupAvatar}
+              name={groupName}
               size={72}
               borderColor="rgba(255,255,255,0.15)"
             />

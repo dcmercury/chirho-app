@@ -30,6 +30,10 @@ export const colors = {
   blurOrb: "#262626",
   badge: "rgba(0, 0, 0, 0.6)",
   badgeOrange: "rgba(249, 115, 22, 0.8)",
+  cardFill: "rgba(10, 8, 7, 0.9)",
+  cardBorder: "rgba(255, 248, 240, 0.2)",
+  cardText: "rgba(255, 250, 245, 0.78)",
+  cardMeta: "rgba(255, 250, 245, 0.58)",
 } as const;
 
 export const fonts = {

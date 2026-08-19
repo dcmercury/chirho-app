@@ -6,9 +6,17 @@ import type {
   MobileHomeResponse,
 } from "../types/home";
 import type {
+  GroupAdminRecord,
+  GroupBackgroundResult,
+  GroupCreationMetadata,
   GroupInviteResult,
   GroupMember,
   GroupMessage,
+  GroupPreviewPayload,
+  GroupPreviewResult,
+  GroupScripture,
+  GroupSettings,
+  GroupUpdatePayload,
   PrayerCount,
   PrayerGroup,
   PrayerGroupSurfaceData,
@@ -32,24 +40,212 @@ async function authenticatedRequest<T>(
   token: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${token}`,
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
-      ...options.headers,
-    },
-  });
+  const url = `${API_BASE}${path}`;
+  const method = options.method || "GET";
+  const startedAt = Date.now();
+
+  if (__DEV__) console.info(`[API] → ${method} ${url}`);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+        ...(options.body ? { "Content-Type": "application/json" } : {}),
+        ...options.headers,
+      },
+    });
+  } catch (error) {
+    console.error(
+      `[API] ✕ ${method} ${url} (${Date.now() - startedAt}ms)`,
+      error,
+    );
+    throw new Error(
+      `Could not reach the API at ${API_BASE}. Make sure the backend is running.`,
+      { cause: error },
+    );
+  }
+
+  if (__DEV__) {
+    console.info(
+      `[API] ← ${response.status} ${method} ${url} (${Date.now() - startedAt}ms)`,
+    );
+  }
+
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = new Error(
       (data as { error?: string }).error || `Request failed (${response.status})`,
     ) as Error & { status?: number };
     error.status = response.status;
+    console.error(`[API] ${response.status} ${method} ${url}`, error.message);
     throw error;
   }
   return data as T;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function optionalString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function normalizeScriptureReferences(value: unknown): GroupScripture[] {
+  const values = Array.isArray(value) ? value : value ? [value] : [];
+  return values
+    .map((item) => {
+      const scripture = asRecord(item);
+      if (!scripture) return null;
+      const citation = optionalString(scripture.citation)?.trim() || "";
+      const text = optionalString(scripture.text)?.trim() || "";
+      if (!citation && !text) return null;
+      const reason = optionalString(scripture.reason)?.trim();
+      return {
+        citation,
+        text,
+        ...(reason ? { reason } : {}),
+      };
+    })
+    .filter((item): item is GroupScripture => Boolean(item));
+}
+
+function normalizeGroupSettings(
+  value: unknown,
+  fallbackTradition?: unknown,
+): GroupSettings {
+  const source = asRecord(value) || {};
+  const settings: GroupSettings = {
+    ...source,
+    isPublic: source.isPublic === true,
+    allowMemberInvites: source.allowMemberInvites === true,
+  };
+  const tradition =
+    optionalString(source.tradition) || optionalString(fallbackTradition);
+  settings.tradition = tradition?.toLowerCase() || null;
+  return settings;
+}
+
+function normalizeCreationMetadata(value: unknown): GroupCreationMetadata | null {
+  const source = asRecord(value);
+  if (!source) return null;
+  const groupType = optionalString(source.groupType)?.trim() || "";
+  if (!groupType) return null;
+  return {
+    groupType,
+    contexts: stringArray(source.contexts),
+    focuses: stringArray(source.focuses),
+  };
+}
+
+function normalizeGroupMember(item: unknown, index: number): GroupMember {
+  const member = asRecord(item) || {};
+  const rawProfile =
+    asRecord(member.profile) ||
+    asRecord(member.memberProfile) ||
+    asRecord(member.user) ||
+    (optionalString(member.imageUrl) || optionalString(member.avatar)
+      ? member
+      : undefined);
+  const firstName =
+    optionalString(member.firstName) || optionalString(rawProfile?.firstName);
+  return {
+    memberId: String(member.memberId || member.id || index),
+    groupuuid: optionalString(member.groupuuid) || optionalString(member.groupUuid),
+    clerkuuid:
+      optionalString(member.clerkuuid) || optionalString(member.userId),
+    firstName,
+    phone: optionalString(member.phone),
+    status:
+      member.status === "pending" ||
+      member.status === "removed" ||
+      member.status === "declined"
+        ? member.status
+        : "active",
+    role: member.role === "admin" ? "admin" : "member",
+    prayerCategories: stringArray(member.prayerCategories),
+    profile: rawProfile
+      ? {
+          firstName: optionalString(rawProfile.firstName) || firstName,
+          lastName: optionalString(rawProfile.lastName),
+          avatar:
+            optionalString(rawProfile.avatar) ||
+            optionalString(rawProfile.imageUrl),
+          phoneNumber:
+            optionalString(rawProfile.phoneNumber) ||
+            optionalString(rawProfile.phone) ||
+            optionalString(member.phone),
+        }
+      : member.status === "pending" || firstName || member.phone
+        ? {
+            firstName,
+            lastName: null,
+            avatar: null,
+            phoneNumber: optionalString(member.phone),
+          }
+        : null,
+    invitedBy: optionalString(member.invitedBy),
+    invitedAt: optionalString(member.invitedAt),
+    invitationToken: optionalString(member.invitationToken),
+    invitationExpiresAt: optionalString(member.invitationExpiresAt),
+    acceptedAt: optionalString(member.acceptedAt),
+    declinedAt: optionalString(member.declinedAt),
+    createdAt: optionalString(member.createdAt),
+    updatedAt: optionalString(member.updatedAt),
+    removedAt: optionalString(member.removedAt),
+    removedBy: optionalString(member.removedBy),
+  };
+}
+
+function normalizeGroupAdminRecord(
+  value: unknown,
+  fallbackGroupuuid: string,
+): GroupAdminRecord {
+  const group = asRecord(value);
+  if (!group) throw new Error("The group response was incomplete.");
+  const parent = asRecord(group.parentEntity);
+  const parentType =
+    parent?.type === "church" || parent?.type === "ngo" ? parent.type : null;
+  const scriptures = normalizeScriptureReferences(
+    group.scriptureReferences ?? group.scripture,
+  );
+  return {
+    groupuuid: String(group.groupuuid || group.groupUuid || fallbackGroupuuid),
+    name: optionalString(group.name) || "Prayer Group",
+    description: optionalString(group.description),
+    purpose: optionalString(group.purpose),
+    scriptureReferences: scriptures,
+    backgroundImage:
+      optionalString(group.backgroundImage) ||
+      optionalString(group.activeBackgroundUrl),
+    creationMetadata: normalizeCreationMetadata(group.creationMetadata),
+    admin: optionalString(group.admin),
+    parentEntity: parent
+      ? {
+          type: parentType,
+          uuid: optionalString(parent.uuid),
+        }
+      : null,
+    settings: normalizeGroupSettings(group.settings, group.tradition),
+    createdAt: optionalString(group.createdAt),
+    updatedAt: optionalString(group.updatedAt),
+    createdBy: optionalString(group.createdBy),
+    deletedAt: optionalString(group.deletedAt),
+    memberCount:
+      typeof group.memberCount === "number" ? group.memberCount : 0,
+    memberClerkIds: stringArray(group.memberClerkIds),
+  };
 }
 
 function normalizeGroupSurface(
@@ -81,64 +277,7 @@ function normalizeGroupSurface(
       ? (scriptures[0] as Record<string, unknown>)
       : null;
   const rawMembers = Array.isArray(source.members) ? source.members : [];
-  const members: GroupMember[] = rawMembers.map((item, index) => {
-    const member =
-      item && typeof item === "object"
-        ? (item as Record<string, unknown>)
-        : {};
-    const rawProfile =
-      member.profile && typeof member.profile === "object"
-        ? (member.profile as Record<string, unknown>)
-        : member.userId
-          ? member
-          : null;
-    return {
-      memberId: String(member.memberId || member.id || index),
-      clerkuuid:
-        typeof member.clerkuuid === "string"
-          ? member.clerkuuid
-          : typeof member.userId === "string"
-            ? member.userId
-            : null,
-      firstName:
-        typeof member.firstName === "string" ? member.firstName : null,
-      phone: typeof member.phone === "string" ? member.phone : null,
-      status:
-        member.status === "pending" ||
-        member.status === "removed" ||
-        member.status === "declined"
-          ? member.status
-          : "active",
-      role: member.role === "admin" ? "admin" : "member",
-      prayerCategories: Array.isArray(member.prayerCategories)
-        ? member.prayerCategories.filter(
-            (category): category is string => typeof category === "string",
-          )
-        : [],
-      profile: rawProfile
-        ? {
-            firstName:
-              typeof rawProfile.firstName === "string"
-                ? rawProfile.firstName
-                : null,
-            lastName:
-              typeof rawProfile.lastName === "string"
-                ? rawProfile.lastName
-                : null,
-            avatar:
-              typeof rawProfile.avatar === "string"
-                ? rawProfile.avatar
-                : typeof rawProfile.imageUrl === "string"
-                  ? rawProfile.imageUrl
-                  : null,
-            phoneNumber:
-              typeof rawProfile.phoneNumber === "string"
-                ? rawProfile.phoneNumber
-                : null,
-          }
-        : null,
-    };
-  });
+  const members = rawMembers.map(normalizeGroupMember);
   const messagePage =
     source.messages &&
     typeof source.messages === "object" &&
@@ -240,6 +379,12 @@ function normalizeGroupSurface(
         : typeof source.hasMoreMessages === "boolean"
         ? source.hasMoreMessages
         : messages.length >= 10,
+    prayerRequestCount:
+      typeof messagePage?.totalCount === "number"
+        ? messagePage.totalCount
+        : typeof source.prayerRequestCount === "number"
+          ? source.prayerRequestCount
+          : messages.length,
   };
 }
 
@@ -286,6 +431,19 @@ export async function generateLovedOnePrayer(
   token: string,
   textOnly: boolean,
 ): Promise<HomePrayerCard> {
+  const now = new Date();
+  const localDate = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-");
+  let timeZone: string | undefined;
+  try {
+    timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    timeZone = undefined;
+  }
+
   const data = await authenticatedRequest<{
     prayer: {
       prayeruuid?: string;
@@ -293,20 +451,63 @@ export async function generateLovedOnePrayer(
       text?: string;
       textClean?: string;
       verse?: string;
+      tradition?: string;
+      timeOfDay?: "morning" | "evening";
+      audioUrl?: string | null;
+      audioStatus?: "pending" | "ready" | "failed";
+      backgroundMusicUrl?: string | null;
+      backgroundMusicVolume?: number;
       backgroundImage?: string;
     };
   }>(`/api/user/prayers/loved-one/${lovedOneId}/generate`, token, {
     method: "POST",
-    body: JSON.stringify({ textOnly, backgroundImage }),
+    body: JSON.stringify({
+      textOnly,
+      backgroundImage,
+      localDate,
+      localHour: now.getHours(),
+      timeZone,
+    }),
   });
   const text = data.prayer.textClean || data.prayer.text || "";
   return {
     prayeruuid: data.prayer.prayeruuid,
     title: data.prayer.title || "Prayer",
-    verse: data.prayer.verse || "",
+    verse: data.prayer.tradition || data.prayer.verse || "Personal prayer",
     text,
     fullPrayer: text,
     image: data.prayer.backgroundImage || backgroundImage,
+    narrationUrl: data.prayer.audioUrl || null,
+    backgroundMusicUrl: data.prayer.backgroundMusicUrl || null,
+    backgroundMusicVolume: data.prayer.backgroundMusicVolume,
+    audioAvailable: Boolean(data.prayer.audioUrl),
+    audioStatus: data.prayer.audioStatus,
+  };
+}
+
+export async function generatePrayerCardAudio(
+  prayeruuid: string,
+  token: string,
+): Promise<{
+  audioStatus: "pending" | "ready" | "failed";
+  narrationUrl: string | null;
+  backgroundMusicUrl: string | null;
+  backgroundMusicVolume: number;
+}> {
+  const data = await authenticatedRequest<{
+    audioStatus?: "pending" | "ready" | "failed";
+    audioUrl?: string | null;
+    backgroundMusicUrl?: string | null;
+    backgroundMusicVolume?: number;
+  }>(`/api/prayers/${prayeruuid}/audio/generate`, token, {
+    method: "POST",
+  });
+
+  return {
+    audioStatus: data.audioStatus || "failed",
+    narrationUrl: data.audioUrl || null,
+    backgroundMusicUrl: data.backgroundMusicUrl || null,
+    backgroundMusicVolume: data.backgroundMusicVolume ?? 0,
   };
 }
 
@@ -397,6 +598,116 @@ export async function updateNotificationPreference(
     method: "PUT",
     body: JSON.stringify({ preferences: { [key]: enabled } }),
   });
+}
+
+export async function getGroupAdminDetails(
+  groupuuid: string,
+  token: string,
+): Promise<{ group: GroupAdminRecord; isAdmin: boolean }> {
+  const payload = await authenticatedRequest<unknown>(
+    `/api/groups/${groupuuid}`,
+    token,
+  );
+  const root = asRecord(payload);
+  const source = asRecord(root?.data) || root;
+  const rawGroup = source?.group || source;
+  return {
+    group: normalizeGroupAdminRecord(rawGroup, groupuuid),
+    isAdmin: source?.isAdmin === true || root?.isAdmin === true,
+  };
+}
+
+export async function getGroupMembers(
+  groupuuid: string,
+  token: string,
+): Promise<GroupMember[]> {
+  const payload = await authenticatedRequest<unknown>(
+    `/api/groups/${groupuuid}/members`,
+    token,
+  );
+  const root = asRecord(payload);
+  const source = asRecord(root?.data) || root;
+  const rawMembers = Array.isArray(source?.members)
+    ? source.members
+    : Array.isArray(payload)
+      ? payload
+      : [];
+  return rawMembers
+    .map(normalizeGroupMember)
+    .filter(
+      (member) => member.status === "active" || member.status === "pending",
+    );
+}
+
+export async function updateGroup(
+  groupuuid: string,
+  updates: GroupUpdatePayload,
+  token: string,
+): Promise<GroupAdminRecord> {
+  const payload = await authenticatedRequest<unknown>(
+    `/api/groups/${groupuuid}`,
+    token,
+    {
+      method: "PATCH",
+      body: JSON.stringify(updates),
+    },
+  );
+  const root = asRecord(payload);
+  const source = asRecord(root?.data) || root;
+  return normalizeGroupAdminRecord(source?.group || source, groupuuid);
+}
+
+export async function deleteGroup(
+  groupuuid: string,
+  token: string,
+): Promise<void> {
+  await authenticatedRequest(`/api/groups/${groupuuid}`, token, {
+    method: "DELETE",
+  });
+}
+
+export async function regenerateGroupBackground(
+  groupuuid: string,
+  token: string,
+): Promise<GroupBackgroundResult> {
+  const payload = await authenticatedRequest<Record<string, unknown>>(
+    `/api/groups/${groupuuid}/background-image`,
+    token,
+    { method: "POST" },
+  );
+  return {
+    success: payload.success === true,
+    imageUrl:
+      optionalString(payload.imageUrl) || optionalString(payload.backgroundImage),
+    ...(typeof payload.cached === "boolean" ? { cached: payload.cached } : {}),
+    ...(typeof payload.regenerated === "boolean"
+      ? { regenerated: payload.regenerated }
+      : {}),
+    ...(typeof payload.fallback === "boolean"
+      ? { fallback: payload.fallback }
+      : {}),
+    ...(typeof payload.error === "string" ? { error: payload.error } : {}),
+  };
+}
+
+export async function previewGroupContent(
+  input: GroupPreviewPayload,
+  token: string,
+): Promise<GroupPreviewResult> {
+  const payload = await authenticatedRequest<Record<string, unknown>>(
+    "/api/groups/preview",
+    token,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
+  return {
+    purpose: optionalString(payload.purpose) || "",
+    scriptureReferences: normalizeScriptureReferences(
+      payload.scriptureReferences,
+    ),
+  };
 }
 
 export async function leaveGroup(
@@ -549,6 +860,7 @@ export async function generateGroupPrayer(
         type: "request";
         categories: string;
         memberName?: string | null;
+        requestContext?: string;
         groupPurpose?: string | null;
         groupName: string;
       }
@@ -574,6 +886,7 @@ export async function inviteGroupMember(
   firstName: string,
   phone: string,
   skipSMS: boolean,
+  customMessage: string | undefined,
   token: string,
 ): Promise<GroupInviteResult> {
   return authenticatedRequest<GroupInviteResult>(
@@ -585,6 +898,9 @@ export async function inviteGroupMember(
         firstName: firstName.trim(),
         phone,
         skipSMS,
+        ...(customMessage?.trim()
+          ? { customMessage: customMessage.trim() }
+          : {}),
       }),
     },
   );
@@ -620,6 +936,14 @@ export async function getGroupDetail(
           textClean?: string;
           verse?: string;
         };
+        audio?: {
+          enabled?: boolean;
+          settings?: {
+            backgroundMusicUrl?: string | null;
+            backgroundMusicVolume?: number;
+          };
+          files?: { narration?: string | null };
+        };
         backgroundImage?: string;
         createdAt?: string;
       }[];
@@ -641,6 +965,12 @@ export async function getGroupDetail(
         fullPrayer: text,
         image: prayer.backgroundImage || `/cover${(index % 6) + 1}.jpg`,
         date: prayer.createdAt,
+        narrationUrl: prayer.audio?.files?.narration || null,
+        backgroundMusicUrl: prayer.audio?.settings?.backgroundMusicUrl || null,
+        backgroundMusicVolume: prayer.audio?.settings?.backgroundMusicVolume,
+        audioAvailable:
+          prayer.audio?.enabled === true &&
+          Boolean(prayer.audio?.files?.narration),
       };
     }),
   };
@@ -659,6 +989,15 @@ export async function getPrayer(
         textClean?: string;
         verse?: string;
       };
+      audio?: {
+        enabled?: boolean;
+        generationStatus?: "pending" | "ready" | "failed";
+        settings?: {
+          backgroundMusicUrl?: string | null;
+          backgroundMusicVolume?: number;
+        };
+        files?: { narration?: string | null };
+      };
       backgroundImage?: string;
       createdAt?: string;
     };
@@ -673,6 +1012,12 @@ export async function getPrayer(
     fullPrayer: text,
     image: prayer.backgroundImage || "/cover1.jpg",
     date: prayer.createdAt,
+    narrationUrl: prayer.audio?.files?.narration || null,
+    backgroundMusicUrl: prayer.audio?.settings?.backgroundMusicUrl || null,
+    backgroundMusicVolume: prayer.audio?.settings?.backgroundMusicVolume,
+    audioAvailable:
+      prayer.audio?.enabled === true && Boolean(prayer.audio?.files?.narration),
+    audioStatus: prayer.audio?.generationStatus,
   };
 }
 

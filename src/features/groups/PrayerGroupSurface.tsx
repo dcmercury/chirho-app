@@ -1,31 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   AppState,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { Image } from "expo-image";
 import {
   generateGroupPrayer,
   getGroupMessages,
   getGroupPrayerCounts,
   getPrayerGroupSurface,
   getPrayerResponses,
-  inviteGroupMember,
-  leaveGroup,
   prayForGroupMessage,
-  removeGroupMember,
   sendGroupMessage,
 } from "../../lib/api";
+import { resolveImage } from "../../lib/assets";
 import {
   type RealtimeGroupMessage,
   useGroupRealtime,
 } from "../../lib/useGroupRealtime";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, fonts } from "../../theme/tokens";
 import type {
-  GroupInviteResult,
   GroupMessage,
   PrayerGroupSurfaceData,
   PrayerIntensity,
@@ -33,9 +31,47 @@ import type {
   TokenProvider,
 } from "./types";
 import { GroupBackground } from "./components/GroupBackground";
+import { GroupAvatar } from "./components/GroupAvatar";
 import { GroupOverview } from "./components/GroupOverview";
 import { MembersSheet } from "./components/MembersSheet";
 import { PrayerRequestView } from "./components/PrayerRequestView";
+import { LoadingChiRhoOverlay } from "../../components/ui/LoadingChiRhoOverlay";
+
+const chiRhoIcon = require("../../../assets/onboarding/chirho.svg");
+
+async function prefetchGroupImages(result: PrayerGroupSurfaceData) {
+  const paths = [
+    result.group.backgroundImage,
+    ...result.members
+      .filter((member) => member.status === "active")
+      .slice(0, 5)
+      .map((member) => member.profile?.avatar),
+  ];
+  const uris = Array.from(
+    new Set(
+      paths
+        .map((path) => {
+          const source = resolveImage(path);
+          return typeof source === "object" &&
+            source !== null &&
+            "uri" in source &&
+            typeof source.uri === "string"
+            ? source.uri
+            : null;
+        })
+        .filter((uri): uri is string => Boolean(uri)),
+    ),
+  );
+  if (!uris.length) return;
+
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, 2000);
+    Promise.allSettled(uris.map((uri) => Image.prefetch(uri))).then(() => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
 
 interface PrayerGroupSurfaceProps {
   groupuuid: string;
@@ -43,7 +79,6 @@ interface PrayerGroupSurfaceProps {
   currentUser: {
     id?: string | null;
     firstName?: string | null;
-    avatar?: string | null;
   };
   initialMessageId?: string;
   initialRequestOpen?: boolean;
@@ -60,6 +95,7 @@ export function PrayerGroupSurface({
   onLeaveSuccess,
   onOpenHome,
 }: PrayerGroupSurfaceProps) {
+  const insets = useSafeAreaInsets();
   const [data, setData] = useState<PrayerGroupSurfaceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -95,6 +131,7 @@ export function PrayerGroupSurface({
         const token = await requireToken();
         const result = await getPrayerGroupSurface(groupuuid, token);
         setData(result);
+        if (!refresh) await prefetchGroupImages(result);
         setCurrentIndex((index) =>
           result.messages.length
             ? Math.min(index || result.messages.length - 1, result.messages.length - 1)
@@ -328,7 +365,7 @@ export function PrayerGroupSurface({
         ? intensities
             .map(({ category, intensity }) => `${category} (${intensity}/10)`)
             .join(", ")
-        : "general life needs";
+        : "";
       setRequestText(
         await generateGroupPrayer(
           groupuuid,
@@ -336,6 +373,7 @@ export function PrayerGroupSurface({
             type: "request",
             categories,
             memberName: currentUser.firstName,
+            requestContext: requestText.trim(),
             groupPurpose: data.group.purpose,
             groupName: data.group.name,
           },
@@ -361,7 +399,15 @@ export function PrayerGroupSurface({
         token,
       );
       const messages = mergeMessages(data.messages, [message]);
-      setData({ ...data, messages });
+      setData({
+        ...data,
+        messages,
+        prayerRequestCount:
+          data.prayerRequestCount +
+          (data.messages.some((item) => item.messageId === message.messageId)
+            ? 0
+            : 1),
+      });
       setCurrentIndex(
         messages.findIndex((item) => item.messageId === message.messageId),
       );
@@ -424,54 +470,21 @@ export function PrayerGroupSurface({
     setCurrentIndex(currentIndex + 1);
   };
 
-  const invite = async (
-    firstName: string,
-    phone: string,
-    personal: boolean,
-  ): Promise<GroupInviteResult> => {
-    const token = await requireToken();
-    const result = await inviteGroupMember(
-      groupuuid,
-      firstName,
-      phone,
-      personal,
-      token,
+  if (loading) {
+    return (
+      <View style={styles.root}>
+        <LoadingChiRhoOverlay
+          label="Preparing your prayer group…"
+          visible
+        />
+      </View>
     );
-    await load(true);
-    return result;
-  };
-
-  const leave = async () => {
-    const token = await requireToken();
-    await leaveGroup(groupuuid, token);
-    setMembersOpen(false);
-    onLeaveSuccess();
-  };
-
-  const remove = async (memberId: string) => {
-    const token = await requireToken();
-    await removeGroupMember(groupuuid, memberId, token);
-    setData((current) =>
-      current
-        ? {
-            ...current,
-            members: current.members.filter(
-              (member) => member.memberId !== memberId,
-            ),
-          }
-        : current,
-    );
-  };
+  }
 
   return (
     <View style={styles.root}>
       <GroupBackground uri={data?.group.backgroundImage || null} />
-      {loading && !data ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={colors.accent} size="large" />
-          <Text style={styles.loading}>Loading prayer group…</Text>
-        </View>
-      ) : error && !data ? (
+      {error && !data ? (
         <View style={styles.center}>
           <Text style={styles.error}>{error}</Text>
           <Pressable onPress={() => load()} style={styles.retry}>
@@ -480,10 +493,29 @@ export function PrayerGroupSurface({
         </View>
       ) : data ? (
         <>
+          <Pressable
+            accessibilityHint="Returns to the home screen"
+            accessibilityLabel="Open home"
+            accessibilityRole="button"
+            onPress={onOpenHome}
+            style={({ pressed }) => [
+              styles.homeButton,
+              { top: insets.top + 10 },
+              pressed && styles.homeButtonPressed,
+            ]}
+          >
+            <Image
+              accessible={false}
+              contentFit="contain"
+              source={chiRhoIcon}
+              style={styles.homeIcon}
+            />
+          </Pressable>
           {mode === "group" ? (
             <GroupOverview
               group={data.group}
               members={data.members}
+              prayerRequestCount={data.prayerRequestCount}
               refreshing={refreshing}
               requestOpen={requestOpen}
               requestText={requestText}
@@ -516,7 +548,7 @@ export function PrayerGroupSurface({
               sendingPrayer={sendingPrayer}
               hasMoreMessages={data.hasMoreMessages}
               loadingOlder={loadingOlder}
-              currentUserAvatar={currentUser.avatar}
+              groupAvatar={data.group.backgroundImage}
               actionError={actionError}
               onBack={() => setMode("group")}
               onPrevious={previous}
@@ -526,18 +558,40 @@ export function PrayerGroupSurface({
               onSendGenerated={handleSendGenerated}
               onDismissGenerated={() => setGeneratedPrayer(null)}
               onNewRequest={openRequest}
-              onCenterAvatar={onOpenHome}
+              onOpenGroupDrawer={() => setMembersOpen(true)}
             />
           )}
+          {mode === "group" || data.messages.length === 0 ? (
+            <Pressable
+              accessibilityLabel={`Open ${data.group.name} members and settings`}
+              accessibilityRole="button"
+              onPress={() => setMembersOpen(true)}
+              style={({ pressed }) => [
+                styles.groupDrawerTrigger,
+                { bottom: Math.max(insets.bottom, 12) },
+                pressed && styles.groupDrawerTriggerPressed,
+              ]}
+            >
+              <GroupAvatar
+                borderColor="rgba(255,255,255,0.18)"
+                name={data.group.name}
+                size={72}
+                uri={data.group.backgroundImage}
+              />
+            </Pressable>
+          ) : null}
           <MembersSheet
             visible={membersOpen}
             group={data.group}
             members={data.members}
             currentUserId={currentUser.id}
+            tokenProvider={tokenProvider}
             onClose={() => setMembersOpen(false)}
-            onInvite={invite}
-            onLeave={leave}
-            onRemove={remove}
+            onChanged={() => load(true)}
+            onExit={() => {
+              setMembersOpen(false);
+              onLeaveSuccess();
+            }}
           />
         </>
       ) : null}
@@ -573,7 +627,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     gap: 14,
   },
-  loading: { color: colors.muted, fontFamily: fonts.body, fontSize: 12 },
   error: {
     color: colors.error,
     fontFamily: fonts.body,
@@ -588,4 +641,34 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
   },
   retryText: { color: colors.black, fontFamily: fonts.bodyMedium, fontSize: 11 },
+  homeButton: {
+    position: "absolute",
+    right: 20,
+    zIndex: 10,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1,
+    borderColor: "rgba(255,248,240,0.36)",
+    backgroundColor: "rgba(255,248,240,0.9)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  homeIcon: {
+    width: 18,
+    height: 24,
+  },
+  homeButtonPressed: {
+    opacity: 0.72,
+    transform: [{ scale: 0.96 }],
+  },
+  groupDrawerTrigger: {
+    position: "absolute",
+    left: "50%",
+    marginLeft: -36,
+  },
+  groupDrawerTriggerPressed: {
+    opacity: 0.72,
+    transform: [{ scale: 0.97 }],
+  },
 });

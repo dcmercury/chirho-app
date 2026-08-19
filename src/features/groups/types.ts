@@ -4,6 +4,67 @@ export interface GroupScripture {
   reason?: string;
 }
 
+export interface GroupSettings {
+  isPublic: boolean;
+  allowMemberInvites: boolean;
+  tradition?: string | null;
+  [key: string]: unknown;
+}
+
+export interface GroupCreationMetadata {
+  groupType: string;
+  contexts: string[];
+  focuses: string[];
+}
+
+export interface GroupAdminRecord {
+  groupuuid: string;
+  name: string;
+  description: string | null;
+  purpose: string | null;
+  scriptureReferences: GroupScripture[];
+  backgroundImage: string | null;
+  creationMetadata: GroupCreationMetadata | null;
+  admin: string | null;
+  parentEntity: {
+    type: "church" | "ngo" | null;
+    uuid: string | null;
+  } | null;
+  settings: GroupSettings;
+  createdAt: string | null;
+  updatedAt: string | null;
+  createdBy: string | null;
+  deletedAt: string | null;
+  memberCount: number;
+  memberClerkIds: string[];
+}
+
+export interface GroupUpdatePayload {
+  purpose?: string | null;
+  scriptureReferences?: GroupScripture[] | null;
+  settings?: GroupSettings;
+}
+
+export interface GroupBackgroundResult {
+  success: boolean;
+  imageUrl: string | null;
+  cached?: boolean;
+  regenerated?: boolean;
+  fallback?: boolean;
+  error?: string;
+}
+
+export interface GroupPreviewPayload {
+  groupType: string;
+  contexts: string[];
+  focuses: string[];
+}
+
+export interface GroupPreviewResult {
+  purpose: string;
+  scriptureReferences: GroupScripture[];
+}
+
 export interface GroupMemberProfile {
   firstName: string | null;
   lastName: string | null;
@@ -13,6 +74,7 @@ export interface GroupMemberProfile {
 
 export interface GroupMember {
   memberId: string;
+  groupuuid?: string | null;
   clerkuuid: string | null;
   firstName?: string | null;
   phone?: string | null;
@@ -20,6 +82,16 @@ export interface GroupMember {
   role: "member" | "admin";
   prayerCategories: string[];
   profile: GroupMemberProfile | null;
+  invitedBy?: string | null;
+  invitedAt?: string | null;
+  invitationToken?: string | null;
+  invitationExpiresAt?: string | null;
+  acceptedAt?: string | null;
+  declinedAt?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  removedAt?: string | null;
+  removedBy?: string | null;
 }
 
 export interface GroupMessage {
@@ -64,6 +136,7 @@ export interface PrayerGroupSurfaceData {
   messages: GroupMessage[];
   prayerCounts: Record<string, PrayerCount>;
   hasMoreMessages: boolean;
+  prayerRequestCount: number;
 }
 
 export interface PrayerIntensity {

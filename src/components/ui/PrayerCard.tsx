@@ -48,9 +48,9 @@ const styles = StyleSheet.create({
     width: 160,
     borderRadius: radii.card,
     overflow: "hidden",
-    backgroundColor: colors.glassFillHover,
+    backgroundColor: colors.cardFill,
     borderWidth: 1,
-    borderColor: colors.glassBorder,
+    borderColor: colors.cardBorder,
   },
   pressed: {
     opacity: 0.76,
@@ -79,6 +79,7 @@ const styles = StyleSheet.create({
   },
   body: {
     padding: 10,
+    backgroundColor: colors.cardFill,
   },
   title: {
     fontFamily: fonts.displayMedium,
@@ -98,13 +99,13 @@ const styles = StyleSheet.create({
   text: {
     fontSize: 10,
     lineHeight: 14,
-    color: colors.mutedSoft,
+    color: colors.cardText,
     fontFamily: fonts.body,
   },
   date: {
     fontFamily: fonts.mono,
     fontSize: 8,
-    color: colors.mutedGhost,
+    color: colors.cardMeta,
     letterSpacing: 0.32,
     marginTop: 6,
   },

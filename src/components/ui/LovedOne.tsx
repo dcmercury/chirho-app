@@ -6,6 +6,7 @@ import { resolveImage } from "../../lib/assets";
 export function LovedOne({
   person,
   showIntention = true,
+  compact = false,
   onPress,
 }: {
   person: {
@@ -15,6 +16,7 @@ export function LovedOne({
     intention: string;
   };
   showIntention?: boolean;
+  compact?: boolean;
   onPress?: () => void;
 }) {
   return (
@@ -23,7 +25,11 @@ export function LovedOne({
       accessibilityLabel={onPress ? `Pray for ${person.name}` : undefined}
       disabled={!onPress}
       onPress={onPress}
-      style={({ pressed }) => [styles.item, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.item,
+        compact && styles.itemCompact,
+        pressed && styles.pressed,
+      ]}
     >
       <Image
         source={resolveImage(person.avatar)}
@@ -47,6 +53,9 @@ const styles = StyleSheet.create({
     width: 90,
     alignItems: "center",
     gap: 8,
+  },
+  itemCompact: {
+    width: 72,
   },
   pressed: {
     opacity: 0.65,

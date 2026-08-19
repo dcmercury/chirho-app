@@ -32,11 +32,32 @@ const PATH_MAP: Record<string, ImageSource> = {
 
 export function resolveImage(path: string | undefined | null): ImageSource {
   if (!path) return images.intro;
-  if (/^https?:\/\//.test(path)) return { uri: path };
+  if (/^https?:\/\//.test(path)) {
+    if (path.includes("dailyoffice-assets.s3")) {
+      return {
+        uri: `${API_BASE}/api/image-proxy?url=${encodeURIComponent(path)}`,
+      };
+    }
+    return { uri: path };
+  }
   if (PATH_MAP[path]) return PATH_MAP[path];
   if (path.startsWith("/")) return { uri: `${API_BASE}${path}` };
   return images.intro;
 }
+
+export function resolveAudioUrl(path: string | undefined | null): string | null {
+  if (!path) return null;
+  if (/^https?:\/\//.test(path)) {
+    if (path.includes("dailyoffice-assets.s3")) {
+      return `${API_BASE}/api/audio-proxy?url=${encodeURIComponent(path)}`;
+    }
+    return path;
+  }
+  return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+export const DEFAULT_BACKGROUND_MUSIC =
+  "/audio/background-music/ambient-morning.mp3";
 
 export const API_BASE =
   process.env.EXPO_PUBLIC_API_URL ?? "https://www.chirho.ai";

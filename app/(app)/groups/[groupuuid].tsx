@@ -30,7 +30,6 @@ export default function GroupScreen() {
       currentUser={{
         id: user?.id,
         firstName: user?.firstName,
-        avatar: user?.imageUrl,
       }}
       initialMessageId={messageId}
       initialRequestOpen={openRequest === "true"}

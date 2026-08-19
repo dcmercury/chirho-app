@@ -6,6 +6,11 @@ export interface HomePrayerCard {
   image: string;
   fullPrayer?: string;
   date?: string;
+  narrationUrl?: string | null;
+  backgroundMusicUrl?: string | null;
+  backgroundMusicVolume?: number;
+  audioAvailable?: boolean;
+  audioStatus?: "pending" | "ready" | "failed";
 }
 
 export interface HomeLovedOne {

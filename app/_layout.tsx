@@ -35,7 +35,7 @@ if (!publishableKey) {
 
 function RootNavigator() {
   const router = useRouter();
-  const { isSignedIn, getToken } = useAuth();
+  const { isLoaded: authLoaded, isSignedIn, getToken } = useAuth();
   const getTokenRef = useRef(getToken);
   const [fontsLoaded] = useFonts({
     Inter: Inter_400Regular,
@@ -50,10 +50,10 @@ function RootNavigator() {
   });
 
   useEffect(() => {
-    if (fontsLoaded) {
+    if (fontsLoaded && authLoaded) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded]);
+  }, [authLoaded, fontsLoaded]);
 
   useEffect(() => {
     getTokenRef.current = getToken;
@@ -125,7 +125,7 @@ function RootNavigator() {
     };
   }, [isSignedIn, router]);
 
-  if (!fontsLoaded) {
+  if (!fontsLoaded || !authLoaded) {
     return (
       <View
         style={{

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -17,6 +16,7 @@ import { images, resolveImage } from "../../lib/assets";
 import {
   addLovedOne,
   generateLovedOnePrayer,
+  generatePrayerCardAudio,
   getMobileHome,
   saveLovedOneConfig,
 } from "../../lib/api";
@@ -24,7 +24,7 @@ import { GridOverlay } from "../ui/GridOverlay";
 import { DisplayTitle } from "../ui/DisplayTitle";
 import { PrayerCard } from "../ui/PrayerCard";
 import { LovedOne } from "../ui/LovedOne";
-import { ChiRhoMark } from "../ui/ChiRhoMark";
+import { LoadingChiRhoOverlay } from "../ui/LoadingChiRhoOverlay";
 import { AddLovedOneModal } from "./AddLovedOneModal";
 import { PrayerDetailModal } from "./PrayerDetailModal";
 import { ProfileDrawer } from "./ProfileDrawer";
@@ -34,6 +34,39 @@ import type {
   HomePrayerCard,
   MobileHomeResponse,
 } from "../../types/home";
+
+async function prefetchHomeImages(result: MobileHomeResponse) {
+  const paths = [
+    result.community?.backgroundImage,
+    ...result.home.cards.slice(0, 2).map((card) => card.image),
+    ...result.home.lovedOnes.slice(0, 5).map((person) => person.avatar),
+    ...result.home.groups.slice(0, 3).map((group) => group.image),
+  ];
+  const uris = Array.from(
+    new Set(
+      paths
+        .map((path) => {
+          const source = resolveImage(path);
+          return typeof source === "object" &&
+            source !== null &&
+            "uri" in source &&
+            typeof source.uri === "string"
+            ? source.uri
+            : null;
+        })
+        .filter((uri): uri is string => Boolean(uri)),
+    ),
+  );
+  if (!uris.length) return;
+
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, 2000);
+    Promise.allSettled(uris.map((uri) => Image.prefetch(uri))).then(() => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
 
 export function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -53,10 +86,20 @@ export function HomeScreen() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [savingLovedOne, setSavingLovedOne] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const generatingLovedOneRef = useRef(false);
 
   useEffect(() => {
     getTokenRef.current = getToken;
   }, [getToken]);
+
+  const requireCurrentToken = useCallback(async () => {
+    const token = await getTokenRef.current();
+    if (!token) {
+      throw new Error("Your session expired. Please sign in again.");
+    }
+    setSessionToken(token);
+    return token;
+  }, []);
 
   const loadHome = useCallback(
     async (refresh = false) => {
@@ -64,10 +107,10 @@ export function HomeScreen() {
       else setLoading(true);
       setError(null);
       try {
-        const token = await getTokenRef.current();
-        if (!token) throw new Error("Your session expired. Please sign in again.");
-        setSessionToken(token);
-        setResponse(await getMobileHome(token));
+        const token = await requireCurrentToken();
+        const result = await getMobileHome(token);
+        setResponse(result);
+        if (!refresh) await prefetchHomeImages(result);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unable to load your home");
       } finally {
@@ -75,7 +118,7 @@ export function HomeScreen() {
         setRefreshing(false);
       }
     },
-    [],
+    [requireCurrentToken],
   );
 
   useEffect(() => {
@@ -88,6 +131,8 @@ export function HomeScreen() {
     : images.intro;
 
   const handleLovedOnePress = async (person: HomeLovedOne) => {
+    if (generatingLovedOneRef.current) return;
+    generatingLovedOneRef.current = true;
     const backgroundImage = person.backgroundImage || "/cover1.jpg";
     setSelectedCard({
       title: `Prayer for ${person.name}`,
@@ -97,25 +142,41 @@ export function HomeScreen() {
     });
     setPrayerLoading(true);
     try {
-      const token = sessionToken || (await getToken());
-      if (!token) throw new Error("Your session expired. Please sign in again.");
-      const textPrayer = await generateLovedOnePrayer(
+      const token = await requireCurrentToken();
+      const prayer = await generateLovedOnePrayer(
         person.id,
         backgroundImage,
         token,
         true,
       );
-      setSelectedCard(textPrayer);
+      setSelectedCard(prayer);
       setPrayerLoading(false);
-      generateLovedOnePrayer(person.id, backgroundImage, token, false)
-        .then((audioPrayer) => {
-          if (audioPrayer.prayeruuid) {
-            setSelectedCard((current) =>
-              current ? { ...current, prayeruuid: audioPrayer.prayeruuid } : current,
-            );
-          }
+
+      void generatePrayerCardAudio(prayer.prayeruuid!, token)
+        .then((audio) => {
+          setSelectedCard((current) => {
+            if (!current || current.prayeruuid !== prayer.prayeruuid) {
+              return current;
+            }
+            return {
+              ...current,
+              narrationUrl: audio.narrationUrl || undefined,
+              backgroundMusicUrl:
+                audio.backgroundMusicUrl || current.backgroundMusicUrl,
+              backgroundMusicVolume: audio.backgroundMusicVolume,
+              audioAvailable: audio.audioStatus === "ready",
+              audioStatus: audio.audioStatus,
+            };
+          });
         })
-        .catch(() => undefined);
+        .catch(() => {
+          setSelectedCard((current) => {
+            if (!current || current.prayeruuid !== prayer.prayeruuid) {
+              return current;
+            }
+            return { ...current, audioStatus: "failed" };
+          });
+        });
     } catch (err) {
       setPrayerLoading(false);
       setSelectedCard({
@@ -127,6 +188,8 @@ export function HomeScreen() {
             : "Unable to generate a prayer. Please try again.",
         image: backgroundImage,
       });
+    } finally {
+      generatingLovedOneRef.current = false;
     }
   };
 
@@ -134,8 +197,7 @@ export function HomeScreen() {
     setSavingLovedOne(true);
     setMutationError(null);
     try {
-      const token = sessionToken || (await getToken());
-      if (!token) throw new Error("Your session expired. Please sign in again.");
+      const token = await requireCurrentToken();
       const lovedOne = await addLovedOne(name, token);
       if (categories.length) {
         await saveLovedOneConfig(lovedOne.id, categories, token);
@@ -149,6 +211,17 @@ export function HomeScreen() {
     }
   };
 
+  if (loading) {
+    return (
+      <View style={styles.root}>
+        <LoadingChiRhoOverlay
+          label="Gathering your prayers…"
+          visible
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.root}>
       <Image source={background} style={StyleSheet.absoluteFill} contentFit="cover" />
@@ -158,7 +231,7 @@ export function HomeScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingTop: insets.top + 24, paddingBottom: 140 + insets.bottom },
+          { paddingTop: insets.top + 24, paddingBottom: 104 + insets.bottom },
         ]}
         refreshControl={
           <RefreshControl
@@ -171,12 +244,7 @@ export function HomeScreen() {
       >
         <DisplayTitle title="Welcome" subtitle={`${firstName}!`} />
 
-        {loading ? (
-          <View style={styles.loading}>
-            <ActivityIndicator color={colors.white} />
-            <Text style={styles.loadingText}>Gathering your prayers...</Text>
-          </View>
-        ) : error ? (
+        {error && !home ? (
           <View style={styles.errorCard}>
             <Text style={styles.errorTitle}>Unable to load your home</Text>
             <Text style={styles.errorText}>{error}</Text>
@@ -184,7 +252,7 @@ export function HomeScreen() {
               <Text style={styles.retryText}>Try again</Text>
             </Pressable>
           </View>
-        ) : (
+        ) : home ? (
           <>
             <Text style={styles.section}>Recent Prayer Cards</Text>
             {home?.cards.length ? (
@@ -229,6 +297,7 @@ export function HomeScreen() {
                   <LovedOne
                     key={person.id}
                     person={person}
+                    compact
                     showIntention={false}
                     onPress={() => handleLovedOnePress(person)}
                   />
@@ -302,33 +371,31 @@ export function HomeScreen() {
               </Text>
             )}
           </>
-        )}
+        ) : null}
       </ScrollView>
 
-      <View style={[styles.nav, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-        <Pressable
-          accessibilityLabel="Open profile and settings"
-          accessibilityRole="button"
-          onPress={() => setProfileOpen(true)}
-          style={styles.navLeft}
-        >
-          {home?.profile.avatar ? (
-            <Image
-              source={resolveImage(home.profile.avatar)}
-              style={styles.navAvatar}
-              contentFit="cover"
-            />
-          ) : (
-            <Text style={styles.navN}>
-              {(home?.profile.name || firstName).slice(0, 1).toUpperCase()}
-            </Text>
-          )}
-        </Pressable>
-        <View style={styles.navCenter}>
-          <ChiRhoMark width={28} height={36} />
-        </View>
-        <View style={{ width: 40 }} />
-      </View>
+      <Pressable
+        accessibilityLabel="Open profile and settings"
+        accessibilityRole="button"
+        onPress={() => setProfileOpen(true)}
+        style={({ pressed }) => [
+          styles.profileTrigger,
+          { bottom: Math.max(insets.bottom, 12) },
+          pressed && styles.pressed,
+        ]}
+      >
+        {home?.profile.avatar ? (
+          <Image
+            source={resolveImage(home.profile.avatar)}
+            style={styles.profileTriggerAvatar}
+            contentFit="cover"
+          />
+        ) : (
+          <Text style={styles.navN}>
+            {(home?.profile.name || firstName).slice(0, 1).toUpperCase()}
+          </Text>
+        )}
+      </Pressable>
 
       <PrayerDetailModal
         card={selectedCard}
@@ -350,6 +417,7 @@ export function HomeScreen() {
       <ProfileDrawer
         visible={profileOpen}
         profile={home?.profile || null}
+        lovedOnes={home?.lovedOnes || []}
         groups={home?.groups || []}
         community={response?.community || null}
         onClose={() => setProfileOpen(false)}
@@ -366,17 +434,6 @@ const styles = StyleSheet.create({
   },
   scroll: {
     paddingHorizontal: 24,
-  },
-  loading: {
-    minHeight: 280,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-  },
-  loadingText: {
-    color: colors.mutedSoft,
-    fontFamily: fonts.body,
-    fontSize: 12,
   },
   errorCard: {
     marginTop: 24,
@@ -424,7 +481,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: 0.8,
     textTransform: "uppercase",
-    color: "rgba(255,255,255,0.35)",
+    color: colors.cardMeta,
     marginBottom: 10,
     marginTop: 8,
   },
@@ -457,7 +514,9 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   lovedRail: {
-    gap: 16,
+    flexGrow: 1,
+    justifyContent: "center",
+    gap: 8,
     paddingBottom: 8,
   },
   groupCard: {
@@ -465,9 +524,9 @@ const styles = StyleSheet.create({
     height: 120,
     borderRadius: 12,
     overflow: "hidden",
-    backgroundColor: colors.glassFillHover,
+    backgroundColor: colors.cardFill,
     borderWidth: 1,
-    borderColor: colors.glassBorder,
+    borderColor: colors.cardBorder,
   },
   groupImg: {
     width: "100%",
@@ -499,7 +558,7 @@ const styles = StyleSheet.create({
   },
   groupBar: {
     padding: 8,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: colors.cardFill,
   },
   groupName: {
     flexShrink: 1,
@@ -525,34 +584,22 @@ const styles = StyleSheet.create({
     fontSize: 7,
   },
   groupMembers: {
-    color: colors.mutedFaint,
+    color: colors.cardMeta,
     fontFamily: fonts.mono,
     fontSize: 8,
     letterSpacing: 0.4,
     marginTop: 2,
   },
-  nav: {
+  profileTrigger: {
     position: "absolute",
-    left: 24,
-    right: 24,
-    bottom: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "rgba(20,20,20,0.72)",
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    minHeight: 64,
-  },
-  navLeft: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1,
+    left: "50%",
+    marginLeft: -36,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 2,
     borderColor: "rgba(255,255,255,0.15)",
+    backgroundColor: "rgba(0,0,0,0.55)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -561,20 +608,9 @@ const styles = StyleSheet.create({
     fontFamily: fonts.displayMedium,
     fontSize: 16,
   },
-  navAvatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-  },
-  navCenter: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: -28,
+  profileTriggerAvatar: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
   },
 });

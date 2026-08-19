@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -10,11 +10,26 @@ import {
   View,
 } from "react-native";
 import { Image } from "expo-image";
-import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
-import { API_BASE, resolveImage } from "../../lib/assets";
+import {
+  setAudioModeAsync,
+  useAudioPlayer,
+  useAudioPlayerStatus,
+} from "expo-audio";
+import {
+  API_BASE,
+  DEFAULT_BACKGROUND_MUSIC,
+  resolveAudioUrl,
+  resolveImage,
+} from "../../lib/assets";
 import { trackPrayerShare } from "../../lib/api";
 import { colors, fonts } from "../../theme/tokens";
 import type { HomePrayerCard } from "../../types/home";
+import {
+  CloseIcon,
+  PauseIcon,
+  PlayIcon,
+  ShareIcon,
+} from "../../features/groups/components/Icons";
 
 interface PrayerDetailModalProps {
   card: HomePrayerCard | null;
@@ -31,32 +46,148 @@ export function PrayerDetailModal({
   loading = false,
   onClose,
 }: PrayerDetailModalProps) {
-  const player = useAudioPlayer(null);
-  const status = useAudioPlayerStatus(player);
-  const loadedPrayerRef = useRef<string | null>(null);
+  const narrationUrl =
+    card?.audioAvailable === false
+      ? null
+      : resolveAudioUrl(
+          card?.narrationUrl ||
+            (card?.prayeruuid
+              ? `/api/prayer-audio/${card.prayeruuid}`
+              : null),
+        );
+  const musicUrl =
+    card?.backgroundMusicVolume === 0
+      ? null
+      : resolveAudioUrl(card?.backgroundMusicUrl || DEFAULT_BACKGROUND_MUSIC);
+  const narrationPlayer = useAudioPlayer(narrationUrl, {
+    downloadFirst: true,
+    keepAudioSessionActive: true,
+  });
+  const musicPlayer = useAudioPlayer(musicUrl, {
+    downloadFirst: true,
+    keepAudioSessionActive: true,
+  });
+  const narrationStatus = useAudioPlayerStatus(narrationPlayer);
+  const musicStatus = useAudioPlayerStatus(musicPlayer);
+  const pendingPlayRef = useRef(false);
+  const [audioMessage, setAudioMessage] = useState<string | null>(null);
+  const audioPreparing = card?.audioStatus === "pending";
+  const displayedAudioMessage =
+    audioMessage ||
+    (audioPreparing
+      ? "Preparing narration…"
+      : card?.audioStatus === "failed"
+        ? "Narration could not be prepared."
+        : null);
+
+  useEffect(() => {
+    if (!visible) return;
+    setAudioModeAsync({
+      allowsRecording: false,
+      interruptionMode: "doNotMix",
+      playsInSilentMode: true,
+      shouldPlayInBackground: true,
+      shouldRouteThroughEarpiece: false,
+    }).catch((error) => {
+      console.error("[Audio] Unable to configure playback:", error);
+      setAudioMessage("Audio playback could not be prepared.");
+    });
+  }, [visible]);
+
+  useEffect(() => {
+    narrationPlayer.volume = 1;
+    musicPlayer.volume = card?.backgroundMusicVolume ?? 0.14;
+    musicPlayer.loop = true;
+  }, [
+    card?.backgroundMusicVolume,
+    musicPlayer,
+    narrationPlayer,
+  ]);
 
   useEffect(() => {
     if (!visible) {
-      player.pause();
-      loadedPrayerRef.current = null;
+      narrationPlayer.pause();
+      musicPlayer.pause();
+      pendingPlayRef.current = false;
+      setAudioMessage(null);
     }
-  }, [player, visible]);
+  }, [musicPlayer, narrationPlayer, visible]);
+
+  useEffect(() => {
+    if (!pendingPlayRef.current || !narrationStatus.isLoaded) return;
+    pendingPlayRef.current = false;
+    setAudioMessage(null);
+    narrationPlayer.play();
+    if (musicStatus.isLoaded) musicPlayer.play();
+  }, [
+    musicPlayer,
+    musicStatus.isLoaded,
+    narrationPlayer,
+    narrationStatus.isLoaded,
+  ]);
+
+  useEffect(() => {
+    if (
+      narrationStatus.playing &&
+      musicUrl &&
+      musicStatus.isLoaded &&
+      !musicStatus.playing
+    ) {
+      musicPlayer.play();
+    }
+  }, [
+    musicPlayer,
+    musicStatus.isLoaded,
+    musicStatus.playing,
+    musicUrl,
+    narrationStatus.playing,
+  ]);
+
+  useEffect(() => {
+    if (narrationStatus.didJustFinish) {
+      musicPlayer.pause();
+    }
+  }, [musicPlayer, narrationStatus.didJustFinish]);
+
+  useEffect(() => {
+    if (!narrationStatus.error) return;
+    console.error("[Audio] Narration failed:", {
+      error: narrationStatus.error,
+      url: narrationUrl,
+    });
+    pendingPlayRef.current = false;
+    musicPlayer.pause();
+    setAudioMessage("Narration could not be loaded. Please try again.");
+  }, [musicPlayer, narrationStatus.error, narrationUrl]);
+
+  useEffect(() => {
+    if (!musicStatus.error) return;
+    console.warn("[Audio] Background music failed:", {
+      error: musicStatus.error,
+      url: musicUrl,
+    });
+    setAudioMessage("Narration is available, but music could not be loaded.");
+  }, [musicStatus.error, musicUrl]);
 
   const toggleAudio = () => {
-    if (!card?.prayeruuid || !token) return;
-    if (status.playing) {
-      player.pause();
+    if (!narrationUrl) return;
+    if (narrationStatus.playing || pendingPlayRef.current) {
+      pendingPlayRef.current = false;
+      narrationPlayer.pause();
+      musicPlayer.pause();
+      setAudioMessage(null);
       return;
     }
-    if (loadedPrayerRef.current !== card.prayeruuid) {
-      player.replace({
-        uri: `${API_BASE}/api/prayer-audio/${card.prayeruuid}`,
-        headers: { Authorization: `Bearer ${token}` },
-        name: card.title,
-      });
-      loadedPrayerRef.current = card.prayeruuid;
+
+    if (!narrationStatus.isLoaded) {
+      pendingPlayRef.current = true;
+      setAudioMessage("Loading narration…");
+      return;
     }
-    player.play();
+
+    setAudioMessage(null);
+    narrationPlayer.play();
+    if (musicStatus.isLoaded) musicPlayer.play();
   };
 
   const sharePrayer = async () => {
@@ -98,29 +229,48 @@ export function PrayerDetailModal({
               <Text style={styles.title}>{card?.title}</Text>
               <Text style={styles.prayer}>{card?.fullPrayer || card?.text}</Text>
               {card?.date ? <Text style={styles.date}>{card.date}</Text> : null}
+              {displayedAudioMessage ? (
+                <Text style={styles.audioMessage}>{displayedAudioMessage}</Text>
+              ) : null}
             </>
           )}
         </ScrollView>
         <View style={styles.actions}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={status.playing ? "Pause prayer" : "Listen to prayer"}
-            disabled={!card?.prayeruuid || !token}
+            accessibilityLabel={
+              audioPreparing
+                ? "Preparing prayer audio"
+                : narrationStatus.playing
+                  ? "Pause prayer"
+                  : "Listen to prayer"
+            }
+            accessibilityState={{ disabled: !narrationUrl }}
+            disabled={!narrationUrl}
+            hitSlop={4}
             onPress={toggleAudio}
             style={({ pressed }) => [
-              styles.primaryAction,
-              (!card?.prayeruuid || !token) && styles.disabled,
+              styles.action,
+              styles.listenAction,
+              narrationStatus.playing && styles.actionActive,
+              !narrationUrl && styles.disabled,
               pressed && styles.pressed,
             ]}
           >
-            <Text style={styles.primaryActionText}>
-              {status.playing ? "Pause" : "Listen"}
-            </Text>
+            {audioPreparing || pendingPlayRef.current ? (
+              <ActivityIndicator color={colors.accent} size="small" />
+            ) : narrationStatus.playing ? (
+              <PauseIcon color={colors.accent} size={17} />
+            ) : (
+              <PlayIcon color={colors.accent} size={17} />
+            )}
           </Pressable>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Share prayer"
+            accessibilityState={{ disabled: !card?.prayeruuid }}
             disabled={!card?.prayeruuid}
+            hitSlop={4}
             onPress={sharePrayer}
             style={({ pressed }) => [
               styles.action,
@@ -128,15 +278,16 @@ export function PrayerDetailModal({
               pressed && styles.pressed,
             ]}
           >
-            <Text style={styles.actionText}>Share</Text>
+            <ShareIcon color={colors.white} size={17} />
           </Pressable>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Close prayer"
+            hitSlop={4}
             onPress={onClose}
             style={({ pressed }) => [styles.action, pressed && styles.pressed]}
           >
-            <Text style={styles.actionText}>Close</Text>
+            <CloseIcon color={colors.white} size={17} />
           </Pressable>
         </View>
       </View>
@@ -157,7 +308,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 28,
     paddingTop: 90,
-    paddingBottom: 150,
+    paddingBottom: 100,
   },
   verse: {
     color: colors.accent,
@@ -190,43 +341,39 @@ const styles = StyleSheet.create({
     marginTop: 24,
     textTransform: "uppercase",
   },
+  audioMessage: {
+    color: colors.mutedSoft,
+    fontFamily: fonts.body,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 14,
+  },
   actions: {
     position: "absolute",
     bottom: 28,
     left: 24,
     right: 24,
     flexDirection: "row",
+    justifyContent: "flex-end",
     gap: 10,
   },
-  primaryAction: {
-    flex: 1,
-    minHeight: 52,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 26,
-    backgroundColor: colors.white,
-  },
-  primaryActionText: {
-    color: colors.black,
-    fontFamily: fonts.displayMedium,
-    fontSize: 14,
-    fontWeight: "500",
-  },
   action: {
-    minWidth: 68,
-    minHeight: 52,
+    width: 40,
+    height: 40,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 26,
-    backgroundColor: "rgba(20,20,20,0.78)",
-    borderColor: colors.glassBorder,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.12)",
     borderWidth: 1,
-    paddingHorizontal: 14,
   },
-  actionText: {
-    color: colors.white,
-    fontFamily: fonts.bodyMedium,
-    fontSize: 12,
+  actionActive: {
+    borderColor: "rgba(249,115,22,0.65)",
+    backgroundColor: "rgba(249,115,22,0.28)",
+  },
+  listenAction: {
+    borderColor: "rgba(249,115,22,0.45)",
+    backgroundColor: "rgba(249,115,22,0.15)",
   },
   disabled: {
     opacity: 0.35,
