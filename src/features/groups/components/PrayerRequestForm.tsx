@@ -1,12 +1,18 @@
-import { useState, type ComponentType } from "react";
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-  type GestureResponderEvent,
-} from "react-native";
+import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, {
+  Easing,
+  ReduceMotion,
+  cancelAnimation,
+  runOnJS,
+  useAnimatedReaction,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withDelay,
+  withTiming,
+} from "react-native-reanimated";
 import { colors, fonts } from "../../../theme/tokens";
 import type { PrayerIntensity } from "../types";
 import {
@@ -26,6 +32,13 @@ const CATEGORIES = [
   { name: "Relationships", Icon: RelationshipsIcon },
   { name: "Finances", Icon: FinancesIcon },
 ] as const;
+
+const INTRO_PRESETS = [3, 4, 6, 3, 5, 2] as const;
+const INTRO_HOLD_MS = 520;
+const INTRO_STAGGER_MS = 85;
+const INTRO_DURATION_MS = 740;
+const INTRO_EASING = Easing.bezier(0.22, 1, 0.36, 1);
+const THUMB_SIZE = 24;
 
 const CATEGORY_TIPS: Record<string, string[]> = {
   Family: [
@@ -86,6 +99,7 @@ export function PrayerRequestForm({
   sending,
 }: PrayerRequestFormProps) {
   const [step, setStep] = useState<0 | 1>(0);
+  const introConsumedRef = useRef(false);
   const [intensities, setIntensities] = useState<Record<string, number>>(
     Object.fromEntries(CATEGORIES.map(({ name }) => [name, 0])),
   );
@@ -105,15 +119,18 @@ export function PrayerRequestForm({
       <View style={styles.panel}>
         <Text style={styles.title}>What&apos;s on your heart?</Text>
         <Text style={styles.subtitle}>
-          Tap to set intensity (0–10) for each area needing prayer.
+          Slide to set intensity (0–10) for each area needing prayer.
         </Text>
         <View style={styles.sliderList}>
-          {CATEGORIES.map(({ name: category, Icon }) => (
+          {CATEGORIES.map(({ name: category, Icon }, index) => (
             <IntensitySlider
               key={category}
               category={category}
               Icon={Icon}
               value={intensities[category]}
+              playIntro={!introConsumedRef.current}
+              introFrom={INTRO_PRESETS[index] ?? 0}
+              introDelay={INTRO_HOLD_MS + index * INTRO_STAGGER_MS}
               onChange={(intensity) =>
                 setIntensities((current) => ({
                   ...current,
@@ -125,7 +142,13 @@ export function PrayerRequestForm({
         </View>
         <View style={styles.actions}>
           <SecondaryButton label="Cancel" onPress={onCancel} />
-          <PrimaryButton label="Continue" onPress={() => setStep(1)} />
+          <PrimaryButton
+            label="Continue"
+            onPress={() => {
+              introConsumedRef.current = true;
+              setStep(1);
+            }}
+          />
         </View>
       </View>
     );
@@ -203,27 +226,113 @@ export function PrayerRequestForm({
   );
 }
 
+const SLIDER_MIN = 0;
+const SLIDER_MAX = 10;
+
+function snapIntensity(x: number, width: number) {
+  if (width <= 0) return SLIDER_MIN;
+  return Math.max(
+    SLIDER_MIN,
+    Math.min(SLIDER_MAX, Math.round((x / width) * SLIDER_MAX)),
+  );
+}
+
 function IntensitySlider({
   category,
   Icon,
   value,
+  playIntro,
+  introFrom,
+  introDelay,
   onChange,
 }: {
   category: string;
   Icon: ComponentType<{ color?: string; size?: number }>;
   value: number;
+  playIntro: boolean;
+  introFrom: number;
+  introDelay: number;
   onChange: (value: number) => void;
 }) {
-  const [width, setWidth] = useState(1);
-  const active = value > 0;
-  const updateFromPress = (event: GestureResponderEvent) => {
-    onChange(
-      Math.max(
-        0,
-        Math.min(10, Math.round((event.nativeEvent.locationX / width) * 10)),
-      ),
+  const reducedMotion = useReducedMotion();
+  const shouldIntro = playIntro && !reducedMotion && introFrom > 0;
+  const widthRef = useRef(1);
+  const valueRef = useRef(value);
+  const onChangeRef = useRef(onChange);
+  valueRef.current = value;
+  onChangeRef.current = onChange;
+
+  const progress = useSharedValue(shouldIntro ? introFrom : value);
+  const trackWidth = useSharedValue(1);
+  const [display, setDisplay] = useState(shouldIntro ? introFrom : value);
+  const active = display > 0;
+
+  useEffect(() => {
+    if (!shouldIntro) return;
+    progress.value = withDelay(
+      introDelay,
+      withTiming(0, {
+        duration: INTRO_DURATION_MS,
+        easing: INTRO_EASING,
+        reduceMotion: ReduceMotion.System,
+      }),
     );
-  };
+    return () => {
+      cancelAnimation(progress);
+    };
+  }, [introDelay, progress, shouldIntro]);
+
+  useAnimatedReaction(
+    () => Math.round(progress.value),
+    (current, previous) => {
+      if (current !== previous) {
+        runOnJS(setDisplay)(current);
+      }
+    },
+  );
+
+  const fillStyle = useAnimatedStyle(() => ({
+    transform: [{ scaleX: Math.max(0, progress.value) / SLIDER_MAX }],
+  }));
+  const thumbStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        translateX:
+          (Math.max(0, progress.value) / SLIDER_MAX) * trackWidth.value -
+          THUMB_SIZE / 2,
+      },
+    ],
+  }));
+
+  const commit = useCallback((x: number) => {
+    cancelAnimation(progress);
+    const next = snapIntensity(x, widthRef.current);
+    progress.value = next;
+    if (next === valueRef.current) return;
+    valueRef.current = next;
+    onChangeRef.current(next);
+  }, [progress]);
+
+  const pan = Gesture.Pan()
+    .runOnJS(true)
+    .minDistance(0)
+    .activeOffsetX([-6, 6])
+    .failOffsetY([-18, 18])
+    .shouldCancelWhenOutside(false)
+    .onStart((event) => {
+      commit(event.x);
+    })
+    .onUpdate((event) => {
+      commit(event.x);
+    });
+
+  const tap = Gesture.Tap()
+    .runOnJS(true)
+    .onEnd((event) => {
+      commit(event.x);
+    });
+
+  const gesture = Gesture.Exclusive(pan, tap);
 
   return (
     <View style={styles.slider}>
@@ -240,37 +349,42 @@ function IntensitySlider({
           </Text>
         </View>
         <Text style={[styles.sliderValue, active && styles.sliderValueActive]}>
-          {value}
+          {display}
         </Text>
       </View>
-      <Pressable
-        accessibilityRole="adjustable"
-        accessibilityValue={{ min: 0, max: 10, now: value }}
-        accessibilityActions={[
-          { name: "increment", label: "Increase intensity" },
-          { name: "decrement", label: "Decrease intensity" },
-        ]}
-        onAccessibilityAction={(event) =>
-          onChange(
-            event.nativeEvent.actionName === "increment"
-              ? Math.min(10, value + 1)
-              : Math.max(0, value - 1),
-          )
-        }
-        onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
-        onPress={updateFromPress}
-        style={styles.trackTouch}
-      >
-        <View style={styles.track} />
-        <View style={[styles.fill, { width: `${value * 10}%` }]} />
+      <GestureDetector gesture={gesture}>
         <View
-          style={[
-            styles.thumb,
-            { left: `${value * 10}%` },
-            active && styles.thumbActive,
+          accessibilityRole="adjustable"
+          accessibilityLabel={`${category} intensity`}
+          accessibilityValue={{ min: SLIDER_MIN, max: SLIDER_MAX, now: display }}
+          accessibilityActions={[
+            { name: "increment", label: "Increase intensity" },
+            { name: "decrement", label: "Decrease intensity" },
           ]}
-        />
-      </Pressable>
+          onAccessibilityAction={(event) => {
+            cancelAnimation(progress);
+            const next =
+              event.nativeEvent.actionName === "increment"
+                ? Math.min(SLIDER_MAX, valueRef.current + 1)
+                : Math.max(SLIDER_MIN, valueRef.current - 1);
+            progress.value = next;
+            valueRef.current = next;
+            onChange(next);
+          }}
+          onLayout={(event) => {
+            const nextWidth = event.nativeEvent.layout.width;
+            widthRef.current = nextWidth;
+            trackWidth.value = nextWidth;
+          }}
+          style={styles.trackTouch}
+        >
+          <View style={styles.track} />
+          <Animated.View style={[styles.fill, fillStyle]} />
+          <Animated.View
+            style={[styles.thumb, thumbStyle, active && styles.thumbActive]}
+          />
+        </View>
+      </GestureDetector>
     </View>
   );
 }
@@ -357,29 +471,36 @@ const styles = StyleSheet.create({
   },
   sliderValueActive: { color: colors.accent },
   trackTouch: {
-    height: 24,
+    height: 44,
     justifyContent: "center",
-    marginHorizontal: 10,
+    marginHorizontal: 12,
   },
   track: {
     position: "absolute",
     left: 0,
     right: 0,
-    height: 1,
+    top: 20,
+    height: 4,
+    borderRadius: 2,
     backgroundColor: "rgba(255,255,255,0.1)",
   },
   fill: {
     position: "absolute",
     left: 0,
-    height: 1,
+    top: 20,
+    width: "100%",
+    height: 4,
+    borderRadius: 2,
     backgroundColor: colors.accent,
+    transformOrigin: "0% 50%",
   },
   thumb: {
     position: "absolute",
-    width: 14,
-    height: 14,
-    marginLeft: -7,
-    borderRadius: 7,
+    top: 10,
+    left: 0,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: "rgba(0,0,0,0.8)",
     borderWidth: 1.5,
     borderColor: "rgba(255,255,255,0.2)",
