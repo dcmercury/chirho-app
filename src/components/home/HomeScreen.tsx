@@ -115,9 +115,38 @@ async function hydrateLovedOnePhotos(
       };
     }),
   );
+  const photosById = new Map<string, string[]>();
+  const photosByName = new Map<string, string[]>();
+  for (const person of lovedOnes) {
+    const paths = (person.photos || [])
+      .slice()
+      .sort((left, right) => Number(right.isPrimary) - Number(left.isPrimary))
+      .map((photo) => photo.contentPath)
+      .filter(Boolean);
+    if (person.primaryPhoto?.contentPath && !paths.includes(person.primaryPhoto.contentPath)) {
+      paths.unshift(person.primaryPhoto.contentPath);
+    }
+    if (!paths.length) continue;
+    photosById.set(person.id, paths);
+    photosByName.set(person.name.trim().toLowerCase(), paths);
+  }
+
   return {
     ...result,
-    home: { ...result.home, lovedOnes },
+    home: {
+      ...result.home,
+      lovedOnes,
+      cards: result.home.cards.map((card, index) => {
+        const fromId =
+          card.subjectType === "loved_one" && card.subjectId
+            ? photosById.get(card.subjectId)
+            : undefined;
+        const fromTitle = card.title.match(/\bfor\s+(.+)$/i)?.[1]?.trim().toLowerCase();
+        const paths = fromId || (fromTitle ? photosByName.get(fromTitle) : undefined);
+        if (!paths?.length) return card;
+        return { ...card, image: paths[index % paths.length] };
+      }),
+    },
   };
 }
 

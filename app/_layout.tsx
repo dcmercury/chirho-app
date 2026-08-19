@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { ActivityIndicator, Platform, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -40,7 +40,7 @@ function RootNavigator() {
   const router = useRouter();
   const { isLoaded: authLoaded, isSignedIn, getToken } = useAuth();
   const getTokenRef = useRef(getToken);
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     Inter: Inter_400Regular,
     "Inter-Medium": Inter_500Medium,
     "Inter-SemiBold": Inter_600SemiBold,
@@ -51,12 +51,16 @@ function RootNavigator() {
     JetBrainsMono: JetBrainsMono_400Regular,
     "JetBrainsMono-Medium": JetBrainsMono_500Medium,
   });
+  const fontsReady = fontsLoaded || !!fontError;
+
+  const hideSplash = useCallback(() => {
+    if (!fontsReady) return;
+    SplashScreen.hideAsync();
+  }, [fontsReady]);
 
   useEffect(() => {
-    if (fontsLoaded && authLoaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [authLoaded, fontsLoaded]);
+    hideSplash();
+  }, [hideSplash]);
 
   useEffect(() => {
     getTokenRef.current = getToken;
@@ -117,9 +121,10 @@ function RootNavigator() {
     };
   }, [isSignedIn, router]);
 
-  if (!fontsLoaded || !authLoaded) {
+  if (!fontsReady || !authLoaded) {
     return (
       <View
+        onLayout={hideSplash}
         style={{
           flex: 1,
           backgroundColor: colors.splash,

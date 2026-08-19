@@ -109,9 +109,11 @@ export interface PrayerCount {
 }
 
 export interface PrayerResponse {
+  prayerId?: string;
   prayerText: string | null;
   createdAt: string;
   clerkId: string;
+  acknowledgedBy?: string[];
 }
 
 export interface PrayerGroup {

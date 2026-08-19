@@ -1061,6 +1061,26 @@ export async function getPrayerResponses(
   return data.previousPrayers || [];
 }
 
+export async function acknowledgeOfferedPrayer(
+  groupuuid: string,
+  messageId: string,
+  prayerId: string,
+  token: string,
+): Promise<string[]> {
+  const data = await authenticatedRequest<{ acknowledgedBy?: string[] }>(
+    `/api/groups/${groupuuid}/chat/prayers`,
+    token,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        messageId,
+        acknowledgePrayerId: prayerId,
+      }),
+    },
+  );
+  return data.acknowledgedBy || [];
+}
+
 export async function prayForGroupMessage(
   groupuuid: string,
   messageId: string,

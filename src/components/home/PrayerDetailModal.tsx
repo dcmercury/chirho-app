@@ -10,20 +10,13 @@ import {
   View,
 } from "react-native";
 import { Image } from "expo-image";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, {
   Easing,
   FadeInDown,
   FadeInUp,
   ReduceMotion,
-  cancelAnimation,
-  interpolate,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withRepeat,
-  withTiming,
 } from "react-native-reanimated";
-import Svg, { Path } from "react-native-svg";
 import {
   setAudioModeAsync,
   useAudioPlayer,
@@ -39,6 +32,7 @@ import {
 import { trackPrayerShare } from "../../lib/api";
 import { colors, fonts } from "../../theme/tokens";
 import type { HomePrayerCard } from "../../types/home";
+import { SwipeChevron } from "../ui/SwipeChevron";
 import {
   CloseIcon,
   PauseIcon,
@@ -60,75 +54,6 @@ interface PrayerDetailModalProps {
   onPlaybackComplete?: () => void;
   onPlaybackError?: () => void;
   onClose: () => void;
-}
-
-function SwipeChevron({
-  direction,
-  onPress,
-}: {
-  direction: "up" | "down";
-  onPress: () => void;
-}) {
-  const progress = useSharedValue(0);
-  const reducedMotion = useReducedMotion();
-
-  useEffect(() => {
-    if (reducedMotion) {
-      progress.value = 0;
-      return;
-    }
-    progress.value = withRepeat(
-      withTiming(1, {
-        duration: 850,
-        easing: Easing.bezier(0.22, 1, 0.36, 1),
-      }),
-      -1,
-      true,
-    );
-    return () => cancelAnimation(progress);
-  }, [progress, reducedMotion]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(progress.value, [0, 1], [0.45, 0.95]),
-    transform: [
-      {
-        translateY: interpolate(
-          progress.value,
-          [0, 1],
-          [direction === "up" ? 3 : -3, direction === "up" ? -3 : 3],
-        ),
-      },
-    ],
-  }));
-
-  return (
-    <Pressable
-      accessibilityLabel={
-        direction === "up"
-          ? "Next prayer, swipe up"
-          : "Previous prayer, swipe down"
-      }
-      accessibilityRole="button"
-      hitSlop={8}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.swipeChevronButton,
-        pressed && styles.swipeChevronPressed,
-      ]}
-    >
-      <Animated.View style={animatedStyle}>
-        <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-          <Path
-            d={direction === "up" ? "m6 15 6-6 6 6" : "m6 9 6 6 6-6"}
-            stroke={colors.white}
-            strokeWidth={1.8}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </Svg>
-      </Animated.View>
-    </Pressable>
-  );
 }
 
 export function PrayerDetailModal({
@@ -430,6 +355,7 @@ export function PrayerDetailModal({
     })
     .reduceMotion(ReduceMotion.System);
   const deckNavigationEnabled = Boolean(onPrevious || onNext);
+  const insets = useSafeAreaInsets();
 
   return (
     <Modal
@@ -479,18 +405,25 @@ export function PrayerDetailModal({
               <Text style={styles.title}>{card?.title}</Text>
               <Text style={styles.prayer}>{card?.fullPrayer || card?.text}</Text>
               {card?.date ? <Text style={styles.date}>{card.date}</Text> : null}
+              {onPrevious ? (
+                <View style={styles.swipeNavigationBottom}>
+                  <SwipeChevron direction="down" onPress={onPrevious} />
+                </View>
+              ) : null}
               {displayedAudioMessage ? (
                 <Text style={styles.audioMessage}>{displayedAudioMessage}</Text>
               ) : null}
             </Animated.View>
           )}
         </ScrollView>
-        {deckNavigationEnabled ? (
-          <View style={styles.swipeNavigation}>
-            {onNext ? <SwipeChevron direction="up" onPress={onNext} /> : null}
-            {onPrevious ? (
-              <SwipeChevron direction="down" onPress={onPrevious} />
-            ) : null}
+        {onNext ? (
+          <View
+            style={[
+              styles.swipeNavigationTop,
+              { top: Math.max(insets.top, 12) + 6 },
+            ]}
+          >
+            <SwipeChevron direction="up" onPress={onNext} />
           </View>
         ) : null}
         {deckPosition ? (
@@ -619,26 +552,16 @@ const styles = StyleSheet.create({
     letterSpacing: 0.48,
     textTransform: "uppercase",
   },
-  swipeNavigation: {
+  swipeNavigationTop: {
     position: "absolute",
-    right: 14,
-    top: "43%",
-    gap: 8,
+    left: 0,
+    right: 0,
     alignItems: "center",
+    zIndex: 2,
   },
-  swipeChevronButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+  swipeNavigationBottom: {
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.34)",
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-  },
-  swipeChevronPressed: {
-    backgroundColor: "rgba(249,115,22,0.2)",
-    borderColor: "rgba(249,115,22,0.48)",
+    marginTop: 16,
   },
   actions: {
     position: "absolute",

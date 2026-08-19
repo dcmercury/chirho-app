@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -7,7 +8,9 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Path } from "react-native-svg";
 import { colors, fonts } from "../../../theme/tokens";
+import { SwipeChevron } from "../../../components/ui/SwipeChevron";
 import type {
   GroupMember,
   GroupMessage,
@@ -38,10 +41,12 @@ interface PrayerRequestViewProps {
   loadingOlder: boolean;
   groupAvatar?: string | null;
   actionError: string | null;
+  currentUserId?: string | null;
   onBack: () => void;
   onPrevious: () => void;
   onNext: () => void;
   onPray: (message: GroupMessage) => void;
+  onAcknowledgeOffered: (message: GroupMessage, prayerId: string) => void;
   onGenerate: (message: GroupMessage) => void;
   onSendGenerated: (message: GroupMessage) => void;
   onDismissGenerated: () => void;
@@ -64,10 +69,12 @@ export function PrayerRequestView({
   loadingOlder,
   groupAvatar,
   actionError,
+  currentUserId,
   onBack,
   onPrevious,
   onNext,
   onPray,
+  onAcknowledgeOffered,
   onGenerate,
   onSendGenerated,
   onDismissGenerated,
@@ -84,17 +91,71 @@ export function PrayerRequestView({
     : { count: 0, userPraying: false };
   const writtenResponses = responses.filter((response) => response.prayerText);
   const prayingIds = [...new Set(responses.map((response) => response.clerkId))];
+  const canGoPrevious = safeIndex > 0 || hasMoreMessages;
+  const canGoNext = safeIndex < messages.length - 1;
+  const scrollOffsetRef = useRef(0);
+  const viewportHeightRef = useRef(0);
+  const contentHeightRef = useRef(0);
+  const touchStartRef = useRef<{
+    pageY: number;
+    canGoPrevious: boolean;
+    canGoNext: boolean;
+  } | null>(null);
+
+  const handleTouchStart = (pageY: number) => {
+    const offset = scrollOffsetRef.current;
+    const viewportHeight = viewportHeightRef.current;
+    const contentHeight = contentHeightRef.current;
+    const contentFits = contentHeight <= viewportHeight + 4;
+    touchStartRef.current = {
+      pageY,
+      canGoPrevious: canGoPrevious && (contentFits || offset <= 4),
+      canGoNext:
+        canGoNext &&
+        (contentFits || offset + viewportHeight >= contentHeight - 4),
+    };
+  };
+
+  const handleTouchEnd = (pageY: number) => {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    if (!start) return;
+    const deltaY = pageY - start.pageY;
+    if (deltaY <= -56 && start.canGoNext) {
+      onNext();
+    } else if (deltaY >= 56 && start.canGoPrevious) {
+      onPrevious();
+    }
+  };
 
   return (
     <View style={styles.root}>
       <ScrollView
+        alwaysBounceVertical={false}
+        bounces={!(canGoPrevious || canGoNext)}
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: insets.top + 24,
-            paddingBottom: insets.bottom + 128,
+            paddingTop: insets.top + 56,
+            paddingBottom: insets.bottom + 148,
           },
         ]}
+        onContentSizeChange={(_, height) => {
+          contentHeightRef.current = height;
+        }}
+        onLayout={(event) => {
+          viewportHeightRef.current = event.nativeEvent.layout.height;
+        }}
+        onScroll={(event) => {
+          scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+        }}
+        onTouchCancel={() => {
+          touchStartRef.current = null;
+        }}
+        onTouchEnd={(event) => handleTouchEnd(event.nativeEvent.pageY)}
+        onTouchStart={(event) => handleTouchStart(event.nativeEvent.pageY)}
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
       >
         <Pressable onPress={onBack} style={styles.back}>
           <BackIcon color={colors.muted} size={13} />
@@ -170,6 +231,13 @@ export function PrayerRequestView({
                       responseMember,
                       response.clerkId,
                     );
+                    const acknowledgers = response.acknowledgedBy || [];
+                    const displayIds = currentUserId
+                      ? [
+                          currentUserId,
+                          ...acknowledgers.filter((id) => id !== currentUserId),
+                        ]
+                      : acknowledgers;
                     return (
                       <View
                         key={`${response.clerkId}-${response.createdAt}-${index}`}
@@ -187,9 +255,73 @@ export function PrayerRequestView({
                             {formatRelativeTime(response.createdAt)}
                           </Text>
                         </View>
-                        <Text style={styles.responseText}>
-                          {response.prayerText}
-                        </Text>
+                        <CollapsiblePrayerText text={response.prayerText || ""} />
+                        {displayIds.length ? (
+                          <View style={styles.acknowledgeRow}>
+                            {displayIds.map((id, avatarIndex) => {
+                              const member = getMember(members, id);
+                              const name = getMemberName(member, id);
+                              const acknowledged = acknowledgers.includes(id);
+                              const isCurrentUser = id === currentUserId;
+                              const avatar = (
+                                <View
+                                  style={[
+                                    styles.acknowledger,
+                                    avatarIndex ? styles.overlap : undefined,
+                                  ]}
+                                >
+                                  <GroupAvatar
+                                    uri={member?.profile?.avatar}
+                                    name={name}
+                                    size={26}
+                                    borderColor="rgba(255,255,255,0.18)"
+                                  />
+                                  <View
+                                    style={[
+                                      styles.heartBadge,
+                                      !acknowledged && styles.heartBadgeMuted,
+                                    ]}
+                                  >
+                                    <HeartIcon
+                                      color={
+                                        acknowledged
+                                          ? colors.accent
+                                          : colors.mutedStrong
+                                      }
+                                      fill={
+                                        acknowledged ? colors.accent : "none"
+                                      }
+                                      size={7}
+                                    />
+                                  </View>
+                                </View>
+                              );
+                              if (isCurrentUser && response.prayerId) {
+                                return (
+                                  <Pressable
+                                    key={id}
+                                    accessibilityLabel={
+                                      acknowledged
+                                        ? "Remove acknowledgment"
+                                        : "Acknowledge this prayer"
+                                    }
+                                    accessibilityRole="button"
+                                    hitSlop={6}
+                                    onPress={() =>
+                                      onAcknowledgeOffered(
+                                        message,
+                                        response.prayerId!,
+                                      )
+                                    }
+                                  >
+                                    {avatar}
+                                  </Pressable>
+                                );
+                              }
+                              return <View key={id}>{avatar}</View>;
+                            })}
+                          </View>
+                        ) : null}
                       </View>
                     );
                   })}
@@ -258,17 +390,35 @@ export function PrayerRequestView({
               </View>
             </Stagger>
             {actionError ? <Text style={styles.error}>{actionError}</Text> : null}
+            {canGoPrevious ? (
+              <View style={styles.swipeNavigationBottom}>
+                <SwipeChevron
+                  accessibilityLabel="Previous prayer request, swipe down"
+                  direction="down"
+                  loading={loadingOlder}
+                  onPress={onPrevious}
+                />
+              </View>
+            ) : null}
           </View>
         )}
       </ScrollView>
+      {canGoNext ? (
+        <View
+          style={[
+            styles.swipeNavigationTop,
+            { top: Math.max(insets.top, 12) + 6 },
+          ]}
+        >
+          <SwipeChevron
+            accessibilityLabel="Next prayer request, swipe up"
+            direction="up"
+            onPress={onNext}
+          />
+        </View>
+      ) : null}
       {message ? (
         <View style={[styles.nav, { paddingBottom: Math.max(insets.bottom, 8) }]}>
-          <NavButton
-            label="PREV"
-            disabled={safeIndex === 0 && !hasMoreMessages}
-            loading={loadingOlder}
-            onPress={onPrevious}
-          />
           <Pressable
             accessibilityLabel={`Open ${groupName} members and settings`}
             accessibilityRole="button"
@@ -282,14 +432,9 @@ export function PrayerRequestView({
               borderColor="rgba(255,255,255,0.15)"
             />
             <Text style={styles.counter}>
-              {safeIndex + 1} / {messages.length}
+              {safeIndex + 1} / {messages.length} · Swipe
             </Text>
           </Pressable>
-          <NavButton
-            label="NEXT"
-            disabled={safeIndex >= messages.length - 1}
-            onPress={onNext}
-          />
           <View style={styles.handle} />
         </View>
       ) : null}
@@ -297,29 +442,48 @@ export function PrayerRequestView({
   );
 }
 
-function NavButton({
-  label,
-  disabled,
-  loading = false,
-  onPress,
-}: {
-  label: string;
-  disabled: boolean;
-  loading?: boolean;
-  onPress: () => void;
-}) {
+const COLLAPSED_PRAYER_LINES = 3;
+
+function CollapsiblePrayerText({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [canExpand, setCanExpand] = useState(false);
+
   return (
-    <Pressable
-      disabled={disabled || loading}
-      onPress={onPress}
-      style={[styles.navButton, disabled && styles.disabled]}
-    >
-      {loading ? (
-        <ActivityIndicator color={colors.mutedStrong} size="small" />
-      ) : (
-        <Text style={styles.navLabel}>{label}</Text>
-      )}
-    </Pressable>
+    <View>
+      <Text
+        numberOfLines={expanded ? undefined : COLLAPSED_PRAYER_LINES}
+        onTextLayout={(event) => {
+          if (event.nativeEvent.lines.length >= COLLAPSED_PRAYER_LINES) {
+            setCanExpand(true);
+          }
+        }}
+        style={styles.responseText}
+      >
+        {text}
+      </Text>
+      {canExpand ? (
+        <Pressable
+          accessibilityLabel={expanded ? "Show less prayer" : "Read more prayer"}
+          accessibilityRole="button"
+          hitSlop={6}
+          onPress={() => setExpanded((open) => !open)}
+          style={styles.readMore}
+        >
+          <Text style={styles.readMoreText}>
+            {expanded ? "Show less" : "Read more"}
+          </Text>
+          <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
+            <Path
+              d={expanded ? "m6 15 6-6 6 6" : "m6 9 6 6 6-6"}
+              stroke={colors.mutedStrong}
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </Svg>
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 
@@ -433,6 +597,47 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontStyle: "italic",
   },
+  readMore: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 4,
+    marginTop: 6,
+    paddingVertical: 2,
+  },
+  readMoreText: {
+    color: colors.mutedStrong,
+    fontFamily: fonts.mono,
+    fontSize: 9,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  acknowledgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+    minHeight: 28,
+  },
+  acknowledger: {
+    width: 26,
+    height: 26,
+  },
+  heartBadge: {
+    position: "absolute",
+    right: -3,
+    bottom: -3,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(12,12,12,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(249,115,22,0.45)",
+  },
+  heartBadgeMuted: {
+    borderColor: "rgba(255,255,255,0.18)",
+  },
   praying: { flexDirection: "row", marginTop: 8 },
   overlap: { marginLeft: -6 },
   actions: { flexDirection: "row", gap: 10, marginTop: 8 },
@@ -485,32 +690,25 @@ const styles = StyleSheet.create({
     borderColor: colors.glassBorder,
   },
   dismissText: { color: colors.muted, fontFamily: fonts.body, fontSize: 11 },
+  swipeNavigationTop: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    zIndex: 2,
+  },
+  swipeNavigationBottom: {
+    alignItems: "center",
+    marginTop: 16,
+  },
   nav: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 16,
     backgroundColor: "rgba(0,0,0,0.25)",
-  },
-  navButton: {
-    width: 46,
-    height: 36,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 18,
-    borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.3)",
-    backgroundColor: "rgba(255,255,255,0.05)",
-  },
-  navLabel: {
-    color: colors.mutedStrong,
-    fontFamily: fonts.mono,
-    fontSize: 8,
-    letterSpacing: 0.5,
   },
   center: { alignItems: "center", gap: 3 },
   counter: {

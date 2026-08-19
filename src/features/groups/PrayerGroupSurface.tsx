@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { Image } from "expo-image";
 import {
+  acknowledgeOfferedPrayer,
   generateGroupPrayer,
   getGroupMessages,
   getGroupPrayerCounts,
@@ -306,6 +307,31 @@ export function PrayerGroupSurface({
     }
   };
 
+  const handleAcknowledgeOffered = async (
+    message: GroupMessage,
+    prayerId: string,
+  ) => {
+    setActionError(null);
+    try {
+      const token = await requireToken();
+      const acknowledgedBy = await acknowledgeOfferedPrayer(
+        groupuuid,
+        message.messageId,
+        prayerId,
+        token,
+      );
+      setResponses((current) =>
+        current.map((response) =>
+          response.prayerId === prayerId
+            ? { ...response, acknowledgedBy }
+            : response,
+        ),
+      );
+    } catch (err) {
+      setActionError(messageFor(err, "Unable to acknowledge this prayer."));
+    }
+  };
+
   const handleGeneratePrayer = async (message: GroupMessage) => {
     setGeneratingPrayer(true);
     setGeneratedPrayer(null);
@@ -554,6 +580,8 @@ export function PrayerGroupSurface({
               onPrevious={previous}
               onNext={next}
               onPray={handlePray}
+              onAcknowledgeOffered={handleAcknowledgeOffered}
+              currentUserId={currentUser.id}
               onGenerate={handleGeneratePrayer}
               onSendGenerated={handleSendGenerated}
               onDismissGenerated={() => setGeneratedPrayer(null)}

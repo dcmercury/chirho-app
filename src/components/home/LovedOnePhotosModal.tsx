@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -48,6 +48,8 @@ export function LovedOnePhotosModal({
   onChanged,
 }: LovedOnePhotosModalProps) {
   const { getToken } = useAuth();
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
   const [token, setToken] = useState<string | null>(null);
   const [photos, setPhotos] = useState<LovedOnePhoto[]>([]);
   const [loading, setLoading] = useState(false);
@@ -55,23 +57,24 @@ export function LovedOnePhotosModal({
   const [pendingMediauuid, setPendingMediauuid] = useState<string | null>(null);
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const lovedOneId = lovedOne?.id;
 
   const requireToken = useCallback(async () => {
-    const sessionToken = await getToken();
+    const sessionToken = await getTokenRef.current();
     if (!sessionToken) {
       throw new Error("Your session expired. Please sign in again.");
     }
-    setToken(sessionToken);
+    setToken((current) => (current === sessionToken ? current : sessionToken));
     return sessionToken;
-  }, [getToken]);
+  }, []);
 
   const loadPhotos = useCallback(async () => {
-    if (!lovedOne) return;
+    if (!lovedOneId) return;
     setLoading(true);
     setError(null);
     try {
       const sessionToken = await requireToken();
-      setPhotos(await getLovedOnePhotos(lovedOne.id, sessionToken));
+      setPhotos(await getLovedOnePhotos(lovedOneId, sessionToken));
     } catch (loadError) {
       setError(
         loadError instanceof Error
@@ -81,10 +84,10 @@ export function LovedOnePhotosModal({
     } finally {
       setLoading(false);
     }
-  }, [lovedOne, requireToken]);
+  }, [lovedOneId, requireToken]);
 
   useEffect(() => {
-    if (visible && lovedOne) {
+    if (visible && lovedOneId) {
       setUploads([]);
       void loadPhotos();
     } else {
@@ -92,7 +95,7 @@ export function LovedOnePhotosModal({
       setError(null);
       setToken(null);
     }
-  }, [loadPhotos, lovedOne, visible]);
+  }, [loadPhotos, lovedOneId, visible]);
 
   const updateUpload = (id: string, updates: Partial<UploadItem>) => {
     setUploads((current) =>
