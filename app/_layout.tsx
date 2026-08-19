@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
-import { ActivityIndicator, Linking, Platform, View } from "react-native";
-import { Stack, useRouter, type Href } from "expo-router";
+import { ActivityIndicator, Platform, View } from "react-native";
+import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { ClerkProvider, useAuth } from "@clerk/expo";
 import { tokenCache } from "@clerk/expo/token-cache";
@@ -22,7 +22,10 @@ import {
   JetBrainsMono_400Regular,
   JetBrainsMono_500Medium,
 } from "@expo-google-fonts/jetbrains-mono";
-import { registerForPushNotifications } from "../src/lib/push";
+import {
+  hrefFromNotificationData,
+  registerForPushNotifications,
+} from "../src/lib/push";
 import { registerPushToken } from "../src/lib/api";
 import { colors } from "../src/theme/tokens";
 
@@ -31,18 +34,6 @@ SplashScreen.preventAutoHideAsync();
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
 if (!publishableKey) {
   throw new Error("EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY is not configured");
-}
-
-function isTrustedNotificationUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return (
-      url.protocol === "https:" &&
-      (url.hostname === "chirho.ai" || url.hostname === "www.chirho.ai")
-    );
-  } catch {
-    return false;
-  }
 }
 
 function RootNavigator() {
@@ -106,32 +97,12 @@ function RootNavigator() {
           ReturnType<typeof Notifications.getLastNotificationResponseAsync>
         >,
       ) => {
-        const data = response?.notification.request.content.data;
-        if (typeof data?.deckuuid === "string") {
-          router.push(
-            `/(app)/prayer-decks/${data.deckuuid}` as Href,
-          );
-        } else if (typeof data?.prayeruuid === "string") {
-          router.push({
-            pathname: "/(app)/prayers/[prayeruuid]",
-            params: { prayeruuid: data.prayeruuid },
-          });
-        } else if (typeof data?.groupuuid === "string") {
-          router.push({
-            pathname: "/(app)/groups/[groupuuid]",
-            params: {
-              groupuuid: data.groupuuid,
-              ...(typeof data.messageId === "string"
-                ? { messageId: data.messageId }
-                : {}),
-            },
-          });
-        } else if (
-          typeof data?.url === "string" &&
-          isTrustedNotificationUrl(data.url)
-        ) {
-          void Linking.openURL(data.url);
-        }
+        const href = hrefFromNotificationData(
+          response?.notification.request.content.data as
+            | Record<string, unknown>
+            | undefined,
+        );
+        if (href) router.push(href);
       };
 
       Notifications.getLastNotificationResponseAsync().then(openNotification);
