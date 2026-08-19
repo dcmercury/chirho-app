@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Modal, ScrollView, View } from "react-native";
 import type {
   HomeCommunity,
@@ -8,7 +7,6 @@ import type {
   PrayerFocus,
 } from "../../types/home";
 import { AccountSection } from "./profile-drawer/AccountSection";
-import { LovedOnePhotosModal } from "./LovedOnePhotosModal";
 import { CommunitySection } from "./profile-drawer/CommunitySection";
 import { DailyPrayersSection } from "./profile-drawer/DailyPrayersSection";
 import { DangerZoneSection } from "./profile-drawer/DangerZoneSection";
@@ -31,7 +29,12 @@ interface ProfileDrawerProps {
   community: HomeCommunity | null;
   token: string | null;
   onClose: () => void;
+  onDismiss?: () => void;
   onChanged: () => Promise<void>;
+  onManageLovedOnePhotos: (lovedOne: {
+    id: string;
+    firstName: string;
+  }) => void;
 }
 
 function firstErrorFor(
@@ -56,13 +59,11 @@ export function ProfileDrawer({
   community,
   token,
   onClose,
+  onDismiss,
   onChanged,
+  onManageLovedOnePhotos,
 }: ProfileDrawerProps) {
   const controller = useProfileDrawerController(visible, onChanged);
-  const [photoLovedOne, setPhotoLovedOne] = useState<{
-    id: string;
-    firstName: string;
-  } | null>(null);
 
   if (!profile) return null;
   const lovedOneAvatarById = Object.fromEntries(
@@ -77,6 +78,7 @@ export function ProfileDrawer({
       animationType="slide"
       presentationStyle="pageSheet"
       visible={visible}
+      onDismiss={onDismiss}
       onRequestClose={onClose}
     >
       <View style={styles.root}>
@@ -104,7 +106,9 @@ export function ProfileDrawer({
             token={token}
             error={firstErrorFor(controller.errors, "loved-one")}
             isPending={(id) => Boolean(controller.pending[`loved-one:${id}`])}
-            onManage={(id, firstName) => setPhotoLovedOne({ id, firstName })}
+            onManage={(id, firstName) =>
+              onManageLovedOnePhotos({ id, firstName })
+            }
             onRemove={controller.confirmRemoveLovedOne}
           />
           <PrayerFocusesSection
@@ -206,12 +210,6 @@ export function ProfileDrawer({
             onDeleteAccount={controller.confirmDeleteAccount}
           />
         </ScrollView>
-        <LovedOnePhotosModal
-          visible={photoLovedOne !== null}
-          lovedOne={photoLovedOne}
-          onClose={() => setPhotoLovedOne(null)}
-          onChanged={onChanged}
-        />
       </View>
     </Modal>
   );

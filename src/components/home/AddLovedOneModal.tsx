@@ -30,6 +30,7 @@ interface AddLovedOneModalProps {
   saving: boolean;
   error: string | null;
   onClose: () => void;
+  onDismiss?: () => void;
   onSubmit: (name: string, categories: string[]) => Promise<void>;
 }
 
@@ -38,6 +39,7 @@ export function AddLovedOneModal({
   saving,
   error,
   onClose,
+  onDismiss,
   onSubmit,
 }: AddLovedOneModalProps) {
   const [name, setName] = useState("");
@@ -63,6 +65,7 @@ export function AddLovedOneModal({
       animationType="slide"
       presentationStyle="pageSheet"
       visible={visible}
+      onDismiss={onDismiss}
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView

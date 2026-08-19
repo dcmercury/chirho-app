@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -142,6 +143,13 @@ export function HomeScreen() {
     id: string;
     firstName: string;
   } | null>(null);
+  const pendingPhotoLovedOneRef = useRef<{
+    id: string;
+    firstName: string;
+  } | null>(null);
+  const photoModalFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const [prayerFocusOpen, setPrayerFocusOpen] = useState(false);
   const [selectedFocus, setSelectedFocus] = useState<PrayerFocus | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -152,6 +160,39 @@ export function HomeScreen() {
   useEffect(() => {
     getTokenRef.current = getToken;
   }, [getToken]);
+
+  const openQueuedPhotoModal = useCallback(() => {
+    const lovedOne = pendingPhotoLovedOneRef.current;
+    if (!lovedOne) return;
+    pendingPhotoLovedOneRef.current = null;
+    if (photoModalFallbackRef.current) {
+      clearTimeout(photoModalFallbackRef.current);
+      photoModalFallbackRef.current = null;
+    }
+    setPhotoLovedOne(lovedOne);
+  }, []);
+
+  const queuePhotoModal = useCallback(
+    (lovedOne: { id: string; firstName: string }) => {
+      pendingPhotoLovedOneRef.current = lovedOne;
+      if (Platform.OS !== "ios") {
+        if (photoModalFallbackRef.current) {
+          clearTimeout(photoModalFallbackRef.current);
+        }
+        photoModalFallbackRef.current = setTimeout(openQueuedPhotoModal, 400);
+      }
+    },
+    [openQueuedPhotoModal],
+  );
+
+  useEffect(
+    () => () => {
+      if (photoModalFallbackRef.current) {
+        clearTimeout(photoModalFallbackRef.current);
+      }
+    },
+    [],
+  );
 
   const requireCurrentToken = useCallback(async () => {
     const token = await getTokenRef.current();
@@ -327,8 +368,8 @@ export function HomeScreen() {
         await saveLovedOneConfig(lovedOne.id, categories, token);
       }
       await loadHome(true);
+      queuePhotoModal(lovedOne);
       setAddLovedOneOpen(false);
-      setPhotoLovedOne(lovedOne);
     } catch (err) {
       setMutationError(err instanceof Error ? err.message : "Unable to add loved one");
     } finally {
@@ -669,6 +710,7 @@ export function HomeScreen() {
         saving={savingLovedOne}
         error={mutationError}
         onClose={() => setAddLovedOneOpen(false)}
+        onDismiss={openQueuedPhotoModal}
         onSubmit={handleAddLovedOne}
       />
       <LovedOnePhotosModal
@@ -701,7 +743,12 @@ export function HomeScreen() {
         community={response?.community || null}
         token={sessionToken}
         onClose={() => setProfileOpen(false)}
+        onDismiss={openQueuedPhotoModal}
         onChanged={() => loadHome(true)}
+        onManageLovedOnePhotos={(lovedOne) => {
+          queuePhotoModal(lovedOne);
+          setProfileOpen(false);
+        }}
       />
     </View>
   );
