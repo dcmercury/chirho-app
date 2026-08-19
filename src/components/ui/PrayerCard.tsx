@@ -8,33 +8,51 @@ export function PrayerCard({
   card,
   index,
   onPress,
+  variant = "default",
 }: {
   card: HomePrayerCard;
   index?: number;
   onPress?: () => void;
+  variant?: "default" | "deck";
 }) {
+  const isDeckCard = variant === "deck";
+
   return (
     <Pressable
       accessibilityRole={onPress ? "button" : undefined}
       accessibilityLabel={onPress ? `Open ${card.title}` : undefined}
       disabled={!onPress}
       onPress={onPress}
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.card,
+        isDeckCard && styles.deckCard,
+        pressed && styles.pressed,
+      ]}
     >
       <View>
-        <Image source={resolveImage(card.image)} style={styles.img} contentFit="cover" />
+        <Image
+          source={resolveImage(card.image)}
+          style={[styles.img, isDeckCard && styles.deckImage]}
+          contentFit="cover"
+        />
         {typeof index === "number" ? (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{index + 1}</Text>
           </View>
         ) : null}
       </View>
-      <View style={styles.body}>
-        <Text style={styles.title} numberOfLines={1}>
+      <View style={[styles.body, isDeckCard && styles.deckBody]}>
+        <Text
+          style={[styles.title, isDeckCard && styles.deckTitle]}
+          numberOfLines={isDeckCard ? 2 : 1}
+        >
           {card.title}
         </Text>
         <Text style={styles.verse}>{card.verse}</Text>
-        <Text style={styles.text} numberOfLines={3}>
+        <Text
+          style={[styles.text, isDeckCard && styles.deckText]}
+          numberOfLines={isDeckCard ? 5 : 3}
+        >
           {card.text}
         </Text>
         {card.date ? <Text style={styles.date}>{card.date}</Text> : null}
@@ -52,6 +70,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.cardBorder,
   },
+  deckCard: {
+    width: 238,
+    borderRadius: 16,
+  },
   pressed: {
     opacity: 0.76,
     transform: [{ scale: 0.98 }],
@@ -59,6 +81,9 @@ const styles = StyleSheet.create({
   img: {
     width: "100%",
     height: 80,
+  },
+  deckImage: {
+    height: 124,
   },
   badge: {
     position: "absolute",
@@ -81,12 +106,21 @@ const styles = StyleSheet.create({
     padding: 10,
     backgroundColor: colors.cardFill,
   },
+  deckBody: {
+    minHeight: 136,
+    padding: 14,
+  },
   title: {
     fontFamily: fonts.displayMedium,
     fontSize: 12,
     fontWeight: "500",
     color: colors.white,
     marginBottom: 2,
+  },
+  deckTitle: {
+    fontSize: 16,
+    lineHeight: 19,
+    marginBottom: 4,
   },
   verse: {
     fontFamily: fonts.mono,
@@ -101,6 +135,10 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     color: colors.cardText,
     fontFamily: fonts.body,
+  },
+  deckText: {
+    fontSize: 11.5,
+    lineHeight: 17,
   },
   date: {
     fontFamily: fonts.mono,

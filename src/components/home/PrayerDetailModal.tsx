@@ -10,6 +10,20 @@ import {
   View,
 } from "react-native";
 import { Image } from "expo-image";
+import Animated, {
+  Easing,
+  FadeInDown,
+  FadeInUp,
+  ReduceMotion,
+  cancelAnimation,
+  interpolate,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
+import Svg, { Path } from "react-native-svg";
 import {
   setAudioModeAsync,
   useAudioPlayer,
@@ -36,7 +50,84 @@ interface PrayerDetailModalProps {
   token: string | null;
   visible: boolean;
   loading?: boolean;
+  autoPlay?: boolean;
+  deckPosition?: string;
+  navigationContext?: string;
+  navigationDirection?: -1 | 1;
+  onPrevious?: () => void;
+  onNext?: () => void;
+  onPlaybackComplete?: () => void;
+  onPlaybackError?: () => void;
   onClose: () => void;
+}
+
+function SwipeChevron({
+  direction,
+  onPress,
+}: {
+  direction: "up" | "down";
+  onPress: () => void;
+}) {
+  const progress = useSharedValue(0);
+  const reducedMotion = useReducedMotion();
+
+  useEffect(() => {
+    if (reducedMotion) {
+      progress.value = 0;
+      return;
+    }
+    progress.value = withRepeat(
+      withTiming(1, {
+        duration: 850,
+        easing: Easing.bezier(0.22, 1, 0.36, 1),
+      }),
+      -1,
+      true,
+    );
+    return () => cancelAnimation(progress);
+  }, [progress, reducedMotion]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.value, [0, 1], [0.45, 0.95]),
+    transform: [
+      {
+        translateY: interpolate(
+          progress.value,
+          [0, 1],
+          [direction === "up" ? 3 : -3, direction === "up" ? -3 : 3],
+        ),
+      },
+    ],
+  }));
+
+  return (
+    <Pressable
+      accessibilityLabel={
+        direction === "up"
+          ? "Next prayer, swipe up"
+          : "Previous prayer, swipe down"
+      }
+      accessibilityRole="button"
+      hitSlop={8}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.swipeChevronButton,
+        pressed && styles.swipeChevronPressed,
+      ]}
+    >
+      <Animated.View style={animatedStyle}>
+        <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+          <Path
+            d={direction === "up" ? "m6 15 6-6 6 6" : "m6 9 6 6 6-6"}
+            stroke={colors.white}
+            strokeWidth={1.8}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+      </Animated.View>
+    </Pressable>
+  );
 }
 
 export function PrayerDetailModal({
@@ -44,6 +135,14 @@ export function PrayerDetailModal({
   token,
   visible,
   loading = false,
+  autoPlay = false,
+  deckPosition,
+  navigationContext = "single-prayer",
+  navigationDirection = 1,
+  onPrevious,
+  onNext,
+  onPlaybackComplete,
+  onPlaybackError,
   onClose,
 }: PrayerDetailModalProps) {
   const narrationUrl =
@@ -70,7 +169,21 @@ export function PrayerDetailModal({
   const narrationStatus = useAudioPlayerStatus(narrationPlayer);
   const musicStatus = useAudioPlayerStatus(musicPlayer);
   const pendingPlayRef = useRef(false);
+  const autoPlayKeyRef = useRef<string | null>(null);
+  const reportedErrorRef = useRef<string | null>(null);
+  const onPlaybackCompleteRef = useRef(onPlaybackComplete);
+  const onPlaybackErrorRef = useRef(onPlaybackError);
+  const scrollOffsetRef = useRef(0);
+  const contentHeightRef = useRef(0);
+  const viewportHeightRef = useRef(0);
+  const touchStartRef = useRef<{
+    pageY: number;
+    canGoPrevious: boolean;
+    canGoNext: boolean;
+  } | null>(null);
   const [audioMessage, setAudioMessage] = useState<string | null>(null);
+  const canNavigatePrevious = Boolean(onPrevious);
+  const canNavigateNext = Boolean(onNext);
   const audioPreparing = card?.audioStatus === "pending";
   const displayedAudioMessage =
     audioMessage ||
@@ -79,6 +192,31 @@ export function PrayerDetailModal({
       : card?.audioStatus === "failed"
         ? "Narration could not be prepared."
         : null);
+
+  useEffect(() => {
+    onPlaybackCompleteRef.current = onPlaybackComplete;
+    onPlaybackErrorRef.current = onPlaybackError;
+  }, [onPlaybackComplete, onPlaybackError]);
+
+  useEffect(() => {
+    if (!__DEV__ || !visible) return;
+    console.info("[PrayerSwipe] Prayer detail opened", {
+      context: navigationContext,
+      prayeruuid: card?.prayeruuid,
+      title: card?.title,
+      position: deckPosition,
+      canNavigatePrevious,
+      canNavigateNext,
+    });
+  }, [
+    canNavigateNext,
+    canNavigatePrevious,
+    card?.prayeruuid,
+    card?.title,
+    deckPosition,
+    navigationContext,
+    visible,
+  ]);
 
   useEffect(() => {
     if (!visible) return;
@@ -109,9 +247,35 @@ export function PrayerDetailModal({
       narrationPlayer.pause();
       musicPlayer.pause();
       pendingPlayRef.current = false;
+      autoPlayKeyRef.current = null;
+      reportedErrorRef.current = null;
       setAudioMessage(null);
     }
   }, [musicPlayer, narrationPlayer, visible]);
+
+  useEffect(() => {
+    if (!visible || !autoPlay || !narrationUrl) return;
+    const key = card?.prayeruuid || narrationUrl;
+    if (autoPlayKeyRef.current === key) return;
+    autoPlayKeyRef.current = key;
+    setAudioMessage(null);
+    if (narrationStatus.isLoaded) {
+      narrationPlayer.play();
+      if (musicStatus.isLoaded) musicPlayer.play();
+    } else {
+      pendingPlayRef.current = true;
+      setAudioMessage("Loading narration…");
+    }
+  }, [
+    autoPlay,
+    card?.prayeruuid,
+    musicPlayer,
+    musicStatus.isLoaded,
+    narrationPlayer,
+    narrationStatus.isLoaded,
+    narrationUrl,
+    visible,
+  ]);
 
   useEffect(() => {
     if (!pendingPlayRef.current || !narrationStatus.isLoaded) return;
@@ -146,6 +310,7 @@ export function PrayerDetailModal({
   useEffect(() => {
     if (narrationStatus.didJustFinish) {
       musicPlayer.pause();
+      onPlaybackCompleteRef.current?.();
     }
   }, [musicPlayer, narrationStatus.didJustFinish]);
 
@@ -158,6 +323,10 @@ export function PrayerDetailModal({
     pendingPlayRef.current = false;
     musicPlayer.pause();
     setAudioMessage("Narration could not be loaded. Please try again.");
+    if (reportedErrorRef.current !== narrationStatus.error) {
+      reportedErrorRef.current = narrationStatus.error;
+      onPlaybackErrorRef.current?.();
+    }
   }, [musicPlayer, narrationStatus.error, narrationUrl]);
 
   useEffect(() => {
@@ -202,6 +371,65 @@ export function PrayerDetailModal({
     });
   };
 
+  const handleTouchStart = (pageY: number) => {
+    const offset = scrollOffsetRef.current;
+    const viewportHeight = viewportHeightRef.current;
+    const contentHeight = contentHeightRef.current;
+    const contentFits = contentHeight <= viewportHeight + 4;
+    touchStartRef.current = {
+      pageY,
+      canGoPrevious: Boolean(onPrevious) && (contentFits || offset <= 4),
+      canGoNext:
+        Boolean(onNext) &&
+        (contentFits || offset + viewportHeight >= contentHeight - 4),
+    };
+    if (__DEV__) {
+      console.info("[PrayerSwipe] Touch start", {
+        context: navigationContext,
+        offset: Math.round(offset),
+        viewportHeight: Math.round(viewportHeight),
+        contentHeight: Math.round(contentHeight),
+        contentFits,
+        canGoPrevious: touchStartRef.current.canGoPrevious,
+        canGoNext: touchStartRef.current.canGoNext,
+      });
+    }
+  };
+
+  const handleTouchEnd = (pageY: number) => {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    if (!start) return;
+    const deltaY = pageY - start.pageY;
+    if (__DEV__) {
+      console.info("[PrayerSwipe] Touch end", {
+        context: navigationContext,
+        deltaY: Math.round(deltaY),
+        canGoPrevious: start.canGoPrevious,
+        canGoNext: start.canGoNext,
+      });
+    }
+    if (deltaY <= -56 && start.canGoNext) {
+      if (__DEV__) console.info("[PrayerSwipe] Navigating to next prayer");
+      onNext?.();
+    } else if (deltaY >= 56 && start.canGoPrevious) {
+      if (__DEV__) console.info("[PrayerSwipe] Navigating to previous prayer");
+      onPrevious?.();
+    }
+  };
+
+  const contentEntrance = (
+    navigationDirection === 1 ? FadeInDown : FadeInUp
+  )
+    .duration(500)
+    .easing(Easing.bezier(0.22, 1, 0.36, 1))
+    .withInitialValues({
+      opacity: 0,
+      transform: [{ translateY: navigationDirection === 1 ? 24 : -24 }],
+    })
+    .reduceMotion(ReduceMotion.System);
+  const deckNavigationEnabled = Boolean(onPrevious || onNext);
+
   return (
     <Modal
       animationType="fade"
@@ -218,13 +446,33 @@ export function PrayerDetailModal({
         />
         <View style={[StyleSheet.absoluteFill, styles.overlay]} />
         <ScrollView
+          alwaysBounceVertical={false}
+          bounces={!deckNavigationEnabled}
           contentContainerStyle={styles.content}
+          onContentSizeChange={(_, height) => {
+            contentHeightRef.current = height;
+          }}
+          onLayout={(event) => {
+            viewportHeightRef.current = event.nativeEvent.layout.height;
+          }}
+          onScroll={(event) => {
+            scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+          }}
+          onTouchCancel={() => {
+            touchStartRef.current = null;
+          }}
+          onTouchEnd={(event) => handleTouchEnd(event.nativeEvent.pageY)}
+          onTouchStart={(event) => handleTouchStart(event.nativeEvent.pageY)}
+          scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
         >
           {loading ? (
             <ActivityIndicator color={colors.white} size="large" />
           ) : (
-            <>
+            <Animated.View
+              key={card?.prayeruuid || card?.deckIndex || "prayer-detail"}
+              entering={contentEntrance}
+            >
               <Text style={styles.verse}>{card?.verse || "PERSONAL PRAYER"}</Text>
               <Text style={styles.title}>{card?.title}</Text>
               <Text style={styles.prayer}>{card?.fullPrayer || card?.text}</Text>
@@ -232,9 +480,20 @@ export function PrayerDetailModal({
               {displayedAudioMessage ? (
                 <Text style={styles.audioMessage}>{displayedAudioMessage}</Text>
               ) : null}
-            </>
+            </Animated.View>
           )}
         </ScrollView>
+        {deckNavigationEnabled ? (
+          <View style={styles.swipeNavigation}>
+            {onNext ? <SwipeChevron direction="up" onPress={onNext} /> : null}
+            {onPrevious ? (
+              <SwipeChevron direction="down" onPress={onPrevious} />
+            ) : null}
+          </View>
+        ) : null}
+        {deckPosition ? (
+          <Text style={styles.deckPosition}>{deckPosition} · Swipe</Text>
+        ) : null}
         <View style={styles.actions}>
           <Pressable
             accessibilityRole="button"
@@ -347,6 +606,37 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     marginTop: 14,
+  },
+  deckPosition: {
+    position: "absolute",
+    bottom: 42,
+    left: 28,
+    color: colors.mutedSoft,
+    fontFamily: fonts.mono,
+    fontSize: 8,
+    letterSpacing: 0.48,
+    textTransform: "uppercase",
+  },
+  swipeNavigation: {
+    position: "absolute",
+    right: 14,
+    top: "43%",
+    gap: 8,
+    alignItems: "center",
+  },
+  swipeChevronButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.34)",
+    borderWidth: 1,
+    borderColor: colors.glassBorder,
+  },
+  swipeChevronPressed: {
+    backgroundColor: "rgba(249,115,22,0.2)",
+    borderColor: "rgba(249,115,22,0.48)",
   },
   actions: {
     position: "absolute",

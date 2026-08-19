@@ -41,6 +41,11 @@
             },
             {
               "scheme": "https",
+              "host": "chirho.ai",
+              "pathPrefix": "/prayer-decks"
+            },
+            {
+              "scheme": "https",
               "host": "www.chirho.ai",
               "pathPrefix": "/prayercards"
             },
@@ -48,6 +53,11 @@
               "scheme": "https",
               "host": "www.chirho.ai",
               "pathPrefix": "/groups"
+            },
+            {
+              "scheme": "https",
+              "host": "www.chirho.ai",
+              "pathPrefix": "/prayer-decks"
             }
           ],
           "category": [

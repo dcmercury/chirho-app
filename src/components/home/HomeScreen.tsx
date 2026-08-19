@@ -10,15 +10,17 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { useAuth, useUser } from "@clerk/expo";
-import { useRouter } from "expo-router";
+import { useRouter, type Href } from "expo-router";
 import { colors, fonts } from "../../theme/tokens";
 import { images, resolveImage } from "../../lib/assets";
 import {
   addLovedOne,
+  createPrayerFocus,
   generateLovedOnePrayer,
   generatePrayerCardAudio,
   getMobileHome,
   saveLovedOneConfig,
+  updatePrayerFocus,
 } from "../../lib/api";
 import { GridOverlay } from "../ui/GridOverlay";
 import { DisplayTitle } from "../ui/DisplayTitle";
@@ -27,12 +29,16 @@ import { LovedOne } from "../ui/LovedOne";
 import { LoadingChiRhoOverlay } from "../ui/LoadingChiRhoOverlay";
 import { AddLovedOneModal } from "./AddLovedOneModal";
 import { PrayerDetailModal } from "./PrayerDetailModal";
+import { PrayerFocusModal } from "./PrayerFocusModal";
+import { PrayerFocusTypeIcon } from "./PrayerFocusTypeIcon";
 import { ProfileDrawer } from "./ProfileDrawer";
 import type {
   HomeData,
   HomeLovedOne,
   HomePrayerCard,
   MobileHomeResponse,
+  PrayerFocus,
+  PrayerFocusInput,
 } from "../../types/home";
 
 async function prefetchHomeImages(result: MobileHomeResponse) {
@@ -81,8 +87,13 @@ export function HomeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [selectedCard, setSelectedCard] = useState<HomePrayerCard | null>(null);
+  const [detailNavigationDirection, setDetailNavigationDirection] = useState<
+    -1 | 1
+  >(1);
   const [prayerLoading, setPrayerLoading] = useState(false);
   const [addLovedOneOpen, setAddLovedOneOpen] = useState(false);
+  const [prayerFocusOpen, setPrayerFocusOpen] = useState(false);
+  const [selectedFocus, setSelectedFocus] = useState<PrayerFocus | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [savingLovedOne, setSavingLovedOne] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
@@ -126,9 +137,33 @@ export function HomeScreen() {
   }, [loadHome]);
 
   const home: HomeData | null = response?.home || null;
+  const selectedCardIndex =
+    selectedCard && home
+      ? home.cards.findIndex((card) =>
+          selectedCard.prayeruuid
+            ? card.prayeruuid === selectedCard.prayeruuid
+            : card === selectedCard,
+        )
+      : -1;
   const background = response?.community?.backgroundImage
     ? resolveImage(response.community.backgroundImage)
     : images.intro;
+
+  const showAdjacentRecentPrayer = (direction: -1 | 1) => {
+    if (!home || selectedCardIndex < 0) return;
+    const nextCard = home.cards[selectedCardIndex + direction];
+    if (!nextCard) return;
+    if (__DEV__) {
+      console.info("[PrayerSwipe] Home recent prayer navigation", {
+        direction: direction === 1 ? "next" : "previous",
+        from: selectedCardIndex,
+        to: selectedCardIndex + direction,
+        prayeruuid: nextCard.prayeruuid,
+      });
+    }
+    setDetailNavigationDirection(direction);
+    setSelectedCard(nextCard);
+  };
 
   const updatePrayerCard = (
     prayeruuid: string,
@@ -244,6 +279,28 @@ export function HomeScreen() {
     }
   };
 
+  const handleSavePrayerFocus = async (input: PrayerFocusInput) => {
+    setSavingLovedOne(true);
+    setMutationError(null);
+    try {
+      const token = await requireCurrentToken();
+      if (selectedFocus) {
+        await updatePrayerFocus(selectedFocus.focusuuid, input, token);
+      } else {
+        await createPrayerFocus(input, token);
+      }
+      await loadHome(true);
+      setPrayerFocusOpen(false);
+      setSelectedFocus(null);
+    } catch (err) {
+      setMutationError(
+        err instanceof Error ? err.message : "Unable to save prayer focus",
+      );
+    } finally {
+      setSavingLovedOne(false);
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.root}>
@@ -287,6 +344,38 @@ export function HomeScreen() {
           </View>
         ) : home ? (
           <>
+            {home.dailyDeck ? (
+              <>
+                <Text style={styles.section}>Today's Prayer Deck</Text>
+                <Pressable
+                  accessibilityLabel={`Open ${home.dailyDeck.timeOfDay} prayer deck`}
+                  accessibilityRole="button"
+                  onPress={() =>
+                    router.push(
+                      `/(app)/prayer-decks/${home.dailyDeck!.deckuuid}` as Href,
+                    )
+                  }
+                  style={({ pressed }) => [
+                    styles.deckCard,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <View style={styles.deckCopy}>
+                    <Text style={styles.deckEyebrow}>
+                      {home.dailyDeck.timeOfDay} · {home.dailyDeck.status}
+                    </Text>
+                    <Text style={styles.deckTitle}>
+                      {home.dailyDeck.labels.join(" · ") || "Daily prayers"}
+                    </Text>
+                    <Text style={styles.deckMeta}>
+                      {home.dailyDeck.readyCards} of {home.dailyDeck.totalCards} ready
+                    </Text>
+                  </View>
+                  <Text style={styles.deckArrow}>→</Text>
+                </Pressable>
+              </>
+            ) : null}
+
             <Text style={styles.section}>Recent Prayer Cards</Text>
             {home?.cards.length ? (
               <ScrollView
@@ -299,7 +388,10 @@ export function HomeScreen() {
                     key={card.prayeruuid || `${card.title}-${i}`}
                     card={card}
                     index={i}
-                    onPress={() => setSelectedCard(card)}
+                    onPress={() => {
+                      setDetailNavigationDirection(1);
+                      setSelectedCard(card);
+                    }}
                   />
                 ))}
               </ScrollView>
@@ -339,6 +431,62 @@ export function HomeScreen() {
             ) : (
               <Text style={styles.empty}>
                 Add someone you would like to pray for.
+              </Text>
+            )}
+
+            <View style={styles.sectionRow}>
+              <Text style={styles.section}>Prayer Focuses</Text>
+              <Pressable
+                accessibilityLabel="Add a prayer focus"
+                accessibilityRole="button"
+                onPress={() => {
+                  setMutationError(null);
+                  setSelectedFocus(null);
+                  setPrayerFocusOpen(true);
+                }}
+                style={({ pressed }) => [styles.plus, pressed && styles.pressed]}
+              >
+                <Text style={styles.plusText}>+</Text>
+              </Pressable>
+            </View>
+            {home.prayerFocuses.length ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.focusRail}
+              >
+                {home.prayerFocuses.map((focus) => (
+                  <Pressable
+                    key={focus.focusuuid}
+                    accessibilityLabel={`Edit prayer focus ${focus.title}`}
+                    accessibilityRole="button"
+                    onPress={() => {
+                      setMutationError(null);
+                      setSelectedFocus(focus);
+                      setPrayerFocusOpen(true);
+                    }}
+                    style={({ pressed }) => [
+                      styles.focusCard,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <View style={styles.focusIcon}>
+                      <PrayerFocusTypeIcon
+                        type={focus.type}
+                        color={colors.accent}
+                        size={18}
+                      />
+                    </View>
+                    <Text numberOfLines={1} style={styles.focusTitle}>
+                      {focus.title}
+                    </Text>
+                    <Text style={styles.focusPeriod}>{focus.period}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            ) : (
+              <Text style={styles.empty}>
+                Add a focus to include in your daily prayer deck.
               </Text>
             )}
 
@@ -435,6 +583,23 @@ export function HomeScreen() {
         token={sessionToken}
         visible={selectedCard !== null}
         loading={prayerLoading}
+        deckPosition={
+          selectedCardIndex >= 0 && home && home.cards.length > 1
+            ? `${selectedCardIndex + 1} of ${home.cards.length}`
+            : undefined
+        }
+        navigationContext="home-recent-prayers"
+        navigationDirection={detailNavigationDirection}
+        onPrevious={
+          selectedCardIndex > 0
+            ? () => showAdjacentRecentPrayer(-1)
+            : undefined
+        }
+        onNext={
+          home && selectedCardIndex >= 0 && selectedCardIndex < home.cards.length - 1
+            ? () => showAdjacentRecentPrayer(1)
+            : undefined
+        }
         onClose={() => {
           setSelectedCard(null);
           setPrayerLoading(false);
@@ -447,10 +612,26 @@ export function HomeScreen() {
         onClose={() => setAddLovedOneOpen(false)}
         onSubmit={handleAddLovedOne}
       />
+      <PrayerFocusModal
+        visible={prayerFocusOpen}
+        focus={selectedFocus}
+        saving={savingLovedOne}
+        error={mutationError}
+        nextOrder={
+          Math.max(-1, ...(home?.prayerFocuses.map((focus) => focus.order) || [])) +
+          1
+        }
+        onClose={() => {
+          setPrayerFocusOpen(false);
+          setSelectedFocus(null);
+        }}
+        onSubmit={handleSavePrayerFocus}
+      />
       <ProfileDrawer
         visible={profileOpen}
         profile={home?.profile || null}
         lovedOnes={home?.lovedOnes || []}
+        prayerFocuses={home?.prayerFocuses || []}
         groups={home?.groups || []}
         community={response?.community || null}
         onClose={() => setProfileOpen(false)}
@@ -500,6 +681,44 @@ const styles = StyleSheet.create({
     color: colors.black,
     fontFamily: fonts.bodyMedium,
     fontSize: 11,
+  },
+  deckCard: {
+    minHeight: 94,
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(249,115,22,0.38)",
+    backgroundColor: "rgba(249,115,22,0.1)",
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    marginBottom: 16,
+  },
+  deckCopy: { flex: 1, minWidth: 0 },
+  deckEyebrow: {
+    color: colors.accent,
+    fontFamily: fonts.monoMedium,
+    fontSize: 9,
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+  },
+  deckTitle: {
+    color: colors.white,
+    fontFamily: fonts.displayMedium,
+    fontSize: 17,
+    marginTop: 5,
+  },
+  deckMeta: {
+    color: colors.mutedSoft,
+    fontFamily: fonts.body,
+    fontSize: 10,
+    marginTop: 4,
+  },
+  deckArrow: {
+    color: colors.accent,
+    fontFamily: fonts.displayMedium,
+    fontSize: 23,
+    marginLeft: 14,
   },
   empty: {
     color: colors.muted,
@@ -551,6 +770,40 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     paddingBottom: 8,
+  },
+  focusRail: {
+    gap: 8,
+    paddingBottom: 8,
+  },
+  focusCard: {
+    width: 112,
+    minHeight: 96,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    backgroundColor: colors.cardFill,
+    padding: 12,
+  },
+  focusIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(249,115,22,0.12)",
+    marginBottom: 9,
+  },
+  focusTitle: {
+    color: colors.white,
+    fontFamily: fonts.displayMedium,
+    fontSize: 12,
+  },
+  focusPeriod: {
+    color: colors.muted,
+    fontFamily: fonts.mono,
+    fontSize: 8,
+    marginTop: 3,
+    textTransform: "uppercase",
   },
   groupCard: {
     width: 120,

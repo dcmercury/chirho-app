@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
-import { ActivityIndicator, Platform, View } from "react-native";
-import { Stack, useRouter } from "expo-router";
+import { ActivityIndicator, Linking, Platform, View } from "react-native";
+import { Stack, useRouter, type Href } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { ClerkProvider, useAuth } from "@clerk/expo";
 import { tokenCache } from "@clerk/expo/token-cache";
@@ -31,6 +31,18 @@ SplashScreen.preventAutoHideAsync();
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
 if (!publishableKey) {
   throw new Error("EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY is not configured");
+}
+
+function isTrustedNotificationUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      (url.hostname === "chirho.ai" || url.hostname === "www.chirho.ai")
+    );
+  } catch {
+    return false;
+  }
 }
 
 function RootNavigator() {
@@ -95,7 +107,11 @@ function RootNavigator() {
         >,
       ) => {
         const data = response?.notification.request.content.data;
-        if (typeof data?.prayeruuid === "string") {
+        if (typeof data?.deckuuid === "string") {
+          router.push(
+            `/(app)/prayer-decks/${data.deckuuid}` as Href,
+          );
+        } else if (typeof data?.prayeruuid === "string") {
           router.push({
             pathname: "/(app)/prayers/[prayeruuid]",
             params: { prayeruuid: data.prayeruuid },
@@ -110,6 +126,11 @@ function RootNavigator() {
                 : {}),
             },
           });
+        } else if (
+          typeof data?.url === "string" &&
+          isTrustedNotificationUrl(data.url)
+        ) {
+          void Linking.openURL(data.url);
         }
       };
 

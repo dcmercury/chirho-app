@@ -5,12 +5,15 @@ import { useAuth, useClerk } from "@clerk/expo";
 import {
   deleteAccount,
   deleteLovedOne,
+  deletePrayerFocus,
   joinCommunity,
   leaveGroup,
   searchCommunities,
+  sendTestNotification,
   setActiveCommunity,
   updateAccountName,
   updateNotificationPreference,
+  updatePrayerFocus,
   updateProfile,
   uploadAvatar,
   type Community,
@@ -18,6 +21,8 @@ import {
 import type {
   DailyPrayerSettings,
   HomeProfile,
+  PrayerFocus,
+  PrayerFocusInput,
 } from "../../../types/home";
 import {
   resolveVoiceId,
@@ -162,6 +167,21 @@ export function useProfileDrawerController(
       updateNotificationPreference(key, enabled, token),
     );
 
+  const testNotification = async (key: string, label: string) => {
+    let confirmation = "Test notification sent.";
+    const sent = await mutate(
+      `notification-test:${key}`,
+      async (token) => {
+        confirmation = await sendTestNotification(key, token);
+      },
+      `Unable to test ${label}`,
+      false,
+    );
+    if (sent && visibleRef.current) {
+      Alert.alert("Test sent", confirmation);
+    }
+  };
+
   const setPrivacy = (key: string, enabled: boolean) =>
     mutate(`privacy:${key}`, (token) =>
       updateProfile({ privacy: { [key]: enabled } }, token),
@@ -181,6 +201,34 @@ export function useProfileDrawerController(
               `loved-one:${id}`,
               (token) => deleteLovedOne(id, token),
               `Unable to remove ${firstName}`,
+            );
+          },
+        },
+      ],
+    );
+  };
+
+  const savePrayerFocus = (focus: PrayerFocus, input: PrayerFocusInput) =>
+    mutate(
+      `prayer-focus:${focus.focusuuid}`,
+      (token) => updatePrayerFocus(focus.focusuuid, input, token).then(() => undefined),
+      `Unable to update ${focus.title}`,
+    );
+
+  const confirmRemovePrayerFocus = (focusuuid: string, title: string) => {
+    Alert.alert(
+      `Remove ${title}?`,
+      "This removes the focus from future daily prayer decks.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => {
+            void mutate(
+              `prayer-focus:${focusuuid}`,
+              (token) => deletePrayerFocus(focusuuid, token),
+              `Unable to remove ${title}`,
             );
           },
         },
@@ -300,8 +348,11 @@ export function useProfileDrawerController(
     selectVoice,
     updateDailyPrayer,
     setNotification,
+    testNotification,
     setPrivacy,
     confirmRemoveLovedOne,
+    savePrayerFocus,
+    confirmRemovePrayerFocus,
     searchCommunity,
     joinAndActivateCommunity,
     confirmLeaveCommunity,

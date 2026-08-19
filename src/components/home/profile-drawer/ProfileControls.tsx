@@ -63,11 +63,13 @@ export function ToggleRow({
   label,
   value,
   disabled,
+  accessory,
   onValueChange,
 }: {
   label: string;
   value: boolean;
   disabled?: boolean;
+  accessory?: ReactNode;
   onValueChange: (value: boolean) => void;
 }) {
   const progress = useRef(new Animated.Value(value ? 1 : 0)).current;
@@ -82,42 +84,45 @@ export function ToggleRow({
 
   return (
     <View style={styles.infoRow}>
-      <Text style={styles.infoValue}>{label}</Text>
-      <Pressable
-        accessibilityLabel={label}
-        accessibilityRole="switch"
-        accessibilityState={{ checked: value, disabled }}
-        disabled={disabled}
-        onPress={() => onValueChange(!value)}
-        style={({ pressed }) => [
-          styles.toggleTouch,
-          pressed && styles.togglePressed,
-        ]}
-      >
-        <View
-          style={[
-            styles.toggleTrack,
-            value && styles.toggleTrackActive,
-            disabled && styles.toggleDisabled,
+      <Text style={[styles.infoValue, styles.toggleLabel]}>{label}</Text>
+      <View style={styles.toggleActions}>
+        {accessory}
+        <Pressable
+          accessibilityLabel={label}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: value, disabled }}
+          disabled={disabled}
+          onPress={() => onValueChange(!value)}
+          style={({ pressed }) => [
+            styles.toggleTouch,
+            pressed && styles.togglePressed,
           ]}
         >
-          <Animated.View
+          <View
             style={[
-              styles.toggleThumb,
-              {
-                transform: [
-                  {
-                    translateX: progress.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0, 12],
-                    }),
-                  },
-                ],
-              },
+              styles.toggleTrack,
+              value && styles.toggleTrackActive,
+              disabled && styles.toggleDisabled,
             ]}
-          />
-        </View>
-      </Pressable>
+          >
+            <Animated.View
+              style={[
+                styles.toggleThumb,
+                {
+                  transform: [
+                    {
+                      translateX: progress.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, 12],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            />
+          </View>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -217,6 +222,8 @@ export const styles = StyleSheet.create({
   },
   section: { marginTop: 28, gap: 10 },
   sectionTitle: { ...typography.labelSm, color: colors.muted },
+  toggleActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  toggleLabel: { flex: 1, paddingRight: 8 },
   accountSummary: {
     minHeight: 50,
     flexDirection: "row",
@@ -398,6 +405,14 @@ export const styles = StyleSheet.create({
   manageCopy: { flex: 1 },
   manageName: { color: colors.white, fontFamily: fonts.bodyMedium, fontSize: 13 },
   manageMeta: { color: colors.muted, fontFamily: fonts.body, fontSize: 10 },
+  manageActions: { flexDirection: "row", alignItems: "center" },
+  manageActionTouch: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
   remove: { color: colors.error, fontFamily: fonts.body, fontSize: 11 },
   join: { color: colors.accent, fontFamily: fonts.bodyMedium, fontSize: 11 },
   empty: { color: colors.muted, fontFamily: fonts.body, fontSize: 12 },

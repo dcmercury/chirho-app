@@ -1,5 +1,9 @@
 export interface HomePrayerCard {
   prayeruuid?: string;
+  deckuuid?: string;
+  subjectType?: string;
+  subjectId?: string;
+  deckIndex?: number;
   title: string;
   verse: string;
   text: string;
@@ -10,7 +14,60 @@ export interface HomePrayerCard {
   backgroundMusicUrl?: string | null;
   backgroundMusicVolume?: number;
   audioAvailable?: boolean;
-  audioStatus?: "pending" | "ready" | "failed";
+  audioStatus?: "not_started" | "pending" | "ready" | "failed";
+}
+
+export type PrayerFocusType =
+  | "church"
+  | "pet"
+  | "health"
+  | "situation"
+  | "other";
+
+export type PrayerFocusPeriod = "morning" | "evening" | "both";
+
+export interface PrayerFocus {
+  focusuuid: string;
+  title: string;
+  type: PrayerFocusType;
+  note?: string | null;
+  categories: string[];
+  virtues: string[];
+  period: PrayerFocusPeriod;
+  active: boolean;
+  order: number;
+}
+
+export type PrayerFocusInput = Omit<PrayerFocus, "focusuuid">;
+
+export interface DailyDeckSummary {
+  deckuuid: string;
+  localDate: string;
+  timeOfDay: "morning" | "evening";
+  status: "pending" | "ready" | "partial" | "failed";
+  totalCards: number;
+  readyCards: number;
+  labels: string[];
+}
+
+export interface PrayerDeckItem {
+  subjectType: string;
+  subjectId: string;
+  label: string;
+  status: "pending" | "ready" | "failed";
+  prayeruuid: string | null;
+  error: string | null;
+}
+
+export interface PrayerDeckDetail extends DailyDeckSummary {
+  items: PrayerDeckItem[];
+}
+
+export interface PrayerDeckCard extends HomePrayerCard {
+  deckuuid: string;
+  subjectType: string;
+  subjectId: string;
+  deckIndex: number;
 }
 
 export interface HomeLovedOne {
@@ -46,6 +103,7 @@ export interface DailyPrayerSettings {
 }
 
 export interface HomeProfile {
+  isSuperadmin: boolean;
   name: string;
   avatar: string;
   memberSince: string;
@@ -91,6 +149,8 @@ export interface HomeData {
   profile: HomeProfile;
   cards: HomePrayerCard[];
   lovedOnes: HomeLovedOne[];
+  prayerFocuses: PrayerFocus[];
+  dailyDeck: DailyDeckSummary | null;
   groups: HomeGroup[];
   availableGroups: HomeGroup[];
 }

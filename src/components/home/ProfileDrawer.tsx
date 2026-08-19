@@ -4,6 +4,7 @@ import type {
   HomeGroup,
   HomeLovedOne,
   HomeProfile,
+  PrayerFocus,
 } from "../../types/home";
 import { AccountSection } from "./profile-drawer/AccountSection";
 import { CommunitySection } from "./profile-drawer/CommunitySection";
@@ -13,6 +14,7 @@ import { GroupsSection } from "./profile-drawer/GroupsSection";
 import { LovedOnesSection } from "./profile-drawer/LovedOnesSection";
 import { NotificationsSection } from "./profile-drawer/NotificationsSection";
 import { PrayerPreferencesSection } from "./profile-drawer/PrayerPreferencesSection";
+import { PrayerFocusesSection } from "./profile-drawer/PrayerFocusesSection";
 import { PrivacySection } from "./profile-drawer/PrivacySection";
 import { ProfileHeader } from "./profile-drawer/ProfileHeader";
 import { Section, styles } from "./profile-drawer/ProfileControls";
@@ -22,6 +24,7 @@ interface ProfileDrawerProps {
   visible: boolean;
   profile: HomeProfile | null;
   lovedOnes: HomeLovedOne[];
+  prayerFocuses: PrayerFocus[];
   groups: HomeGroup[];
   community: HomeCommunity | null;
   onClose: () => void;
@@ -45,6 +48,7 @@ export function ProfileDrawer({
   visible,
   profile,
   lovedOnes,
+  prayerFocuses,
   groups,
   community,
   onClose,
@@ -89,6 +93,17 @@ export function ProfileDrawer({
             error={firstErrorFor(controller.errors, "loved-one")}
             isPending={(id) => Boolean(controller.pending[`loved-one:${id}`])}
             onRemove={controller.confirmRemoveLovedOne}
+          />
+          <PrayerFocusesSection
+            focuses={prayerFocuses}
+            isPending={(focusuuid) =>
+              Boolean(controller.pending[`prayer-focus:${focusuuid}`])
+            }
+            getError={(focusuuid) =>
+              controller.errors[`prayer-focus:${focusuuid}`]
+            }
+            onSave={controller.savePrayerFocus}
+            onRemove={controller.confirmRemovePrayerFocus}
           />
           <Section title="Community and groups">
             <CommunitySection
@@ -137,12 +152,23 @@ export function ProfileDrawer({
           />
           <NotificationsSection
             notifications={profile.notifications}
-            error={firstErrorFor(controller.errors, "notification")}
+            isSuperadmin={profile.isSuperadmin}
+            error={firstErrorFor(
+              controller.errors,
+              "notification",
+              "notification-test",
+            )}
             isPending={(key) =>
               Boolean(controller.pending[`notification:${key}`])
             }
+            isTestPending={(key) =>
+              Boolean(controller.pending[`notification-test:${key}`])
+            }
             onChange={(key, enabled) => {
               void controller.setNotification(key, enabled);
+            }}
+            onTest={(key, label) => {
+              void controller.testNotification(key, label);
             }}
           />
           <PrivacySection

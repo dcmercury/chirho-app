@@ -4,6 +4,10 @@ import type {
   HomeCommunity,
   HomePrayerCard,
   MobileHomeResponse,
+  PrayerDeckCard,
+  PrayerDeckDetail,
+  PrayerFocus,
+  PrayerFocusInput,
 } from "../types/home";
 import type {
   GroupAdminRecord,
@@ -409,7 +413,16 @@ export async function getMobileHome(
       }
     | MobileHomeResponse["home"]
   >("/api/mobile/home", token);
-  if (!("home" in data)) return { home: data, community: null };
+  if (!("home" in data)) {
+    return {
+      home: {
+        ...data,
+        prayerFocuses: data.prayerFocuses || [],
+        dailyDeck: data.dailyDeck || null,
+      },
+      community: null,
+    };
+  }
   const rawCommunity = data.community;
   const community =
     rawCommunity && "activeBackground" in rawCommunity
@@ -422,7 +435,98 @@ export async function getMobileHome(
           backgroundImage: rawCommunity.activeBackground?.url || null,
         }
       : rawCommunity;
-  return { home: data.home, community };
+  return {
+    home: {
+      ...data.home,
+      prayerFocuses: data.home.prayerFocuses || [],
+      dailyDeck: data.home.dailyDeck || null,
+    },
+    community,
+  };
+}
+
+export async function getPrayerFocuses(token: string): Promise<PrayerFocus[]> {
+  const data = await authenticatedRequest<
+    | PrayerFocus[]
+    | { prayerFocuses?: PrayerFocus[]; focuses?: PrayerFocus[] }
+  >("/api/user/prayer-focuses", token);
+  if (Array.isArray(data)) return data;
+  return data.prayerFocuses || data.focuses || [];
+}
+
+export async function createPrayerFocus(
+  focus: PrayerFocusInput,
+  token: string,
+): Promise<PrayerFocus> {
+  const data = await authenticatedRequest<
+    PrayerFocus | { prayerFocus?: PrayerFocus; focus?: PrayerFocus }
+  >("/api/user/prayer-focuses", token, {
+    method: "POST",
+    body: JSON.stringify(focus),
+  });
+  if ("focusuuid" in data) return data;
+  const created = data.prayerFocus || data.focus;
+  if (!created) throw new Error("The prayer focus response was incomplete.");
+  return created;
+}
+
+export async function updatePrayerFocus(
+  focusuuid: string,
+  updates: Partial<PrayerFocusInput>,
+  token: string,
+): Promise<PrayerFocus> {
+  const data = await authenticatedRequest<
+    PrayerFocus | { prayerFocus?: PrayerFocus; focus?: PrayerFocus }
+  >(`/api/user/prayer-focuses/${focusuuid}`, token, {
+    method: "PATCH",
+    body: JSON.stringify(updates),
+  });
+  if ("focusuuid" in data) return data;
+  const updated = data.prayerFocus || data.focus;
+  if (!updated) throw new Error("The prayer focus response was incomplete.");
+  return updated;
+}
+
+export async function deletePrayerFocus(
+  focusuuid: string,
+  token: string,
+): Promise<void> {
+  await authenticatedRequest(`/api/user/prayer-focuses/${focusuuid}`, token, {
+    method: "DELETE",
+  });
+}
+
+export async function getPrayerDeck(
+  deckuuid: string,
+  token: string,
+): Promise<{ deck: PrayerDeckDetail; cards: PrayerDeckCard[] }> {
+  const data = await authenticatedRequest<{
+    success: true;
+    deck: PrayerDeckDetail;
+    cards: PrayerDeckCard[];
+  }>(`/api/mobile/prayer-decks/${deckuuid}`, token);
+  return {
+    deck: data.deck,
+    cards: [...(data.cards || [])].sort(
+      (left, right) => left.deckIndex - right.deckIndex,
+    ),
+  };
+}
+
+export async function retryPrayerDeckItem(
+  deckuuid: string,
+  subjectId: string,
+  token: string,
+): Promise<PrayerDeckCard> {
+  const data = await authenticatedRequest<{
+    success: true;
+    card: PrayerDeckCard;
+  }>(
+    `/api/mobile/prayer-decks/${encodeURIComponent(deckuuid)}/items/${encodeURIComponent(subjectId)}/retry`,
+    token,
+    { method: "POST" },
+  );
+  return data.card;
 }
 
 export async function generateLovedOnePrayer(
@@ -518,8 +622,10 @@ export async function generatePrayerCardAudio(
   for (let attempt = 0; attempt < 15; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 2000));
     const prayer = await getPrayer(prayeruuid, token);
-    const audioStatus =
+    const reportedStatus =
       prayer.audioStatus || (prayer.narrationUrl ? "ready" : "pending");
+    const audioStatus =
+      reportedStatus === "not_started" ? "pending" : reportedStatus;
     if (audioStatus !== "pending") {
       return {
         audioStatus,
@@ -625,6 +731,21 @@ export async function updateNotificationPreference(
     method: "PUT",
     body: JSON.stringify({ preferences: { [key]: enabled } }),
   });
+}
+
+export async function sendTestNotification(
+  notificationType: string,
+  token: string,
+): Promise<string> {
+  const data = await authenticatedRequest<{ message?: string }>(
+    "/api/user/settings/notifications/test",
+    token,
+    {
+      method: "POST",
+      body: JSON.stringify({ notificationType }),
+    },
+  );
+  return data.message || "Test notification sent.";
 }
 
 export async function getGroupAdminDetails(
