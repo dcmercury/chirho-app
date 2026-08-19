@@ -103,7 +103,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow ChiRho to choose a profile photo.",
+          "photosPermission": "Choose photos of loved ones to display privately on your personal prayer cards.",
           "cameraPermission": false,
           "microphonePermission": false
         }

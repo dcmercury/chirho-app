@@ -7,7 +7,7 @@ import {
   View,
 } from "react-native";
 import { Image } from "expo-image";
-import { resolveImage } from "../../../lib/assets";
+import { isPrivateImagePath, resolveImage } from "../../../lib/assets";
 import { colors, fonts, type as typography } from "../../../theme/tokens";
 
 export function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -39,15 +39,18 @@ export function InlineError({ message }: { message?: string }) {
 export function ManageAvatar({
   source,
   label,
+  token,
 }: {
   source?: string | null;
   label: string;
+  token?: string | null;
 }) {
   return source ? (
     <Image
       accessible={false}
+      cachePolicy={isPrivateImagePath(source) ? "memory" : undefined}
       contentFit="cover"
-      source={resolveImage(source)}
+      source={resolveImage(source, token)}
       style={styles.manageAvatar}
     />
   ) : (

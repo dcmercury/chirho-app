@@ -3,6 +3,7 @@ import type {
   GroupDetail,
   HomeCommunity,
   HomePrayerCard,
+  LovedOnePhoto,
   MobileHomeResponse,
   PrayerDeckCard,
   PrayerDeckDetail,
@@ -683,6 +684,85 @@ export async function deleteLovedOne(
 ): Promise<void> {
   await authenticatedRequest(
     `/api/user/profile/loved-ones/${lovedOneId}`,
+    token,
+    { method: "DELETE" },
+  );
+}
+
+function normalizeLovedOnePhoto(value: unknown): LovedOnePhoto | null {
+  const photo = asRecord(value);
+  const mediauuid =
+    optionalString(photo?.mediauuid) || optionalString(photo?.mediaUuid);
+  const contentPath =
+    optionalString(photo?.contentPath) || optionalString(photo?.url);
+  if (!mediauuid || !contentPath) return null;
+  return {
+    mediauuid,
+    contentPath,
+    isPrimary: photo?.isPrimary === true || photo?.primary === true,
+  };
+}
+
+export async function getLovedOnePhotos(
+  lovedOneId: string,
+  token: string,
+): Promise<LovedOnePhoto[]> {
+  const payload = await authenticatedRequest<unknown>(
+    `/api/user/profile/loved-ones/${encodeURIComponent(lovedOneId)}/photos`,
+    token,
+  );
+  const root = asRecord(payload);
+  const data = asRecord(root?.data);
+  const values = Array.isArray(payload)
+    ? payload
+    : Array.isArray(root?.photos)
+      ? root.photos
+      : Array.isArray(data?.photos)
+        ? data.photos
+        : [];
+  return values
+    .map(normalizeLovedOnePhoto)
+    .filter((photo): photo is LovedOnePhoto => Boolean(photo))
+    .slice(0, 3);
+}
+
+export async function uploadLovedOnePhoto(
+  lovedOneId: string,
+  imageData: string,
+  token: string,
+): Promise<void> {
+  await authenticatedRequest(
+    `/api/user/profile/loved-ones/${encodeURIComponent(lovedOneId)}/photos`,
+    token,
+    {
+      method: "POST",
+      body: JSON.stringify({ imageData }),
+    },
+  );
+}
+
+export async function setLovedOnePrimaryPhoto(
+  lovedOneId: string,
+  mediauuid: string,
+  token: string,
+): Promise<void> {
+  await authenticatedRequest(
+    `/api/user/profile/loved-ones/${encodeURIComponent(lovedOneId)}/photos/${encodeURIComponent(mediauuid)}`,
+    token,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ isPrimary: true }),
+    },
+  );
+}
+
+export async function deleteLovedOnePhoto(
+  lovedOneId: string,
+  mediauuid: string,
+  token: string,
+): Promise<void> {
+  await authenticatedRequest(
+    `/api/user/profile/loved-ones/${encodeURIComponent(lovedOneId)}/photos/${encodeURIComponent(mediauuid)}`,
     token,
     { method: "DELETE" },
   );

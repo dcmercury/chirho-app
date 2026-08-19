@@ -35,6 +35,7 @@ interface PrayerDeckPagerProps {
   cards: PrayerDeckCard[];
   currentIndex: number;
   disabled?: boolean;
+  token?: string | null;
   onIndexChange: (index: number) => void;
   onOpenCard: (card: PrayerDeckCard) => void;
 }
@@ -47,6 +48,7 @@ export const PrayerDeckPager = forwardRef<
     cards,
     currentIndex,
     disabled = false,
+    token,
     onIndexChange,
     onOpenCard,
   },
@@ -224,6 +226,7 @@ export const PrayerDeckPager = forwardRef<
         <PrayerCard
           card={card}
           index={index}
+          token={token}
           variant="deck"
           onPress={interactive ? () => onOpenCard(card) : undefined}
         />

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Modal, ScrollView, View } from "react-native";
 import type {
   HomeCommunity,
@@ -7,6 +8,7 @@ import type {
   PrayerFocus,
 } from "../../types/home";
 import { AccountSection } from "./profile-drawer/AccountSection";
+import { LovedOnePhotosModal } from "./LovedOnePhotosModal";
 import { CommunitySection } from "./profile-drawer/CommunitySection";
 import { DailyPrayersSection } from "./profile-drawer/DailyPrayersSection";
 import { DangerZoneSection } from "./profile-drawer/DangerZoneSection";
@@ -27,6 +29,7 @@ interface ProfileDrawerProps {
   prayerFocuses: PrayerFocus[];
   groups: HomeGroup[];
   community: HomeCommunity | null;
+  token: string | null;
   onClose: () => void;
   onChanged: () => Promise<void>;
 }
@@ -51,14 +54,22 @@ export function ProfileDrawer({
   prayerFocuses,
   groups,
   community,
+  token,
   onClose,
   onChanged,
 }: ProfileDrawerProps) {
   const controller = useProfileDrawerController(visible, onChanged);
+  const [photoLovedOne, setPhotoLovedOne] = useState<{
+    id: string;
+    firstName: string;
+  } | null>(null);
 
   if (!profile) return null;
   const lovedOneAvatarById = Object.fromEntries(
-    lovedOnes.map((person) => [person.id, person.avatar]),
+    lovedOnes.map((person) => [
+      person.id,
+      person.primaryPhoto?.contentPath || person.avatar,
+    ]),
   );
 
   return (
@@ -90,8 +101,10 @@ export function ProfileDrawer({
           <LovedOnesSection
             lovedOnes={profile.managedLovedOnes}
             avatarById={lovedOneAvatarById}
+            token={token}
             error={firstErrorFor(controller.errors, "loved-one")}
             isPending={(id) => Boolean(controller.pending[`loved-one:${id}`])}
+            onManage={(id, firstName) => setPhotoLovedOne({ id, firstName })}
             onRemove={controller.confirmRemoveLovedOne}
           />
           <PrayerFocusesSection
@@ -193,6 +206,12 @@ export function ProfileDrawer({
             onDeleteAccount={controller.confirmDeleteAccount}
           />
         </ScrollView>
+        <LovedOnePhotosModal
+          visible={photoLovedOne !== null}
+          lovedOne={photoLovedOne}
+          onClose={() => setPhotoLovedOne(null)}
+          onChanged={onChanged}
+        />
       </View>
     </Modal>
   );

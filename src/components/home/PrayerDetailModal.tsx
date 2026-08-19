@@ -32,6 +32,7 @@ import {
 import {
   API_BASE,
   DEFAULT_BACKGROUND_MUSIC,
+  isPrivateImagePath,
   resolveAudioUrl,
   resolveImage,
 } from "../../lib/assets";
@@ -439,9 +440,10 @@ export function PrayerDetailModal({
     >
       <View style={styles.root}>
         <Image
-          source={resolveImage(card?.image)}
+          source={resolveImage(card?.image, token)}
           style={StyleSheet.absoluteFill}
           contentFit="cover"
+          cachePolicy={isPrivateImagePath(card?.image) ? "memory" : undefined}
           transition={350}
         />
         <View style={[StyleSheet.absoluteFill, styles.overlay]} />

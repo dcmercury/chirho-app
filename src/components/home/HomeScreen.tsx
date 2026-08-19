@@ -12,12 +12,13 @@ import { Image } from "expo-image";
 import { useAuth, useUser } from "@clerk/expo";
 import { useRouter, type Href } from "expo-router";
 import { colors, fonts } from "../../theme/tokens";
-import { images, resolveImage } from "../../lib/assets";
+import { images, isPrivateImagePath, resolveImage } from "../../lib/assets";
 import {
   addLovedOne,
   createPrayerFocus,
   generateLovedOnePrayer,
   generatePrayerCardAudio,
+  getLovedOnePhotos,
   getMobileHome,
   saveLovedOneConfig,
   updatePrayerFocus,
@@ -28,6 +29,7 @@ import { PrayerCard } from "../ui/PrayerCard";
 import { LovedOne } from "../ui/LovedOne";
 import { LoadingChiRhoOverlay } from "../ui/LoadingChiRhoOverlay";
 import { AddLovedOneModal } from "./AddLovedOneModal";
+import { LovedOnePhotosModal } from "./LovedOnePhotosModal";
 import { PrayerDetailModal } from "./PrayerDetailModal";
 import { PrayerFocusModal } from "./PrayerFocusModal";
 import { PrayerFocusTypeIcon } from "./PrayerFocusTypeIcon";
@@ -41,37 +43,81 @@ import type {
   PrayerFocusInput,
 } from "../../types/home";
 
-async function prefetchHomeImages(result: MobileHomeResponse) {
+async function prefetchHomeImages(result: MobileHomeResponse, token: string) {
   const paths = [
     result.community?.backgroundImage,
     ...result.home.cards.slice(0, 2).map((card) => card.image),
-    ...result.home.lovedOnes.slice(0, 5).map((person) => person.avatar),
+    ...result.home.lovedOnes
+      .slice(0, 5)
+      .map((person) => person.primaryPhoto?.contentPath || person.avatar),
     ...result.home.groups.slice(0, 3).map((group) => group.image),
   ];
-  const uris = Array.from(
-    new Set(
-      paths
-        .map((path) => {
-          const source = resolveImage(path);
-          return typeof source === "object" &&
-            source !== null &&
-            "uri" in source &&
-            typeof source.uri === "string"
-            ? source.uri
-            : null;
-        })
-        .filter((uri): uri is string => Boolean(uri)),
-    ),
-  );
-  if (!uris.length) return;
+  const sources = paths
+    .map((path) => {
+      const source = resolveImage(path, token);
+      return typeof source === "object" &&
+        source !== null &&
+        "uri" in source &&
+        typeof source.uri === "string"
+        ? { path, source }
+        : null;
+    })
+    .filter(
+      (
+        item,
+      ): item is {
+        path: string | null | undefined;
+        source: { uri: string; headers?: Record<string, string> };
+      } => Boolean(item),
+    )
+    .filter(
+      (item, index, all) =>
+        all.findIndex(
+          (candidate) => candidate.source.uri === item.source.uri,
+        ) === index,
+    );
+  if (!sources.length) return;
 
   await new Promise<void>((resolve) => {
     const timer = setTimeout(resolve, 2000);
-    Promise.allSettled(uris.map((uri) => Image.prefetch(uri))).then(() => {
+    Promise.allSettled(
+      sources.map(({ path, source }) =>
+        Image.prefetch(source.uri, {
+          cachePolicy: isPrivateImagePath(path) ? "memory" : "memory-disk",
+          headers: source.headers,
+        }),
+      ),
+    ).then(() => {
       clearTimeout(timer);
       resolve();
     });
   });
+}
+
+async function hydrateLovedOnePhotos(
+  result: MobileHomeResponse,
+  token: string,
+): Promise<MobileHomeResponse> {
+  const lovedOnes = await Promise.all(
+    result.home.lovedOnes.map(async (person) => {
+      const photos = Array.isArray(person.photos)
+        ? person.photos
+        : await getLovedOnePhotos(person.id, token).catch(() => []);
+      return {
+        ...person,
+        photos,
+        primaryPhoto:
+          photos.find((photo) => photo.isPrimary) ||
+          photos[0] ||
+          person.primaryPhoto ||
+          null,
+      };
+    }),
+  );
+  return {
+    ...result,
+    home: { ...result.home, lovedOnes },
+  };
 }
 
 export function HomeScreen() {
@@ -92,6 +138,10 @@ export function HomeScreen() {
   >(1);
   const [prayerLoading, setPrayerLoading] = useState(false);
   const [addLovedOneOpen, setAddLovedOneOpen] = useState(false);
+  const [photoLovedOne, setPhotoLovedOne] = useState<{
+    id: string;
+    firstName: string;
+  } | null>(null);
   const [prayerFocusOpen, setPrayerFocusOpen] = useState(false);
   const [selectedFocus, setSelectedFocus] = useState<PrayerFocus | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -119,9 +169,12 @@ export function HomeScreen() {
       setError(null);
       try {
         const token = await requireCurrentToken();
-        const result = await getMobileHome(token);
+        const result = await hydrateLovedOnePhotos(
+          await getMobileHome(token),
+          token,
+        );
         setResponse(result);
-        if (!refresh) await prefetchHomeImages(result);
+        if (!refresh) await prefetchHomeImages(result, token);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unable to load your home");
       } finally {
@@ -192,7 +245,10 @@ export function HomeScreen() {
   const handleLovedOnePress = async (person: HomeLovedOne) => {
     if (generatingLovedOneRef.current) return;
     generatingLovedOneRef.current = true;
-    const backgroundImage = person.backgroundImage || "/cover1.jpg";
+    const backgroundImage =
+      person.primaryPhoto?.contentPath ||
+      person.backgroundImage ||
+      "/cover1.jpg";
     setSelectedCard({
       title: `Prayer for ${person.name}`,
       verse: person.intention,
@@ -272,6 +328,7 @@ export function HomeScreen() {
       }
       await loadHome(true);
       setAddLovedOneOpen(false);
+      setPhotoLovedOne(lovedOne);
     } catch (err) {
       setMutationError(err instanceof Error ? err.message : "Unable to add loved one");
     } finally {
@@ -388,6 +445,7 @@ export function HomeScreen() {
                     key={card.prayeruuid || `${card.title}-${i}`}
                     card={card}
                     index={i}
+                    token={sessionToken}
                     onPress={() => {
                       setDetailNavigationDirection(1);
                       setSelectedCard(card);
@@ -424,6 +482,7 @@ export function HomeScreen() {
                     person={person}
                     compact
                     showIntention={false}
+                    token={sessionToken}
                     onPress={() => handleLovedOnePress(person)}
                   />
                 ))}
@@ -612,6 +671,12 @@ export function HomeScreen() {
         onClose={() => setAddLovedOneOpen(false)}
         onSubmit={handleAddLovedOne}
       />
+      <LovedOnePhotosModal
+        visible={photoLovedOne !== null}
+        lovedOne={photoLovedOne}
+        onClose={() => setPhotoLovedOne(null)}
+        onChanged={() => loadHome(true)}
+      />
       <PrayerFocusModal
         visible={prayerFocusOpen}
         focus={selectedFocus}
@@ -634,6 +699,7 @@ export function HomeScreen() {
         prayerFocuses={home?.prayerFocuses || []}
         groups={home?.groups || []}
         community={response?.community || null}
+        token={sessionToken}
         onClose={() => setProfileOpen(false)}
         onChanged={() => loadHome(true)}
       />

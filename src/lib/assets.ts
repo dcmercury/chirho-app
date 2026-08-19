@@ -30,18 +30,35 @@ const PATH_MAP: Record<string, ImageSource> = {
   "/avatar3.png": images.avatar3,
 };
 
-export function resolveImage(path: string | undefined | null): ImageSource {
+export function isPrivateImagePath(path: string | undefined | null): boolean {
+  return Boolean(
+    path &&
+    /\/api\/user\/profile\/loved-ones\/[^/]+\/photos\/[^/?#]+/.test(path),
+  );
+}
+
+export function resolveImage(
+  path: string | undefined | null,
+  token?: string | null,
+): ImageSource {
   if (!path) return images.intro;
+  const headers =
+    token && isPrivateImagePath(path)
+      ? { Authorization: `Bearer ${token}` }
+      : undefined;
   if (/^https?:\/\//.test(path)) {
     if (path.includes("dailyoffice-assets.s3")) {
       return {
         uri: `${API_BASE}/api/image-proxy?url=${encodeURIComponent(path)}`,
       };
     }
-    return { uri: path };
+    return headers ? { uri: path, headers } : { uri: path };
   }
   if (PATH_MAP[path]) return PATH_MAP[path];
-  if (path.startsWith("/")) return { uri: `${API_BASE}${path}` };
+  if (path.startsWith("/")) {
+    const uri = `${API_BASE}${path}`;
+    return headers ? { uri, headers } : { uri };
+  }
   return images.intro;
 }
 

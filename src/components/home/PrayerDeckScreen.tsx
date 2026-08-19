@@ -22,7 +22,7 @@ import {
   getPrayerDeck,
   retryPrayerDeckItem,
 } from "../../lib/api";
-import { resolveImage } from "../../lib/assets";
+import { isPrivateImagePath, resolveImage } from "../../lib/assets";
 import { colors, fonts } from "../../theme/tokens";
 import type {
   HomePrayerCard,
@@ -292,9 +292,12 @@ export function PrayerDeckScreen({
           style={StyleSheet.absoluteFill}
         >
           <Image
-            source={resolveImage(currentCard.image)}
+            source={resolveImage(currentCard.image, token)}
             style={StyleSheet.absoluteFill}
             contentFit="cover"
+            cachePolicy={
+              isPrivateImagePath(currentCard.image) ? "memory" : undefined
+            }
           />
         </Animated.View>
       ) : null}
@@ -402,6 +405,7 @@ export function PrayerDeckScreen({
               cards={cards}
               currentIndex={currentIndex}
               disabled={prayAllActive}
+              token={token}
               onIndexChange={setCurrentIndex}
               onOpenCard={(card) => {
                 setDetailNavigationDirection(1);

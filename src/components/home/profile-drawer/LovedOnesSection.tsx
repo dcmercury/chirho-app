@@ -10,14 +10,18 @@ import {
 export function LovedOnesSection({
   lovedOnes,
   avatarById,
+  token,
   isPending,
   error,
+  onManage,
   onRemove,
 }: {
   lovedOnes: HomeProfile["managedLovedOnes"];
   avatarById: Record<string, string | undefined>;
+  token: string | null;
   isPending: (id: string) => boolean;
   error?: string;
+  onManage: (id: string, firstName: string) => void;
   onRemove: (id: string, firstName: string) => void;
 }) {
   return (
@@ -30,6 +34,7 @@ export function LovedOnesSection({
               <ManageAvatar
                 label={person.firstName}
                 source={avatarById[person.id]}
+                token={token}
               />
               <View style={styles.manageCopy}>
                 <Text style={styles.manageName}>{person.firstName}</Text>
@@ -37,16 +42,28 @@ export function LovedOnesSection({
                   {person.categories.join(", ") || "No categories"}
                 </Text>
               </View>
-              <Pressable
-                accessibilityLabel={`Remove ${person.firstName}`}
-                accessibilityRole="button"
-                accessibilityState={{ disabled: pending }}
-                disabled={pending}
-                onPress={() => onRemove(person.id, person.firstName)}
-                style={pending && styles.disabled}
-              >
-                <Text style={styles.remove}>Remove</Text>
-              </Pressable>
+              <View style={styles.manageActions}>
+                <Pressable
+                  accessibilityLabel={`Manage photos of ${person.firstName}`}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: pending }}
+                  disabled={pending}
+                  onPress={() => onManage(person.id, person.firstName)}
+                  style={[styles.manageActionTouch, pending && styles.disabled]}
+                >
+                  <Text style={styles.join}>Photos</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityLabel={`Remove ${person.firstName}`}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: pending }}
+                  disabled={pending}
+                  onPress={() => onRemove(person.id, person.firstName)}
+                  style={[styles.manageActionTouch, pending && styles.disabled]}
+                >
+                  <Text style={styles.remove}>Remove</Text>
+                </Pressable>
+              </View>
             </View>
           );
         })

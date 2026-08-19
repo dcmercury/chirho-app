@@ -1,12 +1,14 @@
 import { Pressable, Text, StyleSheet } from "react-native";
 import { Image } from "expo-image";
 import { colors, fonts } from "../../theme/tokens";
-import { resolveImage } from "../../lib/assets";
+import { isPrivateImagePath, resolveImage } from "../../lib/assets";
+import type { LovedOnePhoto } from "../../types/home";
 
 export function LovedOne({
   person,
   showIntention = true,
   compact = false,
+  token,
   onPress,
 }: {
   person: {
@@ -14,11 +16,14 @@ export function LovedOne({
     name: string;
     avatar: string;
     intention: string;
+    primaryPhoto?: LovedOnePhoto | null;
   };
   showIntention?: boolean;
   compact?: boolean;
+  token?: string | null;
   onPress?: () => void;
 }) {
+  const imagePath = person.primaryPhoto?.contentPath || person.avatar;
   return (
     <Pressable
       accessibilityRole={onPress ? "button" : undefined}
@@ -32,9 +37,10 @@ export function LovedOne({
       ]}
     >
       <Image
-        source={resolveImage(person.avatar)}
+        source={resolveImage(imagePath, token)}
         style={styles.avatar}
         contentFit="cover"
+        cachePolicy={isPrivateImagePath(imagePath) ? "memory" : undefined}
       />
       <Text style={styles.name} numberOfLines={1}>
         {person.name}

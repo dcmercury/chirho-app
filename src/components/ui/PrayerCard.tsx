@@ -1,18 +1,20 @@
 import { Pressable, Text, View, StyleSheet } from "react-native";
 import { Image } from "expo-image";
 import { colors, fonts, radii } from "../../theme/tokens";
-import { resolveImage } from "../../lib/assets";
+import { isPrivateImagePath, resolveImage } from "../../lib/assets";
 import type { HomePrayerCard } from "../../types/home";
 
 export function PrayerCard({
   card,
   index,
   onPress,
+  token,
   variant = "default",
 }: {
   card: HomePrayerCard;
   index?: number;
   onPress?: () => void;
+  token?: string | null;
   variant?: "default" | "deck";
 }) {
   const isDeckCard = variant === "deck";
@@ -31,9 +33,10 @@ export function PrayerCard({
     >
       <View>
         <Image
-          source={resolveImage(card.image)}
+          source={resolveImage(card.image, token)}
           style={[styles.img, isDeckCard && styles.deckImage]}
           contentFit="cover"
+          cachePolicy={isPrivateImagePath(card.image) ? "memory" : undefined}
         />
         {typeof index === "number" ? (
           <View style={styles.badge}>

@@ -70,12 +70,20 @@ export interface PrayerDeckCard extends HomePrayerCard {
   deckIndex: number;
 }
 
+export interface LovedOnePhoto {
+  mediauuid: string;
+  contentPath: string;
+  isPrimary: boolean;
+}
+
 export interface HomeLovedOne {
   id: string;
   name: string;
   avatar: string;
   intention: string;
   backgroundImage?: string;
+  primaryPhoto?: LovedOnePhoto | null;
+  photos?: LovedOnePhoto[];
 }
 
 export interface HomeGroup {
