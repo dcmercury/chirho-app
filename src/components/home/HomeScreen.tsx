@@ -130,6 +130,30 @@ export function HomeScreen() {
     ? resolveImage(response.community.backgroundImage)
     : images.intro;
 
+  const updatePrayerCard = (
+    prayeruuid: string,
+    updates: Partial<HomePrayerCard>,
+  ) => {
+    setSelectedCard((current) =>
+      current?.prayeruuid === prayeruuid ? { ...current, ...updates } : current,
+    );
+    setResponse((current) =>
+      current
+        ? {
+            ...current,
+            home: {
+              ...current.home,
+              cards: current.home.cards.map((card) =>
+                card.prayeruuid === prayeruuid
+                  ? { ...card, ...updates }
+                  : card,
+              ),
+            },
+          }
+        : current,
+    );
+  };
+
   const handleLovedOnePress = async (person: HomeLovedOne) => {
     if (generatingLovedOneRef.current) return;
     generatingLovedOneRef.current = true;
@@ -149,32 +173,41 @@ export function HomeScreen() {
         token,
         true,
       );
-      setSelectedCard(prayer);
+      const pendingPrayer = { ...prayer, audioStatus: "pending" as const };
+      setSelectedCard(pendingPrayer);
+      setResponse((current) =>
+        current
+          ? {
+              ...current,
+              home: {
+                ...current.home,
+                cards: [
+                  pendingPrayer,
+                  ...current.home.cards.filter(
+                    (card) => card.prayeruuid !== prayer.prayeruuid,
+                  ),
+                ].slice(0, 5),
+              },
+            }
+          : current,
+      );
       setPrayerLoading(false);
 
       void generatePrayerCardAudio(prayer.prayeruuid!, token)
         .then((audio) => {
-          setSelectedCard((current) => {
-            if (!current || current.prayeruuid !== prayer.prayeruuid) {
-              return current;
-            }
-            return {
-              ...current,
-              narrationUrl: audio.narrationUrl || undefined,
-              backgroundMusicUrl:
-                audio.backgroundMusicUrl || current.backgroundMusicUrl,
-              backgroundMusicVolume: audio.backgroundMusicVolume,
-              audioAvailable: audio.audioStatus === "ready",
-              audioStatus: audio.audioStatus,
-            };
+          updatePrayerCard(prayer.prayeruuid!, {
+            narrationUrl: audio.narrationUrl,
+            backgroundMusicUrl:
+              audio.backgroundMusicUrl || prayer.backgroundMusicUrl,
+            backgroundMusicVolume: audio.backgroundMusicVolume,
+            audioAvailable: audio.audioStatus === "ready",
+            audioStatus: audio.audioStatus,
           });
         })
         .catch(() => {
-          setSelectedCard((current) => {
-            if (!current || current.prayeruuid !== prayer.prayeruuid) {
-              return current;
-            }
-            return { ...current, audioStatus: "failed" };
+          updatePrayerCard(prayer.prayeruuid!, {
+            audioAvailable: false,
+            audioStatus: "failed",
           });
         });
     } catch (err) {

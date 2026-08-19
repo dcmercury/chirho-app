@@ -496,6 +496,7 @@ export async function generatePrayerCardAudio(
 }> {
   const data = await authenticatedRequest<{
     audioStatus?: "pending" | "ready" | "failed";
+    status?: "pending" | "ready" | "failed";
     audioUrl?: string | null;
     backgroundMusicUrl?: string | null;
     backgroundMusicVolume?: number;
@@ -503,9 +504,35 @@ export async function generatePrayerCardAudio(
     method: "POST",
   });
 
+  const initialStatus =
+    data.audioStatus || data.status || (data.audioUrl ? "ready" : "pending");
+  if (initialStatus !== "pending") {
+    return {
+      audioStatus: initialStatus,
+      narrationUrl: data.audioUrl || null,
+      backgroundMusicUrl: data.backgroundMusicUrl || null,
+      backgroundMusicVolume: data.backgroundMusicVolume ?? 0,
+    };
+  }
+
+  for (let attempt = 0; attempt < 15; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    const prayer = await getPrayer(prayeruuid, token);
+    const audioStatus =
+      prayer.audioStatus || (prayer.narrationUrl ? "ready" : "pending");
+    if (audioStatus !== "pending") {
+      return {
+        audioStatus,
+        narrationUrl: prayer.narrationUrl || null,
+        backgroundMusicUrl: prayer.backgroundMusicUrl || null,
+        backgroundMusicVolume: prayer.backgroundMusicVolume ?? 0,
+      };
+    }
+  }
+
   return {
-    audioStatus: data.audioStatus || "failed",
-    narrationUrl: data.audioUrl || null,
+    audioStatus: "failed",
+    narrationUrl: null,
     backgroundMusicUrl: data.backgroundMusicUrl || null,
     backgroundMusicVolume: data.backgroundMusicVolume ?? 0,
   };
