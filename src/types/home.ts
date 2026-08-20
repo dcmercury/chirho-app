@@ -204,20 +204,64 @@ export interface HomeCommunity {
 export interface MobileHomeResponse {
   home: HomeData;
   community: HomeCommunity | null;
+  plan: PersonalPlan | null;
+}
+
+export type PersonalPlanStatus = "free" | "trial" | "pro" | "sponsored";
+
+export interface PersonalPlan {
+  status: PersonalPlanStatus;
+  source: string;
+  hasPersonalPro: boolean;
+  canStartTrial: boolean;
+  trialStartedAt: string | null;
+  trialEndsAt: string | null;
+  paidAt: string | null;
+  sponsoredByCommunityuuid: string | null;
+  sponsoredByName: string | null;
+  daysLeft: number | null;
+  priceLabel: string;
 }
 
 export function communityAllowsPersonalPrayer(
   community: HomeCommunity | null | undefined,
+  plan?: PersonalPlan | null,
 ): boolean {
-  if (!community) return true;
-  return community.features?.personalPrayer === true;
+  if (plan?.hasPersonalPro) return true;
+  if (community) return community.features?.personalPrayer === true;
+  if (!plan) return true;
+  return false;
 }
 
 export function communityAllowsDailyPrayers(
   community: HomeCommunity | null | undefined,
+  plan?: PersonalPlan | null,
 ): boolean {
-  if (!community) return true;
-  return community.features?.dailyPrayers === true;
+  if (plan?.hasPersonalPro) return true;
+  if (community) return community.features?.dailyPrayers === true;
+  if (!plan) return true;
+  return false;
+}
+
+export function formatTrialRemaining(trialEndsAt: string | null | undefined) {
+  if (!trialEndsAt) return null;
+  const ms = new Date(trialEndsAt).getTime() - Date.now();
+  if (ms <= 0) return null;
+  const totalSeconds = Math.max(1, Math.ceil(ms / 1000));
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (days > 0) {
+    return `${days}d ${hours}h left in your free week`;
+  }
+  if (hours > 0) {
+    return `${hours}h ${minutes}m left in your free week`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s left in your free week`;
+  }
+  return `${seconds}s left in your free week`;
 }
 
 export interface GroupDetail {

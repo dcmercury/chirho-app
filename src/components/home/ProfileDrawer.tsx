@@ -9,6 +9,7 @@ import type {
   HomeGroup,
   HomeLovedOne,
   HomeProfile,
+  PersonalPlan,
   PrayerFocus,
 } from "../../types/home";
 import {
@@ -24,6 +25,7 @@ import { GroupsSection } from "./profile-drawer/GroupsSection";
 import { HomeBackgroundSection } from "./profile-drawer/HomeBackgroundSection";
 import { LovedOnesSection } from "./profile-drawer/LovedOnesSection";
 import { NotificationsSection } from "./profile-drawer/NotificationsSection";
+import { PersonalPlanSection } from "./profile-drawer/PersonalPlanSection";
 import { PrayerCardsDrawer } from "./profile-drawer/PrayerCardsDrawer";
 import { PrayerCardsSection } from "./profile-drawer/PrayerCardsSection";
 import { PrayerPreferencesSection } from "./profile-drawer/PrayerPreferencesSection";
@@ -40,9 +42,12 @@ interface ProfileDrawerProps {
   prayerFocuses: PrayerFocus[];
   groups: HomeGroup[];
   community: HomeCommunity | null;
+  plan: PersonalPlan | null;
   onClose: () => void;
   onDismiss?: () => void;
   onChanged: () => Promise<void>;
+  onOpenPlan: () => void;
+  onBecameIndependent: () => void;
   onManageLovedOnePhotos: (lovedOne: {
     id: string;
     firstName: string;
@@ -69,9 +74,12 @@ export function ProfileDrawer({
   prayerFocuses,
   groups,
   community,
+  plan,
   onClose,
   onDismiss,
   onChanged,
+  onOpenPlan,
+  onBecameIndependent,
   onManageLovedOnePhotos,
 }: ProfileDrawerProps) {
   const styles = useProfileStyles();
@@ -84,7 +92,7 @@ export function ProfileDrawer({
   }, [visible]);
 
   if (!profile) return null;
-  const personalPrayer = communityAllowsPersonalPrayer(community);
+  const personalPrayer = communityAllowsPersonalPrayer(community, plan);
   const prayerCount =
     profile.stats.find((stat) => stat.label.toLowerCase() === "prayers")
       ?.value || "0";
@@ -124,6 +132,10 @@ export function ProfileDrawer({
             onChangeAvatar={() => {
               void controller.pickAvatar();
             }}
+          />
+          <PersonalPlanSection
+            plan={plan}
+            onOpen={onOpenPlan}
           />
           <Section title="Appearance">
             <ToggleRow
@@ -175,7 +187,9 @@ export function ProfileDrawer({
               isJoinPending={() => Boolean(controller.pending["community:join"])}
               onSearch={controller.searchCommunity}
               onJoin={controller.joinAndActivateCommunity}
-              onLeave={controller.confirmLeaveCommunity}
+              onLeave={(name) =>
+                controller.confirmLeaveCommunity(name, onBecameIndependent)
+              }
             />
             <GroupsSection
               groups={groups}
@@ -183,7 +197,11 @@ export function ProfileDrawer({
               isPending={(groupuuid) =>
                 Boolean(controller.pending[`group:${groupuuid}`])
               }
-              onLeave={controller.confirmLeaveGroup}
+              onLeave={(groupuuid, name) =>
+                controller.confirmLeaveGroup(groupuuid, name, () => {
+                  if (!community) onBecameIndependent();
+                })
+              }
             />
           </Section>
           {personalPrayer ? (
@@ -243,7 +261,7 @@ export function ProfileDrawer({
               controller.pending["dashboard-background:upload"],
             )}
           />
-          {communityAllowsDailyPrayers(community) ? (
+          {communityAllowsDailyPrayers(community, plan) ? (
             <DailyPrayersSection
               dailyPrayers={profile.dailyPrayers}
               isPending={(period) =>

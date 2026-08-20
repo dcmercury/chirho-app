@@ -323,7 +323,7 @@ export function useProfileDrawerController(
       "Unable to join this community",
     );
 
-  const confirmLeaveCommunity = (name: string) => {
+  const confirmLeaveCommunity = (name: string, onLeft?: () => void) => {
     Alert.alert(
       `Leave ${name}?`,
       "This removes it as your active community.",
@@ -337,14 +337,20 @@ export function useProfileDrawerController(
               "community:leave",
               (token) => setActiveCommunity(null, token),
               "Unable to leave this community",
-            );
+            ).then((ok) => {
+              if (ok) onLeft?.();
+            });
           },
         },
       ],
     );
   };
 
-  const confirmLeaveGroup = (groupuuid: string, name: string) => {
+  const confirmLeaveGroup = (
+    groupuuid: string,
+    name: string,
+    onLeft?: () => void,
+  ) => {
     Alert.alert(`Leave ${name}?`, "You will leave this prayer group.", [
       { text: "Cancel", style: "cancel" },
       {
@@ -355,7 +361,9 @@ export function useProfileDrawerController(
             `group:${groupuuid}`,
             (token) => leaveGroup(groupuuid, token),
             `Unable to leave ${name}`,
-          );
+          ).then((ok) => {
+            if (ok) onLeft?.();
+          });
         },
       },
     ]);

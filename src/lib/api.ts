@@ -5,6 +5,7 @@ import type {
   HomePrayerCard,
   LovedOnePhoto,
   MobileHomeResponse,
+  PersonalPlan,
   PrayerDeckCard,
   PrayerDeckDetail,
   PrayerFocus,
@@ -429,6 +430,7 @@ export async function getMobileHome(
               groupsUsed?: number;
             }
           | null;
+        plan?: PersonalPlan | null;
       }
     | MobileHomeResponse["home"]
   >("/api/mobile/home", token);
@@ -440,6 +442,7 @@ export async function getMobileHome(
         dailyDeck: data.dailyDeck || null,
       },
       community: null,
+      plan: null,
     };
   }
   const rawCommunity = data.community;
@@ -477,6 +480,7 @@ export async function getMobileHome(
       dailyDeck: data.home.dailyDeck || null,
     },
     community,
+    plan: data.plan || null,
   };
 }
 
@@ -1539,6 +1543,21 @@ export async function setActiveCommunity(
     method: "PUT",
     body: JSON.stringify({ communityuuid }),
   });
+}
+
+export async function updatePersonalPlan(
+  action: "start_trial" | "subscribe_placeholder" | "cancel",
+  token: string,
+): Promise<PersonalPlan> {
+  const data = await authenticatedRequest<{ plan: PersonalPlan }>(
+    "/api/user/plan",
+    token,
+    {
+      method: "POST",
+      body: JSON.stringify({ action }),
+    },
+  );
+  return data.plan;
 }
 
 export async function registerPushToken(

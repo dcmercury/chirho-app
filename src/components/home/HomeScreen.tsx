@@ -29,6 +29,7 @@ import {
   getMobileHome,
   saveLovedOneConfig,
   uploadLovedOnePhoto,
+  updatePersonalPlan,
   updatePrayerFocus,
 } from "../../lib/api";
 import { GridOverlay } from "../ui/GridOverlay";
@@ -41,6 +42,7 @@ import { CreateGroupModal } from "./CreateGroupModal";
 import { LovedOnePhotosModal } from "./LovedOnePhotosModal";
 import { PrayerDetailModal } from "./PrayerDetailModal";
 import { PrayerFocusModal } from "./PrayerFocusModal";
+import { PersonalPlanDrawer } from "./PersonalPlanDrawer";
 import { PrayerFocusTypeIcon } from "./PrayerFocusTypeIcon";
 import { ProfileDrawer } from "./ProfileDrawer";
 import type {
@@ -51,7 +53,10 @@ import type {
   PrayerFocus,
   PrayerFocusInput,
 } from "../../types/home";
-import { communityAllowsPersonalPrayer } from "../../types/home";
+import {
+  communityAllowsPersonalPrayer,
+  formatTrialRemaining,
+} from "../../types/home";
 
 async function prefetchHomeImages(result: MobileHomeResponse, token: string) {
   const paths = [
@@ -205,13 +210,25 @@ export function HomeScreen() {
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [selectedFocus, setSelectedFocus] = useState<PrayerFocus | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [planOpen, setPlanOpen] = useState(false);
+  const [planPending, setPlanPending] = useState(false);
+  const [planError, setPlanError] = useState<string | null>(null);
+  const [, setTrialTick] = useState(0);
   const [savingLovedOne, setSavingLovedOne] = useState(false);
   const [savingGroup, setSavingGroup] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const generatingLovedOneRef = useRef(false);
   const showPersonalPrayer = communityAllowsPersonalPrayer(
     response?.community,
+    response?.plan,
   );
+  const trialLabel = formatTrialRemaining(response?.plan?.trialEndsAt);
+
+  useEffect(() => {
+    if (response?.plan?.status !== "trial") return;
+    const id = setInterval(() => setTrialTick((value) => value + 1), 1000);
+    return () => clearInterval(id);
+  }, [response?.plan?.status]);
 
   useEffect(() => {
     console.info("[HomeFeatures]", {
@@ -290,7 +307,11 @@ export function HomeScreen() {
           licenseTier: result.community?.licenseTier ?? null,
           personalPrayer: result.community?.features?.personalPrayer ?? null,
           dailyPrayers: result.community?.features?.dailyPrayers ?? null,
-          allowPersonalPrayer: communityAllowsPersonalPrayer(result.community),
+          allowPersonalPrayer: communityAllowsPersonalPrayer(
+            result.community,
+            result.plan,
+          ),
+          planStatus: result.plan?.status ?? null,
         });
         setResponse(result);
         if (!refresh) await prefetchHomeImages(result, token);
@@ -501,6 +522,31 @@ export function HomeScreen() {
     }
   };
 
+  const openPersonalPlan = () => {
+    setPlanError(null);
+    setProfileOpen(false);
+    setPlanOpen(true);
+  };
+
+  const handlePersonalPlan = async (
+    action: "start_trial" | "subscribe_placeholder",
+  ) => {
+    setPlanPending(true);
+    setPlanError(null);
+    try {
+      const token = await requireCurrentToken();
+      await updatePersonalPlan(action, token);
+      await loadHome(true);
+      setPlanOpen(false);
+    } catch (err) {
+      setPlanError(
+        err instanceof Error ? err.message : "Unable to update ChiRho Personal",
+      );
+    } finally {
+      setPlanPending(false);
+    }
+  };
+
   const handleSavePrayerFocus = async (input: PrayerFocusInput) => {
     setSavingLovedOne(true);
     setMutationError(null);
@@ -583,6 +629,15 @@ export function HomeScreen() {
           <View style={styles.welcomeCopy}>
             <Text style={styles.welcomeGreeting}>{daypartGreeting()}</Text>
             <Text style={styles.welcomeName}>{firstName}!</Text>
+            {trialLabel ? (
+              <Pressable
+                accessibilityLabel={trialLabel}
+                accessibilityRole="button"
+                onPress={openPersonalPlan}
+              >
+                <Text style={styles.trialCaption}>{trialLabel}</Text>
+              </Pressable>
+            ) : null}
           </View>
         </View>
 
@@ -596,6 +651,28 @@ export function HomeScreen() {
           </View>
         ) : home ? (
           <>
+            {!showPersonalPrayer && !response?.community ? (
+              <Pressable
+                accessibilityLabel="Unlock ChiRho Personal"
+                accessibilityRole="button"
+                onPress={openPersonalPlan}
+                style={({ pressed }) => [
+                  styles.deckCard,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <View style={styles.deckCopy}>
+                  <Text style={styles.deckEyebrow}>CHIRHO PERSONAL</Text>
+                  <Text style={styles.deckTitle}>Keep your prayer cards</Text>
+                  <Text style={styles.deckMeta}>
+                    {response?.plan?.canStartTrial
+                      ? "Start a free week, or continue on your own"
+                      : `Continue with Pro · ${response?.plan?.priceLabel || "$4.99/mo"}`}
+                  </Text>
+                </View>
+                <Text style={styles.deckArrow}>›</Text>
+              </Pressable>
+            ) : null}
             {showPersonalPrayer && home.dailyDeck ? (
               <>
                 <Text style={styles.section}>Today's Prayer Deck</Text>
@@ -889,6 +966,17 @@ export function HomeScreen() {
         onClose={() => setCreateGroupOpen(false)}
         onSubmit={handleCreateGroup}
       />
+      <PersonalPlanDrawer
+        visible={planOpen}
+        plan={response?.plan || null}
+        pending={planPending}
+        error={planError}
+        onClose={() => setPlanOpen(false)}
+        onStartTrial={() => handlePersonalPlan("start_trial")}
+        onSubscribePlaceholder={() =>
+          handlePersonalPlan("subscribe_placeholder")
+        }
+      />
       <PrayerFocusModal
         visible={prayerFocusOpen}
         focus={selectedFocus}
@@ -911,9 +999,12 @@ export function HomeScreen() {
         prayerFocuses={home?.prayerFocuses || []}
         groups={home?.groups || []}
         community={response?.community || null}
+        plan={response?.plan || null}
         onClose={() => setProfileOpen(false)}
         onDismiss={openQueuedPhotoModal}
         onChanged={() => loadHome(true)}
+        onOpenPlan={openPersonalPlan}
+        onBecameIndependent={openPersonalPlan}
         onManageLovedOnePhotos={(lovedOne) => {
           queuePhotoModal(lovedOne);
           setProfileOpen(false);
@@ -964,6 +1055,13 @@ function createStyles(colors: ColorTokens) {
     fontWeight: "500",
     letterSpacing: -0.9,
     color: colors.title,
+  },
+  trialCaption: {
+    color: colors.accentText,
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    letterSpacing: 0.3,
+    marginTop: 6,
   },
   errorCard: {
     marginTop: 24,
