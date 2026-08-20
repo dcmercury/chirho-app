@@ -3,6 +3,55 @@ import * as Device from "expo-device";
 import Constants from "expo-constants";
 import type { Href } from "expo-router";
 
+const IOS_NOTIFICATION_PERMISSIONS = {
+  allowAlert: true,
+  allowBadge: true,
+  allowSound: true,
+} as const;
+
+export function configureNotificationHandler() {
+  if (Platform.OS === "web") return;
+  void import("expo-notifications").then((Notifications) => {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+      }),
+    });
+  });
+}
+
+configureNotificationHandler();
+
+export async function applyIncomingNotificationBadge(notification?: {
+  request: { content: { badge?: number | null } };
+}): Promise<void> {
+  if (Platform.OS === "web") return;
+  const Notifications = await import("expo-notifications");
+  const payloadBadge = notification?.request.content.badge;
+  if (typeof payloadBadge === "number" && payloadBadge >= 0) {
+    await Notifications.setBadgeCountAsync(payloadBadge);
+    return;
+  }
+  const current = await Notifications.getBadgeCountAsync();
+  await Notifications.setBadgeCountAsync(current + 1);
+}
+
+function isNotificationPermissionGranted(
+  Notifications: typeof import("expo-notifications"),
+  settings: Awaited<
+    ReturnType<typeof import("expo-notifications").getPermissionsAsync>
+  >,
+): boolean {
+  return (
+    settings.granted ||
+    settings.ios?.status === Notifications.IosAuthorizationStatus.AUTHORIZED ||
+    settings.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL
+  );
+}
+
 export function hrefFromNotificationData(
   data: Record<string, unknown> | undefined | null,
 ): Href | null {
@@ -104,14 +153,7 @@ export async function registerForPushNotifications(
 
   const Notifications = await import("expo-notifications");
 
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-    }),
-  });
+  configureNotificationHandler();
 
   if (Platform.OS === "android") {
     await Notifications.setNotificationChannelAsync("default", {
@@ -123,18 +165,26 @@ export async function registerForPushNotifications(
     });
   }
 
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
+  const existing = await Notifications.getPermissionsAsync();
+  let permission = existing;
 
-  if (existingStatus !== "granted") {
-    if (!options.requestPermission) {
-      return null;
-    }
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
+  if (
+    !isNotificationPermissionGranted(Notifications, existing) &&
+    !options.requestPermission
+  ) {
+    return null;
   }
 
-  if (finalStatus !== "granted") {
+  if (
+    options.requestPermission ||
+    existing.ios?.allowsBadge === false
+  ) {
+    permission = await Notifications.requestPermissionsAsync({
+      ios: IOS_NOTIFICATION_PERMISSIONS,
+    });
+  }
+
+  if (!isNotificationPermissionGranted(Notifications, permission)) {
     return null;
   }
 
