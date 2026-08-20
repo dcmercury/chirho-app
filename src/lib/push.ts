@@ -95,7 +95,9 @@ export function hrefFromTrustedNotificationUrl(value: string): Href | null {
   }
 }
 
-export async function registerForPushNotifications(): Promise<string | null> {
+export async function registerForPushNotifications(
+  options: { requestPermission?: boolean } = {},
+): Promise<string | null> {
   if (!Device.isDevice) {
     return null;
   }
@@ -125,6 +127,9 @@ export async function registerForPushNotifications(): Promise<string | null> {
   let finalStatus = existingStatus;
 
   if (existingStatus !== "granted") {
+    if (!options.requestPermission) {
+      return null;
+    }
     const { status } = await Notifications.requestPermissionsAsync();
     finalStatus = status;
   }

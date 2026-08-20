@@ -5,11 +5,13 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
-import { colors, fonts } from "../../../theme/tokens";
+import { fonts, type ColorTokens } from "../../../theme/tokens";
+import { useTheme, useThemedStyles } from "../../../theme/ThemeProvider";
 import { SwipeChevron } from "../../../components/ui/SwipeChevron";
 import type {
   GroupMember,
@@ -23,6 +25,8 @@ import {
   PlusIcon,
   SparkleIcon,
 } from "./Icons";
+import { ContentSafetyButton } from "./ContentSafetyButton";
+import type { ReportReasonId } from "./ContentSafetyButton";
 import { GroupAvatar } from "./GroupAvatar";
 import { Stagger } from "./Stagger";
 
@@ -39,7 +43,6 @@ interface PrayerRequestViewProps {
   sendingPrayer: boolean;
   hasMoreMessages: boolean;
   loadingOlder: boolean;
-  groupAvatar?: string | null;
   actionError: string | null;
   currentUserId?: string | null;
   onBack: () => void;
@@ -48,10 +51,21 @@ interface PrayerRequestViewProps {
   onPray: (message: GroupMessage) => void;
   onAcknowledgeOffered: (message: GroupMessage, prayerId: string) => void;
   onGenerate: (message: GroupMessage) => void;
+  onChangeGenerated: (text: string) => void;
   onSendGenerated: (message: GroupMessage) => void;
   onDismissGenerated: () => void;
   onNewRequest: () => void;
-  onOpenGroupDrawer: () => void;
+  canCreatePrayerRequests?: boolean;
+  isAdmin?: boolean;
+  onDeleteRequest: (message: GroupMessage) => void;
+  onReportRequest: (message: GroupMessage, reason: ReportReasonId) => void;
+  onDeleteResponse: (message: GroupMessage, prayerId: string) => void;
+  onReportResponse: (
+    message: GroupMessage,
+    prayerId: string,
+    reason: ReportReasonId,
+  ) => void;
+  onBlockMember: (clerkId: string) => void;
 }
 
 export function PrayerRequestView({
@@ -67,7 +81,6 @@ export function PrayerRequestView({
   sendingPrayer,
   hasMoreMessages,
   loadingOlder,
-  groupAvatar,
   actionError,
   currentUserId,
   onBack,
@@ -76,12 +89,21 @@ export function PrayerRequestView({
   onPray,
   onAcknowledgeOffered,
   onGenerate,
+  onChangeGenerated,
   onSendGenerated,
   onDismissGenerated,
   onNewRequest,
-  onOpenGroupDrawer,
+  canCreatePrayerRequests = true,
+  isAdmin = false,
+  onDeleteRequest,
+  onReportRequest,
+  onDeleteResponse,
+  onReportResponse,
+  onBlockMember,
 }: PrayerRequestViewProps) {
   const insets = useSafeAreaInsets();
+  const styles = useThemedStyles(createStyles);
+  const { colors, appearance } = useTheme();
   const safeIndex = Math.min(currentIndex, Math.max(messages.length - 1, 0));
   const message = messages[safeIndex];
   const author = message ? getMember(members, message.userId) : null;
@@ -137,7 +159,7 @@ export function PrayerRequestView({
           styles.content,
           {
             paddingTop: insets.top + 56,
-            paddingBottom: insets.bottom + 148,
+            paddingBottom: insets.bottom + 72,
           },
         ]}
         onContentSizeChange={(_, height) => {
@@ -168,9 +190,11 @@ export function PrayerRequestView({
             <Text style={styles.time}>
               No prayer requests yet. Be the first to share.
             </Text>
-            <Pressable onPress={onNewRequest} style={[styles.action, styles.orange]}>
-              <PlusIcon color={colors.accent} />
-            </Pressable>
+            {canCreatePrayerRequests ? (
+              <Pressable onPress={onNewRequest} style={[styles.action, styles.orange]}>
+                <PlusIcon color={colors.accent} />
+              </Pressable>
+            ) : null}
           </View>
         ) : (
           <View key={message.messageId} style={styles.body}>
@@ -183,9 +207,20 @@ export function PrayerRequestView({
                   uri={author?.profile?.avatar}
                   name={authorName}
                   size={40}
-                  borderColor="rgba(255,255,255,0.15)"
+                  borderColor={colors.glassBorderRow}
                 />
                 <Text style={styles.name}>{authorName}</Text>
+                {currentUserId ? (
+                  <ContentSafetyButton
+                    authorName={authorName}
+                    contentLabel="prayer request"
+                    isAdmin={isAdmin}
+                    isOwn={message.userId === currentUserId}
+                    onBlock={() => onBlockMember(message.userId)}
+                    onDelete={() => onDeleteRequest(message)}
+                    onReport={(reason) => onReportRequest(message, reason)}
+                  />
+                ) : null}
               </View>
             </Stagger>
             <Stagger delay={400}>
@@ -195,12 +230,24 @@ export function PrayerRequestView({
               {generatedPrayer ? (
                 <View style={styles.generatedBlock}>
                   <Text style={styles.responseLabel}>GENERATED PRAYER</Text>
-                  <Text style={styles.generatedText}>{generatedPrayer}</Text>
+                  <TextInput
+                    editable={!sendingPrayer}
+                    multiline
+                    onChangeText={onChangeGenerated}
+                    keyboardAppearance={appearance === "light" ? "light" : "dark"}
+                    style={styles.generatedText}
+                    textAlignVertical="top"
+                    value={generatedPrayer}
+                  />
                   <View style={styles.generatedActions}>
                     <Pressable
-                      disabled={sendingPrayer}
+                      disabled={sendingPrayer || !generatedPrayer.trim()}
                       onPress={() => onSendGenerated(message)}
-                      style={[styles.send, sendingPrayer && styles.disabled]}
+                      style={[
+                        styles.send,
+                        (sendingPrayer || !generatedPrayer.trim()) &&
+                          styles.disabled,
+                      ]}
                     >
                       <Text style={styles.sendText}>
                         {sendingPrayer ? "Sending..." : "Send Prayer"}
@@ -248,12 +295,31 @@ export function PrayerRequestView({
                             uri={responseMember?.profile?.avatar}
                             name={responseName}
                             size={20}
-                            borderColor="rgba(255,255,255,0.15)"
+                            borderColor={colors.glassBorderRow}
                           />
                           <Text style={styles.responseName}>{responseName}</Text>
                           <Text style={styles.responseTime}>
                             {formatRelativeTime(response.createdAt)}
                           </Text>
+                          {currentUserId && response.prayerId ? (
+                            <ContentSafetyButton
+                              authorName={responseName}
+                              contentLabel="prayer"
+                              isAdmin={isAdmin}
+                              isOwn={response.clerkId === currentUserId}
+                              onBlock={() => onBlockMember(response.clerkId)}
+                              onDelete={() =>
+                                onDeleteResponse(message, response.prayerId!)
+                              }
+                              onReport={(reason) =>
+                                onReportResponse(
+                                  message,
+                                  response.prayerId!,
+                                  reason,
+                                )
+                              }
+                            />
+                          ) : null}
                         </View>
                         <CollapsiblePrayerText text={response.prayerText || ""} />
                         {displayIds.length ? (
@@ -274,7 +340,7 @@ export function PrayerRequestView({
                                     uri={member?.profile?.avatar}
                                     name={name}
                                     size={26}
-                                    borderColor="rgba(255,255,255,0.18)"
+                                    borderColor={colors.glassBorderChip}
                                   />
                                   <View
                                     style={[
@@ -381,12 +447,14 @@ export function PrayerRequestView({
                     <SparkleIcon color={colors.mutedStrong} />
                   )}
                 </Pressable>
-                <Pressable
-                  onPress={onNewRequest}
-                  style={[styles.action, styles.orange]}
-                >
-                  <PlusIcon color={colors.accent} />
-                </Pressable>
+                {canCreatePrayerRequests ? (
+                  <Pressable
+                    onPress={onNewRequest}
+                    style={[styles.action, styles.orange]}
+                  >
+                    <PlusIcon color={colors.accent} />
+                  </Pressable>
+                ) : null}
               </View>
             </Stagger>
             {actionError ? <Text style={styles.error}>{actionError}</Text> : null}
@@ -419,22 +487,9 @@ export function PrayerRequestView({
       ) : null}
       {message ? (
         <View style={[styles.nav, { paddingBottom: Math.max(insets.bottom, 8) }]}>
-          <Pressable
-            accessibilityLabel={`Open ${groupName} members and settings`}
-            accessibilityRole="button"
-            onPress={onOpenGroupDrawer}
-            style={styles.center}
-          >
-            <GroupAvatar
-              uri={groupAvatar}
-              name={groupName}
-              size={72}
-              borderColor="rgba(255,255,255,0.15)"
-            />
-            <Text style={styles.counter}>
-              {safeIndex + 1} / {messages.length} · Swipe
-            </Text>
-          </Pressable>
+          <Text style={styles.counter}>
+            {safeIndex + 1} / {messages.length} · Swipe
+          </Text>
           <View style={styles.handle} />
         </View>
       ) : null}
@@ -445,6 +500,8 @@ export function PrayerRequestView({
 const COLLAPSED_PRAYER_LINES = 3;
 
 function CollapsiblePrayerText({ text }: { text: string }) {
+  const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
   const [expanded, setExpanded] = useState(false);
   const [canExpand, setCanExpand] = useState(false);
 
@@ -513,7 +570,8 @@ function formatRelativeTime(value: string) {
   });
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
   root: { flex: 1 },
   content: { flexGrow: 1, paddingHorizontal: 24 },
   back: {
@@ -534,22 +592,23 @@ const styles = StyleSheet.create({
   body: { gap: 12 },
   empty: { gap: 12 },
   label: {
-    color: colors.accent,
+    color: colors.accentText,
     fontFamily: fonts.mono,
     fontSize: 10.4,
     letterSpacing: 0.62,
   },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   name: {
+    flex: 1,
     flexShrink: 1,
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.displayMedium,
     fontSize: 32,
     lineHeight: 35,
     letterSpacing: -0.8,
   },
   time: {
-    color: "rgba(255,255,255,0.45)",
+    color: colors.mutedMid,
     fontFamily: fonts.body,
     fontSize: 12.8,
     lineHeight: 20,
@@ -560,7 +619,7 @@ const styles = StyleSheet.create({
     paddingLeft: 16,
     borderLeftWidth: 2,
     borderLeftColor: colors.accent,
-    color: "rgba(220,220,220,0.85)",
+    color: colors.bodyOnPhoto,
     fontFamily: fonts.body,
     fontSize: 15.2,
     lineHeight: 27.4,
@@ -574,24 +633,29 @@ const styles = StyleSheet.create({
   },
   response: {
     gap: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     paddingLeft: 16,
+    borderRadius: 12,
     borderLeftWidth: 1,
     borderLeftColor: colors.glassBorderSoft,
+    backgroundColor: colors.cardFill,
   },
   responseAuthor: { flexDirection: "row", alignItems: "center", gap: 6 },
   responseName: {
+    flexShrink: 1,
     color: colors.mutedSoft,
     fontFamily: fonts.bodyMedium,
     fontSize: 11,
   },
   responseTime: {
-    color: "rgba(255,255,255,0.25)",
+    color: colors.mutedDeep,
     fontFamily: fonts.body,
     fontSize: 9.6,
     fontStyle: "italic",
   },
   responseText: {
-    color: "rgba(255,255,255,0.45)",
+    color: colors.bodyOnPhoto,
     fontFamily: fonts.body,
     fontSize: 12.8,
     lineHeight: 20,
@@ -631,12 +695,12 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(12,12,12,0.92)",
+    backgroundColor: colors.sheetFill,
     borderWidth: 1,
-    borderColor: "rgba(249,115,22,0.45)",
+    borderColor: colors.accentBorderPill,
   },
   heartBadgeMuted: {
-    borderColor: "rgba(255,255,255,0.18)",
+    borderColor: colors.glassBorderChip,
   },
   praying: { flexDirection: "row", marginTop: 8 },
   overlap: { marginLeft: -6 },
@@ -648,25 +712,26 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(255,255,255,0.08)",
+    borderColor: colors.glassBorderHairline,
+    backgroundColor: colors.glassFillHover,
   },
   actionActive: {
-    borderColor: "rgba(249,115,22,0.3)",
-    backgroundColor: "rgba(249,115,22,0.15)",
+    borderColor: colors.accentBorderMid,
+    backgroundColor: colors.accentFillSelected,
   },
   orange: {
     marginLeft: "auto",
-    borderColor: "rgba(249,115,22,0.4)",
-    backgroundColor: "rgba(249,115,22,0.15)",
+    borderColor: colors.accentBorderSelected,
+    backgroundColor: colors.accentFillSelected,
   },
   generatedBlock: { gap: 8 },
   generatedText: {
+    minHeight: 132,
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "rgba(249,115,22,0.15)",
-    backgroundColor: "rgba(249,115,22,0.06)",
+    borderColor: colors.accentBorderFaint,
+    backgroundColor: colors.accentFillFaint,
     color: colors.subtitle,
     fontFamily: fonts.body,
     fontSize: 12,
@@ -708,11 +773,10 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.25)",
+    backgroundColor: colors.overlayFaint,
   },
-  center: { alignItems: "center", gap: 3 },
   counter: {
-    color: "rgba(255,255,255,0.35)",
+    color: colors.mutedFaint,
     fontFamily: fonts.mono,
     fontSize: 8.8,
     letterSpacing: 0.5,
@@ -723,8 +787,9 @@ const styles = StyleSheet.create({
     width: 28,
     height: 3,
     borderRadius: 2,
-    backgroundColor: "rgba(255,255,255,0.2)",
+    backgroundColor: colors.glassBorderSelected,
   },
   error: { color: colors.error, fontFamily: fonts.body, fontSize: 11 },
   disabled: { opacity: 0.3 },
-});
+  });
+}

@@ -4,9 +4,31 @@ import {
   StyleSheet,
   Text,
 } from "react-native";
-import { colors, fonts } from "../../../theme/tokens";
+import { fonts, type ColorTokens } from "../../../theme/tokens";
+import { useTheme, useThemedStyles } from "../../../theme/ThemeProvider";
 import type { HomeProfile } from "../../../types/home";
 import { InlineError, Section, ToggleRow } from "./ProfileControls";
+
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
+    testButton: {
+      minWidth: 48,
+      minHeight: 36,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: colors.glassBorderStrong,
+      paddingHorizontal: 11,
+    },
+    testText: {
+      color: colors.accentText,
+      fontFamily: fonts.bodyMedium,
+      fontSize: 10,
+    },
+    disabled: { opacity: 0.45 },
+  });
+}
 
 export function NotificationsSection({
   notifications,
@@ -25,10 +47,13 @@ export function NotificationsSection({
   onChange: (key: string, enabled: boolean) => void;
   onTest: (key: string, label: string) => void;
 }) {
-  if (!notifications.length) return null;
+  const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
+  const visible = notifications.filter((item) => !item.adminDisabled);
+  if (!visible.length) return null;
   return (
     <Section title="Notifications">
-      {notifications.map((item) => {
+      {visible.map((item) => {
         const testing = isTestPending(item.key);
         return (
           <ToggleRow
@@ -44,7 +69,7 @@ export function NotificationsSection({
                   style={[styles.testButton, testing && styles.disabled]}
                 >
                   {testing ? (
-                    <ActivityIndicator color={colors.accent} size="small" />
+                    <ActivityIndicator color={colors.accentText} size="small" />
                   ) : (
                     <Text style={styles.testText}>Test</Text>
                   )}
@@ -62,22 +87,3 @@ export function NotificationsSection({
     </Section>
   );
 }
-
-const styles = StyleSheet.create({
-  testButton: {
-    minWidth: 48,
-    minHeight: 36,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.glassBorderStrong,
-    paddingHorizontal: 11,
-  },
-  testText: {
-    color: colors.accent,
-    fontFamily: fonts.bodyMedium,
-    fontSize: 10,
-  },
-  disabled: { opacity: 0.45 },
-});

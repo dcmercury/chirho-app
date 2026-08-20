@@ -13,7 +13,8 @@ import Animated, {
   withDelay,
   withTiming,
 } from "react-native-reanimated";
-import { colors, fonts } from "../../../theme/tokens";
+import { fonts, type ColorTokens } from "../../../theme/tokens";
+import { useTheme, useThemedStyles } from "../../../theme/ThemeProvider";
 import type { PrayerIntensity } from "../types";
 import {
   FamilyIcon,
@@ -98,6 +99,8 @@ export function PrayerRequestForm({
   generating,
   sending,
 }: PrayerRequestFormProps) {
+  const styles = useThemedStyles(createStyles);
+  const { colors, appearance } = useTheme();
   const [step, setStep] = useState<0 | 1>(0);
   const introConsumedRef = useRef(false);
   const [intensities, setIntensities] = useState<Record<string, number>>(
@@ -196,7 +199,8 @@ export function PrayerRequestForm({
         multiline
         editable={!sending}
         placeholder="What would you like prayer for?"
-        placeholderTextColor="rgba(255,255,255,0.5)"
+        placeholderTextColor={colors.mutedSoft}
+        keyboardAppearance={appearance === "light" ? "light" : "dark"}
         value={value}
         onChangeText={onChange}
         style={styles.input}
@@ -254,6 +258,8 @@ function IntensitySlider({
   introDelay: number;
   onChange: (value: number) => void;
 }) {
+  const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
   const reducedMotion = useReducedMotion();
   const shouldIntro = playIntro && !reducedMotion && introFrom > 0;
   const widthRef = useRef(1);
@@ -340,7 +346,7 @@ function IntensitySlider({
         <View style={styles.sliderLabel}>
           <View style={styles.sliderIcon}>
             <Icon
-              color={active ? "rgba(255,255,255,0.9)" : colors.subtitle}
+              color={active ? colors.bodyBright : colors.subtitle}
               size={18}
             />
           </View>
@@ -396,6 +402,7 @@ function SecondaryButton({
   label: string;
   onPress: () => void;
 }) {
+  const styles = useThemedStyles(createStyles);
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}>
       <Text style={styles.secondaryText}>{label}</Text>
@@ -412,6 +419,7 @@ function PrimaryButton({
   onPress: () => void;
   disabled?: boolean;
 }) {
+  const styles = useThemedStyles(createStyles);
   return (
     <Pressable
       disabled={disabled}
@@ -427,17 +435,18 @@ function PrimaryButton({
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
   panel: {
     gap: 12,
     padding: 16,
     borderRadius: 12,
-    backgroundColor: "rgba(10,8,7,0.52)",
+    backgroundColor: colors.cardFillSoft,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.16)",
+    borderColor: colors.glassBorderInput,
   },
   title: {
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.displayMedium,
     fontSize: 14,
   },
@@ -461,7 +470,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodyMedium,
     fontSize: 13,
   },
-  active: { color: "rgba(255,255,255,0.85)" },
+  active: { color: colors.bodyActive },
   sliderValue: {
     width: 20,
     color: colors.mutedSoft,
@@ -469,7 +478,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: "right",
   },
-  sliderValueActive: { color: colors.accent },
+  sliderValueActive: { color: colors.accentText },
   trackTouch: {
     height: 44,
     justifyContent: "center",
@@ -482,7 +491,7 @@ const styles = StyleSheet.create({
     top: 20,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    backgroundColor: colors.glassFillStrong,
   },
   fill: {
     position: "absolute",
@@ -501,9 +510,9 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: "rgba(0,0,0,0.8)",
+    backgroundColor: colors.overlay,
     borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.2)",
+    borderColor: colors.glassBorderSelected,
   },
   thumbActive: {
     borderColor: colors.accent,
@@ -526,7 +535,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: colors.glassBorder,
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: colors.glassFillFaint,
   },
   generateText: {
     color: colors.mutedStrong,
@@ -540,20 +549,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: "rgba(249,115,22,0.1)",
+    backgroundColor: colors.accentFill,
     borderWidth: 1,
-    borderColor: "rgba(249,115,22,0.2)",
+    borderColor: colors.accentBorder,
   },
   pillText: { color: colors.mutedSoft, fontFamily: fonts.body, fontSize: 9 },
-  pillValue: { color: colors.accent, fontFamily: fonts.monoMedium, fontSize: 9 },
+  pillValue: { color: colors.accentText, fontFamily: fonts.monoMedium, fontSize: 9 },
   input: {
     minHeight: 132,
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.16)",
-    backgroundColor: "rgba(10,8,7,0.44)",
-    color: colors.white,
+    borderColor: colors.glassBorderInput,
+    backgroundColor: colors.cardFillMuted,
+    color: colors.title,
     fontFamily: fonts.body,
     fontSize: 13,
     lineHeight: 20,
@@ -600,9 +609,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 8,
-    backgroundColor: colors.white,
+    backgroundColor: colors.buttonPrimary,
   },
-  primaryText: { color: colors.black, fontFamily: fonts.displayMedium, fontSize: 12 },
+  primaryText: { color: colors.buttonOnPrimary, fontFamily: fonts.displayMedium, fontSize: 12 },
   pressed: { opacity: 0.75 },
   disabled: { opacity: 0.35 },
-});
+  });
+}

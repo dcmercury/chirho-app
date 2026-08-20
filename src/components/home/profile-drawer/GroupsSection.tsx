@@ -1,6 +1,6 @@
 import { Pressable, Text, View } from "react-native";
 import type { HomeGroup } from "../../../types/home";
-import { InlineError, ManageAvatar, styles } from "./ProfileControls";
+import { InlineError, ManageAvatar, useProfileStyles } from "./ProfileControls";
 
 export function GroupsSection({
   groups,
@@ -13,6 +13,7 @@ export function GroupsSection({
   error?: string;
   onLeave: (groupuuid: string, name: string) => void;
 }) {
+  const styles = useProfileStyles();
   return (
     <>
       {groups.map((group) => {

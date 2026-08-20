@@ -6,7 +6,7 @@ import {
   ScrollView,
   View,
 } from "react-native";
-import { colors } from "../../../theme/tokens";
+import { useTheme } from "../../../theme/ThemeProvider";
 import type {
   GroupMember,
   PrayerGroup,
@@ -18,13 +18,17 @@ import { GroupDangerZoneSection } from "./group-drawer/GroupDangerZoneSection";
 import { GroupDrawerHeader } from "./group-drawer/GroupDrawerHeader";
 import {
   GroupDrawerError,
-  styles,
+  useGroupDrawerStyles,
 } from "./group-drawer/GroupDrawerControls";
 import { GroupPurposeSection } from "./group-drawer/GroupPurposeSection";
 import { GroupSettingsSection } from "./group-drawer/GroupSettingsSection";
 import { InviteSection } from "./group-drawer/InviteSection";
 import { MembersSection } from "./group-drawer/MembersSection";
 import { useGroupDrawerController } from "./group-drawer/useGroupDrawerController";
+import {
+  groupBackgroundGallery,
+  selectedGroupBackgrounds,
+} from "../../../lib/groupBackgrounds";
 
 interface MembersSheetProps {
   visible: boolean;
@@ -47,6 +51,8 @@ export function MembersSheet({
   onChanged,
   onExit,
 }: MembersSheetProps) {
+  const styles = useGroupDrawerStyles();
+  const { colors } = useTheme();
   const controller = useGroupDrawerController({
     visible,
     group,
@@ -127,6 +133,7 @@ export function MembersSheet({
               <GroupSettingsSection
                 error={firstErrorFor(controller.errors, "settings")}
                 invitesPending={settingsPending}
+                memberInvitesLocked={group.memberInvitesLocked}
                 onMemberInvitesChange={controller.setMemberInvites}
                 onSelectTradition={controller.selectTradition}
                 settings={drawerGroup.settings}
@@ -163,9 +170,26 @@ export function MembersSheet({
           ) : null}
           {drawerGroup && controller.isAdmin ? (
             <GroupBackgroundSection
-              error={controller.errors.background}
+              error={firstErrorFor(
+                controller.errors,
+                "background",
+              )}
+              images={groupBackgroundGallery(
+                drawerGroup.backgroundImage,
+                drawerGroup.backgroundImages,
+              )}
               onRegenerate={controller.regenerateBackground}
+              onSelect={controller.selectBackground}
+              onUpload={controller.uploadBackground}
               pending={Boolean(controller.pending.background)}
+              selectedUrls={selectedGroupBackgrounds(
+                drawerGroup.backgroundImage,
+                drawerGroup.backgroundImages,
+              )}
+              uploadPending={Boolean(
+                controller.pending["background:upload"] ||
+                  controller.pending["background:select"],
+              )}
             />
           ) : null}
           {controller.canLeave ? (

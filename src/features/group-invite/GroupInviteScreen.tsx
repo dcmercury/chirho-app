@@ -28,7 +28,9 @@ import Animated, {
 } from "react-native-reanimated";
 import { ChiRhoMark } from "../../components/ui/ChiRhoMark";
 import { ErrorBanner } from "../../components/ui/ErrorBanner";
+import { GlassInput } from "../../components/ui/GlassInput";
 import { OtpInput } from "../../components/ui/OtpInput";
+import { PrivacyPolicyLink } from "../../components/ui/PrivacyPolicyLink";
 import {
   GroupInviteApiError,
   acceptGroupInvitation,
@@ -37,8 +39,9 @@ import {
   type GroupInvitation,
   type GroupInviteScripture,
 } from "../../lib/groupInviteApi";
-import { formatPhoneDisplay, normalizePhone } from "../../lib/phone";
-import { colors, fonts } from "../../theme/tokens";
+import { formatPhoneDisplay, formatPhoneInput, isValidPhone, lastFourDigits, normalizePhone } from "../../lib/phone";
+import { fonts, type ColorTokens } from "../../theme/tokens";
+import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
 import { InviteBackground } from "./InviteBackground";
 import { InviteFooter } from "./InviteFooter";
 
@@ -129,6 +132,8 @@ function clerkErrorMessage(error: unknown, fallback: string): string {
 export function GroupInviteScreen({ token }: { token: string }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
   const { isLoaded: authLoaded, isSignedIn, getToken } = useAuth();
   const {
     signUp,
@@ -144,6 +149,7 @@ export function GroupInviteScreen({ token }: { token: string }) {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [pendingVerification, setPendingVerification] = useState(false);
   const [otpCode, setOtpCode] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
   const [requiresExistingAccountSignIn, setRequiresExistingAccountSignIn] =
     useState(false);
@@ -264,7 +270,7 @@ export function GroupInviteScreen({ token }: { token: string }) {
     }
     if (
       !isSignedIn &&
-      (requiresExistingAccountSignIn || !invitation.phone)
+      requiresExistingAccountSignIn
     ) {
       openSecureSignIn();
       return;
@@ -288,12 +294,20 @@ export function GroupInviteScreen({ token }: { token: string }) {
       if (!signUp || !signUpLoaded) {
         throw new Error("Sign up is still connecting. Please try again.");
       }
-      if (!invitation.phone) {
-        throw new Error("This invitation does not include a phone number.");
+      if (!isValidPhone(phoneNumber)) {
+        throw new Error("Enter the phone number this invitation was sent to.");
       }
-      const normalizedPhone = normalizePhone(invitation.phone);
+      if (
+        invitation.phoneLastFour &&
+        lastFourDigits(phoneNumber) !== invitation.phoneLastFour
+      ) {
+        throw new Error(
+          "Use the phone number this invitation was sent to.",
+        );
+      }
+      const normalizedPhone = normalizePhone(phoneNumber);
       if (!normalizedPhone) {
-        throw new Error("The phone number on this invitation is invalid.");
+        throw new Error("That phone number is invalid.");
       }
       try {
         await signUp.create({
@@ -326,6 +340,7 @@ export function GroupInviteScreen({ token }: { token: string }) {
     invitation,
     isSignedIn,
     openSecureSignIn,
+    phoneNumber,
     requiresExistingAccountSignIn,
     signUp,
     signUpLoaded,
@@ -427,7 +442,7 @@ export function GroupInviteScreen({ token }: { token: string }) {
       <View style={styles.root}>
         <InviteBackground />
         <View style={styles.stateCenter}>
-          <ActivityIndicator color={colors.white} />
+          <ActivityIndicator color={colors.title} />
           <Text style={styles.stateHint}>Loading invitation…</Text>
         </View>
       </View>
@@ -450,7 +465,7 @@ export function GroupInviteScreen({ token }: { token: string }) {
             { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 },
           ]}
         >
-          <ChiRhoMark width={30} height={40} color={colors.white} />
+          <ChiRhoMark width={30} height={40} color={colors.title} />
           <Text style={styles.stateLabel}>GROUP INVITATION</Text>
           <Text style={styles.stateTitle}>{title}</Text>
           <Text style={styles.stateMessage}>{loadError?.message}</Text>
@@ -479,9 +494,7 @@ export function GroupInviteScreen({ token }: { token: string }) {
   const selectedLabels = selectedCategories.map(
     (id) => PRAYER_CATEGORIES.find((category) => category.id === id)?.label || id,
   );
-  const needsSignIn =
-    !isSignedIn &&
-    (requiresExistingAccountSignIn || !invitation.phone);
+  const needsSignIn = !isSignedIn && requiresExistingAccountSignIn;
   const primaryLabel = isFinalStep
     ? needsSignIn
       ? "Sign In"
@@ -492,7 +505,12 @@ export function GroupInviteScreen({ token }: { token: string }) {
   const primaryDisabled =
     !clerkReady ||
     (isFinalStep &&
-      (pendingVerification ? otpCode.length !== 6 : !termsAccepted));
+      (pendingVerification
+        ? otpCode.length !== 6
+        : !termsAccepted ||
+          (!isSignedIn &&
+            !requiresExistingAccountSignIn &&
+            !isValidPhone(phoneNumber))));
 
   const renderStep = () => {
     if (!step) return null;
@@ -505,8 +523,10 @@ export function GroupInviteScreen({ token }: { token: string }) {
                 ? `Welcome, ${invitation.firstName}`
                 : "You’re invited"}
             </Text>
-            {invitation.phone ? (
-              <Text style={styles.hint}>{formatPhoneDisplay(invitation.phone)}</Text>
+            {invitation.phoneLastFour ? (
+              <Text style={styles.hint}>
+                Phone ending in {invitation.phoneLastFour}
+              </Text>
             ) : null}
           </Enter>
           <Enter delay={150}>
@@ -617,7 +637,7 @@ export function GroupInviteScreen({ token }: { token: string }) {
           </Text>
           <Text style={styles.hint}>
             {pendingVerification
-              ? `Enter the code sent to ${formatPhoneDisplay(invitation.phone || "")}.`
+              ? `Enter the code sent to ${formatPhoneDisplay(phoneNumber)}.`
               : isSignedIn
                 ? "Your signed-in account will be added to this group."
                 : "Confirm the invitation details below."}
@@ -649,12 +669,27 @@ export function GroupInviteScreen({ token }: { token: string }) {
                 {invitation.firstName ? (
                   <ReadOnlyRow label="NAME" value={invitation.firstName} />
                 ) : null}
-                {invitation.phone ? (
-                  <ReadOnlyRow
-                    label="PHONE"
-                    value={formatPhoneDisplay(invitation.phone)}
-                  />
-                ) : null}
+                {isSignedIn ? null : (
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.metaLabel}>PHONE</Text>
+                    {invitation.phoneLastFour ? (
+                      <Text style={styles.hint}>
+                        Must match the number ending in {invitation.phoneLastFour}
+                      </Text>
+                    ) : null}
+                    <GlassInput
+                      value={phoneNumber}
+                      onChangeText={(value) => {
+                        setPhoneNumber(formatPhoneInput(value));
+                        setAuthError(null);
+                      }}
+                      placeholder="(555) 000-0000"
+                      keyboardType="phone-pad"
+                      maxLength={14}
+                      editable={!busy}
+                    />
+                  </View>
+                )}
                 <ReadOnlyRow label="GROUP" value={invitation.groupName} />
                 {selectedLabels.length ? (
                   <View style={styles.summaryRow}>
@@ -691,12 +726,13 @@ export function GroupInviteScreen({ token }: { token: string }) {
                   disabled={busy}
                   onValueChange={setTermsAccepted}
                   trackColor={{
-                    false: "rgba(255,255,255,0.12)",
+                    false: colors.glassBorderHairline,
                     true: colors.accent,
                   }}
                   thumbColor={colors.white}
                 />
               </Pressable>
+              <PrivacyPolicyLink style={styles.legal} />
             </Enter>
           </>
         )}
@@ -739,7 +775,7 @@ export function GroupInviteScreen({ token }: { token: string }) {
         <View style={styles.header}>
           <Enter delay={80}>
             <View style={styles.mark}>
-              <ChiRhoMark width={28} height={37} color={colors.white} />
+              <ChiRhoMark width={28} height={37} color={colors.title} />
             </View>
           </Enter>
           <Enter delay={150}>
@@ -777,6 +813,7 @@ export function GroupInviteScreen({ token }: { token: string }) {
 }
 
 function ReadOnlyRow({ label, value }: { label: string; value: string }) {
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.summaryRow}>
       <Text style={styles.metaLabel}>{label}</Text>
@@ -785,7 +822,8 @@ function ReadOnlyRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.canvas,
@@ -805,7 +843,7 @@ const styles = StyleSheet.create({
     marginBottom: 9,
   },
   inviteLabel: {
-    color: colors.accent,
+    color: colors.accentText,
     fontFamily: fonts.monoMedium,
     fontSize: 10,
     letterSpacing: 0.7,
@@ -813,7 +851,7 @@ const styles = StyleSheet.create({
     marginBottom: 7,
   },
   title: {
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.displayMedium,
     fontSize: 34,
     lineHeight: 37,
@@ -831,7 +869,7 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   heading: {
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.displayMedium,
     fontSize: 19,
     lineHeight: 24,
@@ -845,7 +883,7 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   sectionLabel: {
-    color: colors.accent,
+    color: colors.accentText,
     fontFamily: fonts.monoMedium,
     fontSize: 10,
     letterSpacing: 0.8,
@@ -870,11 +908,11 @@ const styles = StyleSheet.create({
   divider: {
     width: 32,
     height: StyleSheet.hairlineWidth,
-    backgroundColor: "rgba(255,255,255,0.18)",
+    backgroundColor: colors.glassFillChip,
     marginBottom: 9,
   },
   purpose: {
-    color: "rgba(235,235,235,0.82)",
+    color: colors.titleMuted,
     fontFamily: fonts.body,
     fontSize: 14,
     lineHeight: 22,
@@ -883,7 +921,7 @@ const styles = StyleSheet.create({
     paddingLeft: 14,
   },
   scripture: {
-    color: "rgba(255,255,255,0.66)",
+    color: colors.subtitleStrong,
     fontFamily: fonts.body,
     fontSize: 15,
     lineHeight: 24,
@@ -905,12 +943,12 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(255,255,255,0.05)",
+    borderColor: colors.glassBorderHairline,
+    backgroundColor: colors.glassFill,
   },
   tagSelected: {
-    borderColor: "rgba(249,115,22,0.42)",
-    backgroundColor: "rgba(249,115,22,0.16)",
+    borderColor: colors.accentBorderInvite,
+    backgroundColor: colors.accentFillHeavy,
   },
   tagText: {
     color: colors.mutedSoft,
@@ -918,15 +956,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   tagTextSelected: {
-    color: colors.accent,
+    color: colors.accentText,
   },
   summary: {
     gap: 11,
     padding: 14,
     borderRadius: 11,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(255,255,255,0.05)",
+    borderColor: colors.glassBorder,
+    backgroundColor: colors.glassFill,
   },
   summaryRow: {
     gap: 2,
@@ -948,8 +986,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(255,255,255,0.05)",
+    borderColor: colors.glassBorder,
+    backgroundColor: colors.glassFill,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -959,7 +997,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   termsTitle: {
-    color: colors.accent,
+    color: colors.accentText,
     fontFamily: fonts.displayMedium,
     fontSize: 12,
   },
@@ -969,6 +1007,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     marginTop: 2,
+  },
+  legal: {
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 10,
   },
   otpStack: {
     gap: 12,
@@ -985,11 +1030,11 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "rgba(249,115,22,0.28)",
-    backgroundColor: "rgba(249,115,22,0.09)",
+    borderColor: colors.accentBorderMuted,
+    backgroundColor: colors.accentFillMuted,
   },
   signInTitle: {
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.displayMedium,
     fontSize: 13,
   },
@@ -1006,7 +1051,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   signInActionText: {
-    color: colors.accent,
+    color: colors.accentText,
     fontFamily: fonts.bodyMedium,
     fontSize: 12,
     textDecorationLine: "underline",
@@ -1024,14 +1069,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   stateLabel: {
-    color: colors.accent,
+    color: colors.accentText,
     fontFamily: fonts.monoMedium,
     fontSize: 10,
     letterSpacing: 0.8,
     marginTop: 6,
   },
   stateTitle: {
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.displayMedium,
     fontSize: 28,
     textAlign: "center",
@@ -1048,13 +1093,13 @@ const styles = StyleSheet.create({
     minHeight: 42,
     paddingHorizontal: 18,
     borderRadius: 22,
-    backgroundColor: colors.white,
+    backgroundColor: colors.buttonPrimary,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 4,
   },
   stateButtonText: {
-    color: colors.black,
+    color: colors.buttonOnPrimary,
     fontFamily: fonts.displayMedium,
     fontSize: 12,
   },
@@ -1073,4 +1118,5 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.82,
   },
-});
+  });
+}

@@ -5,7 +5,8 @@ import Animated, {
   FadeInDown,
   ReduceMotion,
 } from "react-native-reanimated";
-import { colors, fonts } from "../../theme/tokens";
+import { fonts, type ColorTokens } from "../../theme/tokens";
+import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
 
 interface InviteFooterProps {
   activeStep: number;
@@ -15,6 +16,84 @@ interface InviteFooterProps {
   busy: boolean;
   onBack: () => void;
   onContinue: () => void;
+}
+
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
+    footer: {
+      minHeight: 76,
+      paddingTop: 14,
+      paddingHorizontal: 24,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.glassBorderHairline,
+      backgroundColor: colors.overlayFooter,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      zIndex: 30,
+    },
+    back: {
+      width: 72,
+      minHeight: 40,
+      justifyContent: "center",
+    },
+    hidden: {
+      opacity: 0,
+    },
+    backText: {
+      color: colors.mutedSoft,
+      fontFamily: fonts.bodyMedium,
+      fontSize: 12,
+    },
+    dots: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      top: 32,
+      flexDirection: "row",
+      justifyContent: "center",
+      alignItems: "center",
+      gap: 5,
+    },
+    dot: {
+      width: 5,
+      height: 5,
+      borderRadius: 3,
+      backgroundColor: colors.glassFillBright,
+    },
+    dotActive: {
+      backgroundColor: colors.accent,
+    },
+    primary: {
+      minWidth: 102,
+      minHeight: 40,
+      paddingHorizontal: 16,
+      borderRadius: 22,
+      backgroundColor: colors.buttonPrimary,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 6,
+    },
+    primaryDisabled: {
+      opacity: 0.35,
+    },
+    primaryPressed: {
+      opacity: 0.88,
+      transform: [{ scale: 0.98 }],
+    },
+    primaryText: {
+      color: colors.buttonOnPrimary,
+      fontFamily: fonts.displayMedium,
+      fontSize: 12,
+    },
+    chevron: {
+      color: colors.buttonOnPrimary,
+      fontFamily: fonts.body,
+      fontSize: 18,
+      lineHeight: 18,
+    },
+  });
 }
 
 export function InviteFooter({
@@ -27,6 +106,8 @@ export function InviteFooter({
   onContinue,
 }: InviteFooterProps) {
   const insets = useSafeAreaInsets();
+  const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
   const isFirstStep = activeStep === 0;
 
   return (
@@ -68,7 +149,7 @@ export function InviteFooter({
         ]}
       >
         {busy ? (
-          <ActivityIndicator color={colors.black} size="small" />
+          <ActivityIndicator color={colors.buttonOnPrimary} size="small" />
         ) : (
           <>
             <Text style={styles.primaryText}>{primaryLabel}</Text>
@@ -79,79 +160,3 @@ export function InviteFooter({
     </Animated.View>
   );
 }
-
-const styles = StyleSheet.create({
-  footer: {
-    minHeight: 76,
-    paddingTop: 14,
-    paddingHorizontal: 24,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.74)",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    zIndex: 30,
-  },
-  back: {
-    width: 72,
-    minHeight: 40,
-    justifyContent: "center",
-  },
-  hidden: {
-    opacity: 0,
-  },
-  backText: {
-    color: colors.mutedSoft,
-    fontFamily: fonts.bodyMedium,
-    fontSize: 12,
-  },
-  dots: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 32,
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 5,
-  },
-  dot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: "rgba(255,255,255,0.16)",
-  },
-  dotActive: {
-    backgroundColor: colors.accent,
-  },
-  primary: {
-    minWidth: 102,
-    minHeight: 40,
-    paddingHorizontal: 16,
-    borderRadius: 22,
-    backgroundColor: colors.white,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  primaryDisabled: {
-    opacity: 0.35,
-  },
-  primaryPressed: {
-    opacity: 0.88,
-    transform: [{ scale: 0.98 }],
-  },
-  primaryText: {
-    color: colors.black,
-    fontFamily: fonts.displayMedium,
-    fontSize: 12,
-  },
-  chevron: {
-    color: colors.black,
-    fontFamily: fonts.body,
-    fontSize: 18,
-    lineHeight: 18,
-  },
-});

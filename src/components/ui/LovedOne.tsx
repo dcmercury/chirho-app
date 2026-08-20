@@ -1,14 +1,51 @@
 import { Pressable, Text, StyleSheet } from "react-native";
-import { Image } from "expo-image";
-import { colors, fonts } from "../../theme/tokens";
-import { isPrivateImagePath, resolveImage } from "../../lib/assets";
+import { fonts, type ColorTokens } from "../../theme/tokens";
+import { useThemedStyles } from "../../theme/ThemeProvider";
 import type { LovedOnePhoto } from "../../types/home";
+import { KenBurnsImage, lovedOneImagePaths } from "./KenBurnsImage";
+
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
+    item: {
+      width: 90,
+      alignItems: "center",
+      gap: 8,
+    },
+    itemCompact: {
+      width: 72,
+    },
+    pressed: {
+      opacity: 0.65,
+      transform: [{ scale: 0.96 }],
+    },
+    avatar: {
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      borderWidth: 2,
+      borderColor: colors.glassBorderRow,
+    },
+    name: {
+      fontFamily: fonts.displayMedium,
+      fontSize: 12,
+      fontWeight: "500",
+      color: colors.title,
+      textAlign: "center",
+    },
+    intention: {
+      fontSize: 9.6,
+      color: colors.muted,
+      textAlign: "center",
+      lineHeight: 12.5,
+      fontFamily: fonts.body,
+    },
+  });
+}
 
 export function LovedOne({
   person,
   showIntention = true,
   compact = false,
-  token,
   onPress,
 }: {
   person: {
@@ -17,13 +54,15 @@ export function LovedOne({
     avatar: string;
     intention: string;
     primaryPhoto?: LovedOnePhoto | null;
+    photos?: LovedOnePhoto[];
+    backgroundImage?: string;
   };
   showIntention?: boolean;
   compact?: boolean;
-  token?: string | null;
   onPress?: () => void;
 }) {
-  const imagePath = person.primaryPhoto?.contentPath || person.avatar;
+  const styles = useThemedStyles(createStyles);
+  const imagePaths = lovedOneImagePaths(person);
   return (
     <Pressable
       accessibilityRole={onPress ? "button" : undefined}
@@ -36,11 +75,9 @@ export function LovedOne({
         pressed && styles.pressed,
       ]}
     >
-      <Image
-        source={resolveImage(imagePath, token)}
+      <KenBurnsImage
+        paths={imagePaths}
         style={styles.avatar}
-        contentFit="cover"
-        cachePolicy={isPrivateImagePath(imagePath) ? "memory" : undefined}
       />
       <Text style={styles.name} numberOfLines={1}>
         {person.name}
@@ -53,39 +90,3 @@ export function LovedOne({
     </Pressable>
   );
 }
-
-const styles = StyleSheet.create({
-  item: {
-    width: 90,
-    alignItems: "center",
-    gap: 8,
-  },
-  itemCompact: {
-    width: 72,
-  },
-  pressed: {
-    opacity: 0.65,
-    transform: [{ scale: 0.96 }],
-  },
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    borderWidth: 2,
-    borderColor: "rgba(255, 255, 255, 0.15)",
-  },
-  name: {
-    fontFamily: fonts.displayMedium,
-    fontSize: 12,
-    fontWeight: "500",
-    color: colors.white,
-    textAlign: "center",
-  },
-  intention: {
-    fontSize: 9.6,
-    color: colors.muted,
-    textAlign: "center",
-    lineHeight: 12.5,
-    fontFamily: fonts.body,
-  },
-});

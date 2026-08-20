@@ -4,13 +4,12 @@ import {
   InlineError,
   ManageAvatar,
   Section,
-  styles,
+  useProfileStyles,
 } from "./ProfileControls";
 
 export function LovedOnesSection({
   lovedOnes,
   avatarById,
-  token,
   isPending,
   error,
   onManage,
@@ -18,12 +17,12 @@ export function LovedOnesSection({
 }: {
   lovedOnes: HomeProfile["managedLovedOnes"];
   avatarById: Record<string, string | undefined>;
-  token: string | null;
   isPending: (id: string) => boolean;
   error?: string;
   onManage: (id: string, firstName: string) => void;
   onRemove: (id: string, firstName: string) => void;
 }) {
+  const styles = useProfileStyles();
   return (
     <Section title="Loved ones">
       {lovedOnes.length ? (
@@ -34,7 +33,6 @@ export function LovedOnesSection({
               <ManageAvatar
                 label={person.firstName}
                 source={avatarById[person.id]}
-                token={token}
               />
               <View style={styles.manageCopy}>
                 <Text style={styles.manageName}>{person.firstName}</Text>

@@ -1,22 +1,111 @@
 import { Pressable, Text, View, StyleSheet } from "react-native";
-import { Image } from "expo-image";
-import { colors, fonts, radii } from "../../theme/tokens";
-import { isPrivateImagePath, resolveImage } from "../../lib/assets";
+import { fonts, radii, type ColorTokens } from "../../theme/tokens";
+import { useThemedStyles } from "../../theme/ThemeProvider";
 import type { HomePrayerCard } from "../../types/home";
+import { KenBurnsImage } from "./KenBurnsImage";
+
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
+    card: {
+      width: 160,
+      borderRadius: radii.card,
+      overflow: "hidden",
+      backgroundColor: colors.cardFill,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    deckCard: {
+      width: 238,
+      borderRadius: 16,
+    },
+    pressed: {
+      opacity: 0.76,
+      transform: [{ scale: 0.98 }],
+    },
+    img: {
+      width: "100%",
+      height: 80,
+    },
+    deckImage: {
+      height: 124,
+    },
+    badge: {
+      position: "absolute",
+      top: 8,
+      right: 8,
+      backgroundColor: colors.badge,
+      borderRadius: 999,
+      paddingVertical: 4,
+      paddingHorizontal: 8,
+      borderWidth: 1,
+      borderColor: colors.glassBorder,
+    },
+    badgeText: {
+      fontFamily: fonts.monoMedium,
+      fontSize: 8,
+      fontWeight: "600",
+      color: colors.white,
+    },
+    body: {
+      padding: 10,
+      backgroundColor: colors.cardFill,
+    },
+    deckBody: {
+      minHeight: 136,
+      padding: 14,
+    },
+    title: {
+      fontFamily: fonts.displayMedium,
+      fontSize: 12,
+      fontWeight: "500",
+      color: colors.title,
+      marginBottom: 2,
+    },
+    deckTitle: {
+      fontSize: 16,
+      lineHeight: 19,
+      marginBottom: 4,
+    },
+    verse: {
+      fontFamily: fonts.mono,
+      fontSize: 8.8,
+      color: colors.accentText,
+      textTransform: "uppercase",
+      letterSpacing: 0.44,
+      marginBottom: 6,
+    },
+    text: {
+      fontSize: 10,
+      lineHeight: 14,
+      color: colors.cardText,
+      fontFamily: fonts.body,
+    },
+    deckText: {
+      fontSize: 11.5,
+      lineHeight: 17,
+    },
+    date: {
+      fontFamily: fonts.mono,
+      fontSize: 8,
+      color: colors.cardMeta,
+      letterSpacing: 0.32,
+      marginTop: 6,
+    },
+  });
+}
 
 export function PrayerCard({
   card,
   index,
   onPress,
-  token,
   variant = "default",
 }: {
   card: HomePrayerCard;
   index?: number;
   onPress?: () => void;
-  token?: string | null;
   variant?: "default" | "deck";
 }) {
+  const styles = useThemedStyles(createStyles);
   const isDeckCard = variant === "deck";
 
   return (
@@ -32,11 +121,10 @@ export function PrayerCard({
       ]}
     >
       <View>
-        <Image
-          source={resolveImage(card.image, token)}
+        <KenBurnsImage
+          path={card.image}
+          paths={card.images}
           style={[styles.img, isDeckCard && styles.deckImage]}
-          contentFit="cover"
-          cachePolicy={isPrivateImagePath(card.image) ? "memory" : undefined}
         />
         {typeof index === "number" ? (
           <View style={styles.badge}>
@@ -63,91 +151,3 @@ export function PrayerCard({
     </Pressable>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    width: 160,
-    borderRadius: radii.card,
-    overflow: "hidden",
-    backgroundColor: colors.cardFill,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  deckCard: {
-    width: 238,
-    borderRadius: 16,
-  },
-  pressed: {
-    opacity: 0.76,
-    transform: [{ scale: 0.98 }],
-  },
-  img: {
-    width: "100%",
-    height: 80,
-  },
-  deckImage: {
-    height: 124,
-  },
-  badge: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    backgroundColor: colors.badge,
-    borderRadius: 999,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-  },
-  badgeText: {
-    fontFamily: fonts.monoMedium,
-    fontSize: 8,
-    fontWeight: "600",
-    color: colors.white,
-  },
-  body: {
-    padding: 10,
-    backgroundColor: colors.cardFill,
-  },
-  deckBody: {
-    minHeight: 136,
-    padding: 14,
-  },
-  title: {
-    fontFamily: fonts.displayMedium,
-    fontSize: 12,
-    fontWeight: "500",
-    color: colors.white,
-    marginBottom: 2,
-  },
-  deckTitle: {
-    fontSize: 16,
-    lineHeight: 19,
-    marginBottom: 4,
-  },
-  verse: {
-    fontFamily: fonts.mono,
-    fontSize: 8.8,
-    color: colors.accent,
-    textTransform: "uppercase",
-    letterSpacing: 0.44,
-    marginBottom: 6,
-  },
-  text: {
-    fontSize: 10,
-    lineHeight: 14,
-    color: colors.cardText,
-    fontFamily: fonts.body,
-  },
-  deckText: {
-    fontSize: 11.5,
-    lineHeight: 17,
-  },
-  date: {
-    fontFamily: fonts.mono,
-    fontSize: 8,
-    color: colors.cardMeta,
-    letterSpacing: 0.32,
-    marginTop: 6,
-  },
-});

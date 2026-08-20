@@ -10,21 +10,23 @@ import {
   View,
 } from "react-native";
 import { useAuth } from "@clerk/expo";
-import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
-import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import {
   deleteLovedOnePhoto,
   getLovedOnePhotos,
   setLovedOnePrimaryPhoto,
   uploadLovedOnePhoto,
 } from "../../lib/api";
-import { resolveImage } from "../../lib/assets";
-import { colors, fonts } from "../../theme/tokens";
+import {
+  MAX_LOVED_ONE_PHOTOS,
+  prepareLovedOnePhoto,
+} from "../../lib/lovedOnePhoto";
+import { fonts, type ColorTokens } from "../../theme/tokens";
+import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
 import type { LovedOnePhoto } from "../../types/home";
+import { AuthenticatedImage } from "../ui/AuthenticatedImage";
 
-const MAX_PHOTOS = 3;
-const MAX_DIMENSION = 1600;
+const MAX_PHOTOS = MAX_LOVED_ONE_PHOTOS;
 
 type UploadStatus = "processing" | "uploading" | "complete" | "error";
 
@@ -47,10 +49,11 @@ export function LovedOnePhotosModal({
   onClose,
   onChanged,
 }: LovedOnePhotosModalProps) {
+  const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
   const { getToken } = useAuth();
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
-  const [token, setToken] = useState<string | null>(null);
   const [photos, setPhotos] = useState<LovedOnePhoto[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -64,7 +67,6 @@ export function LovedOnePhotosModal({
     if (!sessionToken) {
       throw new Error("Your session expired. Please sign in again.");
     }
-    setToken((current) => (current === sessionToken ? current : sessionToken));
     return sessionToken;
   }, []);
 
@@ -93,7 +95,6 @@ export function LovedOnePhotosModal({
     } else {
       setPhotos([]);
       setError(null);
-      setToken(null);
     }
   }, [loadPhotos, lovedOneId, visible]);
 
@@ -134,32 +135,9 @@ export function LovedOnePhotosModal({
         const asset = selected[index];
         const item = uploadItems[index];
         try {
-          const largestDimension = Math.max(asset.width, asset.height);
-          const actions =
-            largestDimension > MAX_DIMENSION
-              ? [
-                  {
-                    resize:
-                      asset.width >= asset.height
-                        ? { width: MAX_DIMENSION }
-                        : { height: MAX_DIMENSION },
-                  },
-                ]
-              : [];
-          const processed = await manipulateAsync(asset.uri, actions, {
-            base64: true,
-            compress: 0.8,
-            format: SaveFormat.JPEG,
-          });
-          if (!processed.base64) {
-            throw new Error("The selected photo could not be prepared.");
-          }
+          const imageData = await prepareLovedOnePhoto(asset);
           updateUpload(item.id, { status: "uploading" });
-          await uploadLovedOnePhoto(
-            lovedOne.id,
-            `data:image/jpeg;base64,${processed.base64}`,
-            sessionToken,
-          );
+          await uploadLovedOnePhoto(lovedOne.id, imageData, sessionToken);
           uploadedAny = true;
           updateUpload(item.id, { status: "complete" });
         } catch (uploadError) {
@@ -273,15 +251,14 @@ export function LovedOnePhotosModal({
                 const pending = pendingMediauuid === photo.mediauuid;
                 return (
                   <View key={photo.mediauuid} style={styles.photoCard}>
-                    <Image
+                    <AuthenticatedImage
                       accessibilityLabel={
                         photo.isPrimary
                           ? `Primary photo of ${lovedOne?.firstName || "loved one"}`
                           : `Photo of ${lovedOne?.firstName || "loved one"}`
                       }
-                      cachePolicy="memory"
                       contentFit="cover"
-                      source={resolveImage(photo.contentPath, token)}
+                      path={photo.contentPath}
                       style={styles.photo}
                     />
                     {photo.isPrimary ? (
@@ -390,7 +367,8 @@ export function LovedOnePhotosModal({
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   content: { padding: 24, paddingBottom: 48 },
   handle: {
@@ -402,14 +380,14 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   eyebrow: {
-    color: colors.accent,
+    color: colors.accentText,
     fontFamily: fonts.monoMedium,
     fontSize: 10,
     letterSpacing: 1,
     marginBottom: 10,
   },
   title: {
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.displayMedium,
     fontSize: 30,
     letterSpacing: -0.7,
@@ -465,7 +443,7 @@ const styles = StyleSheet.create({
     borderTopColor: colors.glassBorderSoft,
   },
   photoActionText: {
-    color: colors.accent,
+    color: colors.accentText,
     fontFamily: fonts.bodyMedium,
     fontSize: 10,
   },
@@ -487,9 +465,9 @@ const styles = StyleSheet.create({
     borderStyle: "dashed",
     borderColor: colors.glassBorderStrong,
   },
-  addIcon: { color: colors.white, fontFamily: fonts.body, fontSize: 28 },
+  addIcon: { color: colors.title, fontFamily: fonts.body, fontSize: 28 },
   addText: {
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.bodyMedium,
     fontSize: 11,
     marginTop: 5,
@@ -529,13 +507,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 27,
-    backgroundColor: colors.white,
+    backgroundColor: colors.buttonPrimary,
     marginTop: 24,
   },
   doneText: {
-    color: colors.black,
+    color: colors.buttonOnPrimary,
     fontFamily: fonts.displayMedium,
     fontSize: 14,
   },
   disabled: { opacity: 0.4 },
-});
+  });
+}

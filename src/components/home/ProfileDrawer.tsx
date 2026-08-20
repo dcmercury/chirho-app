@@ -1,4 +1,9 @@
+import { useEffect, useState } from "react";
 import { Modal, ScrollView, View } from "react-native";
+import {
+  dashboardBackgroundGallery,
+  selectedDashboardBackgrounds,
+} from "../../lib/dashboardBackgrounds";
 import type {
   HomeCommunity,
   HomeGroup,
@@ -6,18 +11,26 @@ import type {
   HomeProfile,
   PrayerFocus,
 } from "../../types/home";
+import {
+  communityAllowsDailyPrayers,
+  communityAllowsPersonalPrayer,
+} from "../../types/home";
+import { useTheme } from "../../theme/ThemeProvider";
 import { AccountSection } from "./profile-drawer/AccountSection";
 import { CommunitySection } from "./profile-drawer/CommunitySection";
 import { DailyPrayersSection } from "./profile-drawer/DailyPrayersSection";
 import { DangerZoneSection } from "./profile-drawer/DangerZoneSection";
 import { GroupsSection } from "./profile-drawer/GroupsSection";
+import { HomeBackgroundSection } from "./profile-drawer/HomeBackgroundSection";
 import { LovedOnesSection } from "./profile-drawer/LovedOnesSection";
 import { NotificationsSection } from "./profile-drawer/NotificationsSection";
+import { PrayerCardsDrawer } from "./profile-drawer/PrayerCardsDrawer";
+import { PrayerCardsSection } from "./profile-drawer/PrayerCardsSection";
 import { PrayerPreferencesSection } from "./profile-drawer/PrayerPreferencesSection";
 import { PrayerFocusesSection } from "./profile-drawer/PrayerFocusesSection";
 import { PrivacySection } from "./profile-drawer/PrivacySection";
 import { ProfileHeader } from "./profile-drawer/ProfileHeader";
-import { Section, styles } from "./profile-drawer/ProfileControls";
+import { InlineError, Section, ToggleRow, useProfileStyles } from "./profile-drawer/ProfileControls";
 import { useProfileDrawerController } from "./profile-drawer/useProfileDrawerController";
 
 interface ProfileDrawerProps {
@@ -27,7 +40,6 @@ interface ProfileDrawerProps {
   prayerFocuses: PrayerFocus[];
   groups: HomeGroup[];
   community: HomeCommunity | null;
-  token: string | null;
   onClose: () => void;
   onDismiss?: () => void;
   onChanged: () => Promise<void>;
@@ -57,15 +69,25 @@ export function ProfileDrawer({
   prayerFocuses,
   groups,
   community,
-  token,
   onClose,
   onDismiss,
   onChanged,
   onManageLovedOnePhotos,
 }: ProfileDrawerProps) {
+  const styles = useProfileStyles();
+  const { appearance } = useTheme();
   const controller = useProfileDrawerController(visible, onChanged);
+  const [prayerCardsOpen, setPrayerCardsOpen] = useState(false);
+
+  useEffect(() => {
+    if (!visible) setPrayerCardsOpen(false);
+  }, [visible]);
 
   if (!profile) return null;
+  const personalPrayer = communityAllowsPersonalPrayer(community);
+  const prayerCount =
+    profile.stats.find((stat) => stat.label.toLowerCase() === "prayers")
+      ?.value || "0";
   const lovedOneAvatarById = Object.fromEntries(
     lovedOnes.map((person) => [
       person.id,
@@ -86,6 +108,9 @@ export function ProfileDrawer({
           <ProfileHeader
             profile={profile}
             onClose={onClose}
+            onOpenPrayerCards={
+              personalPrayer ? () => setPrayerCardsOpen(true) : undefined
+            }
           />
           <AccountSection
             account={profile.account}
@@ -100,10 +125,26 @@ export function ProfileDrawer({
               void controller.pickAvatar();
             }}
           />
+          <Section title="Appearance">
+            <ToggleRow
+              disabled={Boolean(controller.pending.theme)}
+              label="Light theme"
+              onValueChange={(enabled) => {
+                void controller.setTheme(enabled ? "light" : "dark");
+              }}
+              value={appearance === "light"}
+            />
+            <InlineError message={controller.errors.theme} />
+          </Section>
+          {personalPrayer ? (
+            <>
+          <PrayerCardsSection
+            count={prayerCount}
+            onOpen={() => setPrayerCardsOpen(true)}
+          />
           <LovedOnesSection
             lovedOnes={profile.managedLovedOnes}
             avatarById={lovedOneAvatarById}
-            token={token}
             error={firstErrorFor(controller.errors, "loved-one")}
             isPending={(id) => Boolean(controller.pending[`loved-one:${id}`])}
             onManage={(id, firstName) =>
@@ -122,6 +163,8 @@ export function ProfileDrawer({
             onSave={controller.savePrayerFocus}
             onRemove={controller.confirmRemovePrayerFocus}
           />
+            </>
+          ) : null}
           <Section title="Community and groups">
             <CommunitySection
               visible={visible}
@@ -143,30 +186,79 @@ export function ProfileDrawer({
               onLeave={controller.confirmLeaveGroup}
             />
           </Section>
+          {personalPrayer ? (
           <PrayerPreferencesSection
+            visible={visible}
             traditions={profile.traditions}
             voices={profile.voices}
+            backgroundMusicEnabled={profile.backgroundMusicEnabled !== false}
             traditionPending={Boolean(controller.pending.tradition)}
             voicePending={Boolean(controller.pending.voice)}
+            backgroundMusicPending={Boolean(
+              controller.pending["background-music"],
+            )}
             traditionError={controller.errors.tradition}
             voiceError={controller.errors.voice}
+            backgroundMusicError={controller.errors["background-music"]}
             onSelectTradition={(id) => {
               void controller.selectTradition(id);
             }}
             onSelectVoice={(id) => {
               void controller.selectVoice(id);
             }}
-          />
-          <DailyPrayersSection
-            dailyPrayers={profile.dailyPrayers}
-            isPending={(period) =>
-              Boolean(controller.pending[`daily-${period}`])
-            }
-            getError={(period) => controller.errors[`daily-${period}`]}
-            onChange={(period, next) => {
-              void controller.updateDailyPrayer(profile.dailyPrayers, period, next);
+            onChangeBackgroundMusic={(enabled) => {
+              void controller.setBackgroundMusic(enabled);
             }}
           />
+          ) : null}
+          <HomeBackgroundSection
+            error={firstErrorFor(controller.errors, "dashboard-background")}
+            images={dashboardBackgroundGallery(
+              community?.backgroundImage,
+              profile.dashboardBackgrounds,
+            )}
+            onSelect={(url) => {
+              void controller.selectHomeBackground(
+                url,
+                selectedDashboardBackgrounds(
+                  community?.backgroundImage,
+                  profile.dashboardBackgrounds,
+                ),
+              );
+            }}
+            onUpload={() => {
+              void controller.uploadHomeBackground(
+                selectedDashboardBackgrounds(
+                  community?.backgroundImage,
+                  profile.dashboardBackgrounds,
+                ),
+              );
+            }}
+            pending={Boolean(controller.pending["dashboard-background:select"])}
+            selectedUrls={selectedDashboardBackgrounds(
+              community?.backgroundImage,
+              profile.dashboardBackgrounds,
+            )}
+            uploadPending={Boolean(
+              controller.pending["dashboard-background:upload"],
+            )}
+          />
+          {communityAllowsDailyPrayers(community) ? (
+            <DailyPrayersSection
+              dailyPrayers={profile.dailyPrayers}
+              isPending={(period) =>
+                Boolean(controller.pending[`daily-${period}`])
+              }
+              getError={(period) => controller.errors[`daily-${period}`]}
+              onChange={(period, next) => {
+                void controller.updateDailyPrayer(
+                  profile.dailyPrayers,
+                  period,
+                  next,
+                );
+              }}
+            />
+          ) : null}
           <NotificationsSection
             notifications={profile.notifications}
             isSuperadmin={profile.isSuperadmin}
@@ -210,6 +302,12 @@ export function ProfileDrawer({
             onDeleteAccount={controller.confirmDeleteAccount}
           />
         </ScrollView>
+        <PrayerCardsDrawer
+          visible={prayerCardsOpen}
+          count={prayerCount}
+          onClose={() => setPrayerCardsOpen(false)}
+          onChanged={onChanged}
+        />
       </View>
     </Modal>
   );

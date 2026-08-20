@@ -6,7 +6,8 @@ import {
   Text,
   View,
 } from "react-native";
-import { colors, fonts } from "../../../../theme/tokens";
+import { fonts, type ColorTokens } from "../../../../theme/tokens";
+import { useThemedStyles } from "../../../../theme/ThemeProvider";
 import type { GroupSettings } from "../../types";
 import {
   GroupDrawerError,
@@ -23,6 +24,81 @@ interface GroupSettingsSectionProps {
   error?: string;
   onSelectTradition: (tradition: string) => void;
   onMemberInvitesChange: (enabled: boolean) => void;
+  memberInvitesLocked?: boolean;
+}
+
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
+    label: {
+      color: colors.mutedStrong,
+      fontFamily: fonts.bodyMedium,
+      fontSize: 12,
+    },
+    traditions: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 7,
+    },
+    tradition: {
+      flexBasis: "47%",
+      flexGrow: 1,
+    },
+    toggleRow: {
+      minHeight: 54,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      borderBottomWidth: 1,
+      borderBottomColor: colors.glassBorderSoft,
+    },
+    toggleCopy: {
+      flex: 1,
+      paddingRight: 16,
+    },
+    toggleLabel: {
+      color: colors.mutedStrong,
+      fontFamily: fonts.body,
+      fontSize: 12,
+    },
+    toggleHint: {
+      color: colors.muted,
+      fontFamily: fonts.body,
+      fontSize: 9,
+      marginTop: 2,
+    },
+    toggleTouch: {
+      width: 44,
+      height: 44,
+      alignItems: "flex-end",
+      justifyContent: "center",
+    },
+    toggleTrack: {
+      width: 32,
+      height: 20,
+      borderRadius: 10,
+      padding: 2,
+      backgroundColor: colors.glassFillStrong,
+    },
+    toggleTrackActive: {
+      backgroundColor: colors.accent,
+    },
+    toggleThumb: {
+      width: 16,
+      height: 16,
+      borderRadius: 8,
+      backgroundColor: colors.cream,
+      shadowColor: colors.black,
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.28,
+      shadowRadius: 2,
+    },
+    pressed: {
+      opacity: 0.78,
+    },
+    disabled: {
+      opacity: 0.32,
+    },
+  });
 }
 
 export function GroupSettingsSection({
@@ -32,7 +108,9 @@ export function GroupSettingsSection({
   error,
   onSelectTradition,
   onMemberInvitesChange,
+  memberInvitesLocked = false,
 }: GroupSettingsSectionProps) {
+  const styles = useThemedStyles(createStyles);
   const allowsInvites = settings.allowMemberInvites === true;
   const progress = useRef(new Animated.Value(allowsInvites ? 1 : 0)).current;
 
@@ -65,7 +143,9 @@ export function GroupSettingsSection({
         <View style={styles.toggleCopy}>
           <Text style={styles.toggleLabel}>Members can invite</Text>
           <Text style={styles.toggleHint}>
-            Allow active members to invite others.
+            {memberInvitesLocked
+              ? "Your community has turned off group invites."
+              : "Allow active members to invite others."}
           </Text>
         </View>
         <Pressable
@@ -73,10 +153,10 @@ export function GroupSettingsSection({
           accessibilityRole="switch"
           accessibilityState={{
             checked: allowsInvites,
-            disabled: invitesPending,
+            disabled: invitesPending || memberInvitesLocked,
             busy: invitesPending,
           }}
-          disabled={invitesPending}
+          disabled={invitesPending || memberInvitesLocked}
           onPress={() => onMemberInvitesChange(!allowsInvites)}
           style={({ pressed }) => [
             styles.toggleTouch,
@@ -88,6 +168,7 @@ export function GroupSettingsSection({
               styles.toggleTrack,
               allowsInvites && styles.toggleTrackActive,
               invitesPending && styles.disabled,
+              memberInvitesLocked && styles.disabled,
             ]}
           >
             <Animated.View
@@ -112,75 +193,3 @@ export function GroupSettingsSection({
     </GroupDrawerSection>
   );
 }
-
-const styles = StyleSheet.create({
-  label: {
-    color: colors.mutedStrong,
-    fontFamily: fonts.bodyMedium,
-    fontSize: 12,
-  },
-  traditions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 7,
-  },
-  tradition: {
-    flexBasis: "47%",
-    flexGrow: 1,
-  },
-  toggleRow: {
-    minHeight: 54,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderBottomWidth: 1,
-    borderBottomColor: colors.glassBorderSoft,
-  },
-  toggleCopy: {
-    flex: 1,
-    paddingRight: 16,
-  },
-  toggleLabel: {
-    color: colors.mutedStrong,
-    fontFamily: fonts.body,
-    fontSize: 12,
-  },
-  toggleHint: {
-    color: colors.muted,
-    fontFamily: fonts.body,
-    fontSize: 9,
-    marginTop: 2,
-  },
-  toggleTouch: {
-    width: 44,
-    height: 44,
-    alignItems: "flex-end",
-    justifyContent: "center",
-  },
-  toggleTrack: {
-    width: 32,
-    height: 20,
-    borderRadius: 10,
-    padding: 2,
-    backgroundColor: colors.glassFillStrong,
-  },
-  toggleTrackActive: {
-    backgroundColor: colors.accent,
-  },
-  toggleThumb: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: "#fffaf5",
-    shadowColor: colors.black,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.28,
-    shadowRadius: 2,
-  },
-  pressed: {
-    opacity: 0.78,
-  },
-  disabled: {
-    opacity: 0.32,
-  },
-});

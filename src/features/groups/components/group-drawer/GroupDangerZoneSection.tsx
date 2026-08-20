@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text } from "react-native";
-import { colors, fonts } from "../../../../theme/tokens";
+import { fonts, type ColorTokens } from "../../../../theme/tokens";
+import { useThemedStyles } from "../../../../theme/ThemeProvider";
 import {
   GroupDrawerError,
   GroupDrawerSection,
@@ -11,11 +12,39 @@ interface GroupDangerZoneSectionProps {
   onDelete: () => void;
 }
 
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
+    copy: {
+      color: colors.muted,
+      fontFamily: fonts.body,
+      fontSize: 11,
+      lineHeight: 17,
+    },
+    deleteButton: {
+      minHeight: 44,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 22,
+      borderWidth: 1,
+      borderColor: colors.errorBorder,
+    },
+    deleteText: {
+      color: colors.error,
+      fontFamily: fonts.body,
+      fontSize: 12,
+    },
+    disabled: {
+      opacity: 0.4,
+    },
+  });
+}
+
 export function GroupDangerZoneSection({
   pending,
   error,
   onDelete,
 }: GroupDangerZoneSectionProps) {
+  const styles = useThemedStyles(createStyles);
   return (
     <GroupDrawerSection title="Danger zone">
       <Text style={styles.copy}>
@@ -37,28 +66,3 @@ export function GroupDangerZoneSection({
     </GroupDrawerSection>
   );
 }
-
-const styles = StyleSheet.create({
-  copy: {
-    color: colors.muted,
-    fontFamily: fonts.body,
-    fontSize: 11,
-    lineHeight: 17,
-  },
-  deleteButton: {
-    minHeight: 44,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: colors.errorBorder,
-  },
-  deleteText: {
-    color: colors.error,
-    fontFamily: fonts.body,
-    fontSize: 12,
-  },
-  disabled: {
-    opacity: 0.4,
-  },
-});

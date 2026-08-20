@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
-import { colors } from "../../../../theme/tokens";
+import { useTheme } from "../../../../theme/ThemeProvider";
 import type { GroupInviteResult } from "../../types";
 import { CheckIcon, CopyIcon } from "../Icons";
 import {
   GroupDrawerError,
   GroupDrawerPill,
   GroupDrawerSection,
-  styles,
+  useGroupDrawerStyles,
 } from "./GroupDrawerControls";
 
 type InviteMethod = "automatic" | "personal";
@@ -40,6 +40,8 @@ export function InviteSection({
   onSubmit,
   onCopy,
 }: InviteSectionProps) {
+  const styles = useGroupDrawerStyles();
+  const { colors } = useTheme();
   const [firstName, setFirstName] = useState("");
   const [phone, setPhone] = useState("");
   const [customMessage, setCustomMessage] = useState("");
@@ -73,7 +75,7 @@ export function InviteSection({
             ]}
           >
             {copied ? (
-              <CheckIcon color="#34d399" />
+              <CheckIcon color={colors.success} />
             ) : (
               <CopyIcon color={colors.mutedStrong} />
             )}

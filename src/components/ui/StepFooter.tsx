@@ -1,7 +1,75 @@
 import { Pressable, Text, View, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path, Polyline } from "react-native-svg";
-import { colors, fonts } from "../../theme/tokens";
+import { fonts, type ColorTokens } from "../../theme/tokens";
+import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
+
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
+    footer: {
+      paddingTop: 16,
+      borderTopWidth: 1,
+      borderTopColor: colors.footerRule,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      zIndex: 20,
+    },
+    left: {
+      flexDirection: "column",
+      gap: 8,
+    },
+    dots: {
+      flexDirection: "row",
+      gap: 8,
+      alignItems: "center",
+    },
+    dot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: colors.dot,
+    },
+    dotActive: {
+      backgroundColor: colors.title,
+      transform: [{ scale: 1.25 }],
+    },
+    label: {
+      color: colors.footerLabel,
+      fontSize: 12,
+      fontWeight: "500",
+      fontFamily: fonts.displayMedium,
+    },
+    right: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    signin: {
+      color: colors.muted,
+      fontSize: 11.2,
+      fontWeight: "400",
+      fontFamily: fonts.body,
+    },
+    signinLink: {
+      color: colors.mutedStrong,
+      textDecorationLine: "underline",
+    },
+    arrow: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: colors.buttonPrimary,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    back: {
+      color: colors.muted,
+      fontSize: 12,
+      fontFamily: fonts.body,
+    },
+  });
+}
 
 export function StepFooter({
   variant,
@@ -23,6 +91,8 @@ export function StepFooter({
   onBack?: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
 
   return (
     <View style={[styles.footer, { paddingBottom: 24 + insets.bottom }]}>
@@ -59,7 +129,7 @@ export function StepFooter({
                 <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
                   <Polyline
                     points="20 6 9 17 4 12"
-                    stroke="#000"
+                    stroke={colors.buttonOnPrimary}
                     strokeWidth={2}
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -69,14 +139,14 @@ export function StepFooter({
                 <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
                   <Path
                     d="M5 12h14"
-                    stroke="#000"
+                    stroke={colors.buttonOnPrimary}
                     strokeWidth={2}
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
                   <Path
                     d="m12 5 7 7-7 7"
-                    stroke="#000"
+                    stroke={colors.buttonOnPrimary}
                     strokeWidth={2}
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -99,68 +169,3 @@ export function StepFooter({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  footer: {
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: colors.footerRule,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    zIndex: 20,
-  },
-  left: {
-    flexDirection: "column",
-    gap: 8,
-  },
-  dots: {
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.dot,
-  },
-  dotActive: {
-    backgroundColor: colors.white,
-    transform: [{ scale: 1.25 }],
-  },
-  label: {
-    color: colors.footerLabel,
-    fontSize: 12,
-    fontWeight: "500",
-    fontFamily: fonts.displayMedium,
-  },
-  right: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  signin: {
-    color: "rgba(255, 255, 255, 0.4)",
-    fontSize: 11.2,
-    fontWeight: "400",
-    fontFamily: fonts.body,
-  },
-  signinLink: {
-    color: "rgba(255, 255, 255, 0.7)",
-    textDecorationLine: "underline",
-  },
-  arrow: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.white,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  back: {
-    color: colors.muted,
-    fontSize: 12,
-    fontFamily: fonts.body,
-  },
-});

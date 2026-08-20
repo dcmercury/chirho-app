@@ -7,7 +7,8 @@ import Animated, {
   FadeIn,
   ReduceMotion,
 } from "react-native-reanimated";
-import { colors } from "../../theme/tokens";
+import { type ColorTokens } from "../../theme/tokens";
+import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
 import { GridOverlay } from "./GridOverlay";
 import type { ImageSource } from "expo-image";
 
@@ -30,6 +31,8 @@ export function ScreenShell({
   children: ReactNode;
   footer: ReactNode;
 }) {
+  const { overlayAt } = useTheme();
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.slide}>
       <Image source={background} style={StyleSheet.absoluteFill} contentFit="cover" />
@@ -67,7 +70,7 @@ export function ScreenShell({
           .reduceMotion(ReduceMotion.System)}
         style={[
           StyleSheet.absoluteFill,
-          { backgroundColor: `rgba(0,0,0,${overlayOpacity})` },
+          { backgroundColor: overlayAt(overlayOpacity) },
         ]}
         pointerEvents="none"
       />
@@ -80,38 +83,40 @@ export function ScreenShell({
   );
 }
 
-const styles = StyleSheet.create({
-  slide: {
-    flex: 1,
-    backgroundColor: colors.canvas,
-  },
-  video: {
-    ...StyleSheet.absoluteFill,
-    zIndex: 2,
-  },
-  videoFaded: {
-    opacity: 0,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    zIndex: 20,
-    justifyContent: "space-between",
-  },
-  body: {
-    flex: 1,
-    justifyContent: "flex-end",
-    marginBottom: 32,
-  },
-  blurOrb: {
-    position: "absolute",
-    bottom: -160,
-    right: -160,
-    width: 384,
-    height: 384,
-    borderRadius: 192,
-    backgroundColor: colors.blurOrb,
-    opacity: 0.4,
-  },
-});
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
+    slide: {
+      flex: 1,
+      backgroundColor: colors.canvas,
+    },
+    video: {
+      ...StyleSheet.absoluteFill,
+      zIndex: 2,
+    },
+    videoFaded: {
+      opacity: 0,
+    },
+    content: {
+      flex: 1,
+      paddingHorizontal: 24,
+      paddingTop: 24,
+      zIndex: 20,
+      justifyContent: "space-between",
+    },
+    body: {
+      flex: 1,
+      justifyContent: "flex-end",
+      marginBottom: 32,
+    },
+    blurOrb: {
+      position: "absolute",
+      bottom: -160,
+      right: -160,
+      width: 384,
+      height: 384,
+      borderRadius: 192,
+      backgroundColor: colors.blurOrb,
+      opacity: 0.4,
+    },
+  });
+}

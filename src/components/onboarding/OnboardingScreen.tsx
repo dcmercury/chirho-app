@@ -28,7 +28,8 @@ import {
   isValidPhone,
   normalizePhone,
 } from "../../lib/phone";
-import { colors, fonts } from "../../theme/tokens";
+import { fonts, type ColorTokens } from "../../theme/tokens";
+import { useThemedStyles } from "../../theme/ThemeProvider";
 import { ScreenShell } from "../ui/ScreenShell";
 import { DisplayTitle } from "../ui/DisplayTitle";
 import { OrangeCaption } from "../ui/OrangeCaption";
@@ -48,6 +49,7 @@ import { PrimaryButton } from "../ui/PrimaryButton";
 import { GhostBack } from "../ui/GhostBack";
 import { ErrorBanner } from "../ui/ErrorBanner";
 import { StepFooter } from "../ui/StepFooter";
+import { PrivacyPolicyLink } from "../ui/PrivacyPolicyLink";
 
 const steps = welcome.steps as WelcomeStep[];
 
@@ -79,6 +81,7 @@ function Enter({
 
 export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
   const router = useRouter();
+  const styles = useThemedStyles(createStyles);
   const { isSignedIn, getToken } = useAuth();
   const { signIn, isLoaded: signInLoaded, setActive } = useSignIn();
   const { signUp, isLoaded: signUpLoaded, setActive: setSignUpActive } = useSignUp();
@@ -536,6 +539,7 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
             disabled={authenticating || !isValidPhone(phoneNumber)}
             loading={authenticating}
           />
+          <PrivacyPolicyLink style={styles.legal} />
           <GhostBack
             onPress={() => {
               setSignUpStep("community");
@@ -626,6 +630,7 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
             disabled={authenticating || !signInLoaded || !isValidPhone(phoneNumber)}
             loading={authenticating}
           />
+          <PrivacyPolicyLink style={styles.legal} />
         </>
       ) : (
         <>
@@ -714,7 +719,8 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
   stack: {
     gap: 16,
   },
@@ -770,4 +776,12 @@ const styles = StyleSheet.create({
     width: "100%",
     paddingVertical: 4,
   },
-});
+  legal: {
+    color: colors.muted,
+    fontSize: 11,
+    lineHeight: 16,
+    textAlign: "center",
+    fontFamily: fonts.body,
+  },
+  });
+}

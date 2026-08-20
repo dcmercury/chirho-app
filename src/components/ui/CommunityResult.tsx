@@ -1,8 +1,69 @@
 import { Pressable, Text, View, StyleSheet, ActivityIndicator } from "react-native";
-import { colors, fonts, radii } from "../../theme/tokens";
+import { fonts, radii, type ColorTokens } from "../../theme/tokens";
+import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
 import type { Community } from "../../lib/api";
 import { GlassInput } from "./GlassInput";
 import Svg, { Circle, Path } from "react-native-svg";
+
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
+    wrap: {
+      position: "relative",
+    },
+    input: {
+      paddingRight: 36,
+      fontSize: 12.8,
+      paddingVertical: 12,
+    },
+    icon: {
+      position: "absolute",
+      right: 12,
+      top: 0,
+      bottom: 0,
+      justifyContent: "center",
+    },
+    result: {
+      padding: 12,
+      borderRadius: radii.glass,
+      backgroundColor: colors.glassFill,
+      borderWidth: 1,
+      borderColor: colors.glassBorderSoft,
+    },
+    resultPressed: {
+      backgroundColor: colors.glassFillStrong,
+      borderColor: colors.glassBorderRow,
+    },
+    name: {
+      fontFamily: fonts.displayMedium,
+      fontSize: 12.8,
+      fontWeight: "500",
+      color: colors.title,
+    },
+    location: {
+      fontSize: 10.4,
+      color: colors.muted,
+      marginTop: 2,
+      fontFamily: fonts.body,
+    },
+    selected: {
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      borderRadius: radii.glass,
+      backgroundColor: colors.glassFillHover,
+      borderWidth: 1,
+      borderColor: colors.glassBorderSelected,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    change: {
+      color: colors.muted,
+      fontSize: 10.4,
+      textDecorationLine: "underline",
+      fontFamily: fonts.body,
+    },
+  });
+}
 
 export function CommunitySearch({
   query,
@@ -13,6 +74,8 @@ export function CommunitySearch({
   onChangeQuery: (q: string) => void;
   searching: boolean;
 }) {
+  const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
   return (
     <View style={styles.wrap}>
       <GlassInput
@@ -48,6 +111,7 @@ export function CommunityResult({
   community: Community;
   onPress: () => void;
 }) {
+  const styles = useThemedStyles(createStyles);
   return (
     <Pressable
       onPress={onPress}
@@ -68,6 +132,7 @@ export function CommunitySelected({
   location: string;
   onChange?: () => void;
 }) {
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.selected}>
       <View style={{ flex: 1 }}>
@@ -82,61 +147,3 @@ export function CommunitySelected({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  wrap: {
-    position: "relative",
-  },
-  input: {
-    paddingRight: 36,
-    fontSize: 12.8,
-    paddingVertical: 12,
-  },
-  icon: {
-    position: "absolute",
-    right: 12,
-    top: 0,
-    bottom: 0,
-    justifyContent: "center",
-  },
-  result: {
-    padding: 12,
-    borderRadius: radii.glass,
-    backgroundColor: colors.glassFill,
-    borderWidth: 1,
-    borderColor: colors.glassBorderSoft,
-  },
-  resultPressed: {
-    backgroundColor: colors.glassFillStrong,
-    borderColor: "rgba(255,255,255,0.15)",
-  },
-  name: {
-    fontFamily: fonts.displayMedium,
-    fontSize: 12.8,
-    fontWeight: "500",
-    color: colors.white,
-  },
-  location: {
-    fontSize: 10.4,
-    color: colors.muted,
-    marginTop: 2,
-    fontFamily: fonts.body,
-  },
-  selected: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: radii.glass,
-    backgroundColor: colors.glassFillHover,
-    borderWidth: 1,
-    borderColor: colors.glassBorderSelected,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  change: {
-    color: colors.muted,
-    fontSize: 10.4,
-    textDecorationLine: "underline",
-    fontFamily: fonts.body,
-  },
-});

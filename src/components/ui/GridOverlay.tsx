@@ -1,8 +1,9 @@
 import Svg, { Circle, Defs, Pattern, Rect } from "react-native-svg";
 import { StyleSheet } from "react-native";
-import { colors } from "../../theme/tokens";
+import { useTheme } from "../../theme/ThemeProvider";
 
 export function GridOverlay() {
+  const { colors } = useTheme();
   return (
     <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
       <Defs>

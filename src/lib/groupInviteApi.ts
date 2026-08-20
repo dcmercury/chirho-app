@@ -18,7 +18,7 @@ export interface GroupInvitation {
   createdAt?: string;
   memberCount?: number;
   firstName?: string | null;
-  phone?: string | null;
+  phoneLastFour?: string | null;
   adminName?: string | null;
   backgroundImage?: string | null;
 }

@@ -16,7 +16,8 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
-import { colors, fonts } from "../../theme/tokens";
+import { fonts, type ColorTokens } from "../../theme/tokens";
+import { useThemedStyles } from "../../theme/ThemeProvider";
 import type { PrayerDeckCard } from "../../types/home";
 import { PrayerCard } from "../ui/PrayerCard";
 
@@ -35,7 +36,6 @@ interface PrayerDeckPagerProps {
   cards: PrayerDeckCard[];
   currentIndex: number;
   disabled?: boolean;
-  token?: string | null;
   onIndexChange: (index: number) => void;
   onOpenCard: (card: PrayerDeckCard) => void;
 }
@@ -48,12 +48,12 @@ export const PrayerDeckPager = forwardRef<
     cards,
     currentIndex,
     disabled = false,
-    token,
     onIndexChange,
     onOpenCard,
   },
   ref,
 ) {
+  const styles = useThemedStyles(createStyles);
   const translateY = useSharedValue(0);
   const transitioning = useSharedValue(false);
   const reducedMotion = useReducedMotion();
@@ -226,7 +226,6 @@ export const PrayerDeckPager = forwardRef<
         <PrayerCard
           card={card}
           index={index}
-          token={token}
           variant="deck"
           onPress={interactive ? () => onOpenCard(card) : undefined}
         />
@@ -253,7 +252,8 @@ export const PrayerDeckPager = forwardRef<
   );
 });
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
   stage: {
     height: STAGE_HEIGHT,
     alignItems: "center",
@@ -283,4 +283,5 @@ const styles = StyleSheet.create({
     letterSpacing: 0.32,
     textTransform: "uppercase",
   },
-});
+  });
+}

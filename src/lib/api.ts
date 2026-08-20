@@ -234,6 +234,9 @@ function normalizeGroupAdminRecord(
     backgroundImage:
       optionalString(group.backgroundImage) ||
       optionalString(group.activeBackgroundUrl),
+    backgroundImages: stringArray(
+      group.backgroundImages || group.backgrounds,
+    ),
     creationMetadata: normalizeCreationMetadata(group.creationMetadata),
     admin: optionalString(group.admin),
     parentEntity: parent
@@ -338,6 +341,9 @@ function normalizeGroupSurface(
         : typeof source.backgroundImage === "string"
           ? source.backgroundImage
           : null,
+    backgroundImages: stringArray(
+      rawGroup.backgroundImages || source.backgroundImages,
+    ),
     tradition:
       typeof settings.tradition === "string"
         ? settings.tradition.toUpperCase()
@@ -371,6 +377,11 @@ function normalizeGroupSurface(
         : isAdmin,
     canLeave:
       typeof viewer.canLeave === "boolean" ? viewer.canLeave : !isAdmin,
+    canCreatePrayerRequests:
+      typeof viewer.canCreatePrayerRequests === "boolean"
+        ? viewer.canCreatePrayerRequests
+        : true,
+    memberInvitesLocked: viewer.memberInvitesLocked === true,
   };
 
   return {
@@ -409,6 +420,13 @@ export async function getMobileHome(
               tradition: string | null;
               branding: { logo: string | null } | null;
               activeBackground: { url: string } | null;
+              donationLink?: string | null;
+              features?: HomeCommunity["features"];
+              licenseTier?: string | null;
+              canCreateGroups?: boolean;
+              createBlockedReason?: HomeCommunity["createBlockedReason"];
+              groupLimits?: HomeCommunity["groupLimits"];
+              groupsUsed?: number;
             }
           | null;
       }
@@ -425,17 +443,33 @@ export async function getMobileHome(
     };
   }
   const rawCommunity = data.community;
-  const community =
-    rawCommunity && "activeBackground" in rawCommunity
-      ? {
-          communityuuid: rawCommunity.communityuuid,
-          name: rawCommunity.name,
-          location: rawCommunity.location || undefined,
-          tradition: rawCommunity.tradition,
-          logo: rawCommunity.branding?.logo || null,
-          backgroundImage: rawCommunity.activeBackground?.url || null,
-        }
-      : rawCommunity;
+  const community = !rawCommunity
+    ? null
+    : {
+        communityuuid: rawCommunity.communityuuid,
+        name: rawCommunity.name,
+        location:
+          "location" in rawCommunity
+            ? rawCommunity.location || undefined
+            : undefined,
+        tradition: rawCommunity.tradition,
+        logo:
+          "logo" in rawCommunity
+            ? rawCommunity.logo || null
+            : rawCommunity.branding?.logo || null,
+        backgroundImage:
+          "backgroundImage" in rawCommunity
+            ? rawCommunity.backgroundImage || null
+            : rawCommunity.activeBackground?.url || null,
+        donationLink: rawCommunity.donationLink || null,
+        features: rawCommunity.features,
+        licenseTier:
+          "licenseTier" in rawCommunity ? rawCommunity.licenseTier : null,
+        canCreateGroups: rawCommunity.canCreateGroups,
+        createBlockedReason: rawCommunity.createBlockedReason,
+        groupLimits: rawCommunity.groupLimits,
+        groupsUsed: rawCommunity.groupsUsed,
+      };
   return {
     home: {
       ...data.home,
@@ -575,10 +609,18 @@ export async function generateLovedOnePrayer(
     }),
   });
   const text = data.prayer.textClean || data.prayer.text || "";
+  const timeOfDay = data.prayer.timeOfDay;
+  const titleFromName = data.prayer.title?.match(/\bfor\s+(.+)$/i)?.[1]?.trim();
   return {
     prayeruuid: data.prayer.prayeruuid,
-    title: data.prayer.title || "Prayer",
-    verse: data.prayer.tradition || data.prayer.verse || "Personal prayer",
+    title: titleFromName || data.prayer.title || "Prayer",
+    verse:
+      data.prayer.verse ||
+      (timeOfDay === "morning"
+        ? "Morning Prayer"
+        : timeOfDay === "evening"
+          ? "Evening Prayer"
+          : data.prayer.tradition || "Personal prayer"),
     text,
     fullPrayer: text,
     image: data.prayer.backgroundImage || backgroundImage,
@@ -802,6 +844,28 @@ export async function uploadAvatar(
   });
 }
 
+export async function selectDashboardBackground(
+  imageUrl: string,
+  current: string[],
+  token: string,
+): Promise<void> {
+  await authenticatedRequest("/api/user/profile/dashboard-background", token, {
+    method: "POST",
+    body: JSON.stringify({ action: "select", imageUrl, current }),
+  });
+}
+
+export async function uploadDashboardBackground(
+  imageData: string,
+  current: string[],
+  token: string,
+): Promise<void> {
+  await authenticatedRequest("/api/user/profile/dashboard-background", token, {
+    method: "POST",
+    body: JSON.stringify({ action: "upload", imageData, current }),
+  });
+}
+
 export async function updateNotificationPreference(
   key: string,
   enabled: boolean,
@@ -894,15 +958,9 @@ export async function deleteGroup(
   });
 }
 
-export async function regenerateGroupBackground(
-  groupuuid: string,
-  token: string,
-): Promise<GroupBackgroundResult> {
-  const payload = await authenticatedRequest<Record<string, unknown>>(
-    `/api/groups/${groupuuid}/background-image`,
-    token,
-    { method: "POST" },
-  );
+function parseBackgroundResult(
+  payload: Record<string, unknown>,
+): GroupBackgroundResult {
   return {
     success: payload.success === true,
     imageUrl:
@@ -916,6 +974,50 @@ export async function regenerateGroupBackground(
       : {}),
     ...(typeof payload.error === "string" ? { error: payload.error } : {}),
   };
+}
+
+export async function regenerateGroupBackground(
+  groupuuid: string,
+  token: string,
+): Promise<GroupBackgroundResult> {
+  const payload = await authenticatedRequest<Record<string, unknown>>(
+    `/api/groups/${groupuuid}/background-image`,
+    token,
+    { method: "POST", body: JSON.stringify({ action: "generate" }) },
+  );
+  return parseBackgroundResult(payload);
+}
+
+export async function selectGroupBackground(
+  groupuuid: string,
+  imageUrl: string,
+  token: string,
+): Promise<GroupBackgroundResult> {
+  const payload = await authenticatedRequest<Record<string, unknown>>(
+    `/api/groups/${groupuuid}/background-image`,
+    token,
+    {
+      method: "POST",
+      body: JSON.stringify({ action: "select", imageUrl }),
+    },
+  );
+  return parseBackgroundResult(payload);
+}
+
+export async function uploadGroupBackground(
+  groupuuid: string,
+  imageData: string,
+  token: string,
+): Promise<GroupBackgroundResult> {
+  const payload = await authenticatedRequest<Record<string, unknown>>(
+    `/api/groups/${groupuuid}/background-image`,
+    token,
+    {
+      method: "POST",
+      body: JSON.stringify({ action: "upload", imageData }),
+    },
+  );
+  return parseBackgroundResult(payload);
 }
 
 export async function previewGroupContent(
@@ -936,6 +1038,21 @@ export async function previewGroupContent(
       payload.scriptureReferences,
     ),
   };
+}
+
+export async function createGroup(
+  name: string,
+  token: string,
+): Promise<{ groupuuid: string; name: string }> {
+  const data = await authenticatedRequest<{
+    group?: { groupuuid?: string; name?: string };
+  }>("/api/groups", token, {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+  const groupuuid = data.group?.groupuuid;
+  if (!groupuuid) throw new Error("The group could not be created.");
+  return { groupuuid, name: data.group?.name || name };
 }
 
 export async function leaveGroup(
@@ -1081,6 +1198,57 @@ export async function acknowledgeOfferedPrayer(
   return data.acknowledgedBy || [];
 }
 
+export async function deleteGroupMessage(
+  groupuuid: string,
+  messageId: string,
+  token: string,
+): Promise<void> {
+  const query = new URLSearchParams({ messageId });
+  await authenticatedRequest(
+    `/api/groups/${groupuuid}/chat/messages?${query.toString()}`,
+    token,
+    { method: "DELETE" },
+  );
+}
+
+export async function deleteOfferedPrayer(
+  groupuuid: string,
+  prayerId: string,
+  token: string,
+): Promise<void> {
+  const query = new URLSearchParams({ prayerId });
+  await authenticatedRequest(
+    `/api/groups/${groupuuid}/chat/prayers?${query.toString()}`,
+    token,
+    { method: "DELETE" },
+  );
+}
+
+export async function reportGroupContent(
+  groupuuid: string,
+  payload: {
+    contentType: "request" | "response";
+    contentId: string;
+    reason: string;
+  },
+  token: string,
+): Promise<void> {
+  await authenticatedRequest(`/api/groups/${groupuuid}/reports`, token, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function blockGroupMember(
+  blockedClerkId: string,
+  token: string,
+): Promise<void> {
+  await authenticatedRequest("/api/user/blocks", token, {
+    method: "POST",
+    body: JSON.stringify({ blockedClerkId }),
+  });
+}
+
 export async function prayForGroupMessage(
   groupuuid: string,
   messageId: string,
@@ -1222,6 +1390,47 @@ export async function getGroupDetail(
       };
     }),
   };
+}
+
+export async function listPrayerCards(
+  token: string,
+  options: { before?: string } = {},
+): Promise<{
+  cards: HomePrayerCard[];
+  hasMore: boolean;
+  nextBefore?: string;
+}> {
+  const query = new URLSearchParams({ limit: "30" });
+  if (options.before) query.set("before", options.before);
+  const data = await authenticatedRequest<{
+    cards?: HomePrayerCard[];
+    hasMore?: boolean;
+    nextBefore?: string;
+  }>(`/api/mobile/prayers?${query.toString()}`, token);
+  return {
+    cards: data.cards || [],
+    hasMore: Boolean(data.hasMore),
+    nextBefore: data.nextBefore,
+  };
+}
+
+export async function deletePrayerCard(
+  prayeruuid: string,
+  token: string,
+): Promise<void> {
+  await authenticatedRequest(`/api/prayers/${prayeruuid}`, token, {
+    method: "DELETE",
+  });
+}
+
+export async function publishPrayerCard(
+  prayeruuid: string,
+  token: string,
+): Promise<void> {
+  await authenticatedRequest(`/api/prayers/${prayeruuid}`, token, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
 }
 
 export async function getPrayer(

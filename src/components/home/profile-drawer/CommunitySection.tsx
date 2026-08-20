@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
-import { colors } from "../../../theme/tokens";
+import { Pressable, Text, TextInput, View, Linking } from "react-native";
+import { useTheme } from "../../../theme/ThemeProvider";
 import type { HomeCommunity } from "../../../types/home";
-import { InlineError, ManageAvatar, styles } from "./ProfileControls";
+import { InlineError, ManageAvatar, useProfileStyles } from "./ProfileControls";
 import type { CommunitySearchResult } from "./types";
 
 export function CommunitySection({
@@ -26,6 +26,8 @@ export function CommunitySection({
   onJoin: (uuid: string) => Promise<boolean>;
   onLeave: (name: string) => void;
 }) {
+  const styles = useProfileStyles();
+  const { colors } = useTheme();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<CommunitySearchResult[]>([]);
   const searchGeneration = useRef(0);
@@ -80,6 +82,17 @@ export function CommunitySection({
       ) : (
         <Text style={styles.empty}>No active community.</Text>
       )}
+      {community?.donationLink ? (
+        <Pressable
+          accessibilityLabel={`Open donation page for ${community.name}`}
+          accessibilityRole="link"
+          onPress={() => {
+            void Linking.openURL(community.donationLink as string);
+          }}
+        >
+          <Text style={styles.manageMeta}>Support {community.name}</Text>
+        </Pressable>
+      ) : null}
       <View style={styles.communitySearch}>
         <TextInput
           accessibilityLabel="Find a church or community"

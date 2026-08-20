@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { ActivityIndicator, Platform, View } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { ClerkProvider, useAuth } from "@clerk/expo";
@@ -27,6 +28,7 @@ import {
   registerForPushNotifications,
 } from "../src/lib/push";
 import { registerPushToken } from "../src/lib/api";
+import { ThemeProvider, useTheme } from "../src/theme/ThemeProvider";
 import { colors } from "../src/theme/tokens";
 
 SplashScreen.preventAutoHideAsync();
@@ -37,6 +39,7 @@ if (!publishableKey) {
 }
 
 function RootNavigator() {
+  const { colors: themeColors, statusBarStyle } = useTheme();
   const router = useRouter();
   const { isLoaded: authLoaded, isSignedIn, getToken } = useAuth();
   const getTokenRef = useRef(getToken);
@@ -70,7 +73,9 @@ function RootNavigator() {
     if (!isSignedIn) return;
     let cancelled = false;
     (async () => {
-      const pushToken = await registerForPushNotifications();
+      const pushToken = await registerForPushNotifications({
+        requestPermission: false,
+      });
       if (!pushToken || cancelled) return;
       const sessionToken = await getTokenRef.current();
       if (!sessionToken || cancelled) return;
@@ -132,15 +137,15 @@ function RootNavigator() {
           justifyContent: "center",
         }}
       >
-        <ActivityIndicator size="large" color="#8B4513" />
+        <ActivityIndicator size="large" color={themeColors.splashSpinner} />
       </View>
     );
   }
 
   return (
     <>
-      <StatusBar style="light" />
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#000" } }}>
+      <StatusBar style={statusBarStyle} />
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: themeColors.canvas } }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="(onboarding)" />
         <Stack.Screen name="(app)" />
@@ -151,6 +156,8 @@ function RootNavigator() {
 
 export default function RootLayout() {
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+    <ThemeProvider>
     <ClerkProvider
       publishableKey={publishableKey}
       tokenCache={tokenCache}
@@ -158,5 +165,7 @@ export default function RootLayout() {
     >
       <RootNavigator />
     </ClerkProvider>
+    </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }

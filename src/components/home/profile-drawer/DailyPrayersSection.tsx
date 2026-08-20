@@ -7,7 +7,7 @@ import {
   InlineError,
   Section,
   ToggleRow,
-  styles,
+  useProfileStyles,
 } from "./ProfileControls";
 import type { DailyPrayerPeriod } from "./profileUtilities";
 
@@ -25,6 +25,7 @@ export function DailyPrayersSection({
     next: DailyPrayerSettings,
   ) => void;
 }) {
+  const styles = useProfileStyles();
   return (
     <Section title="Daily prayers">
       {(["morning", "evening"] as const).map((period) => {

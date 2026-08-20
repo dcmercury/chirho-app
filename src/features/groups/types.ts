@@ -24,6 +24,7 @@ export interface GroupAdminRecord {
   purpose: string | null;
   scriptureReferences: GroupScripture[];
   backgroundImage: string | null;
+  backgroundImages?: string[];
   creationMetadata: GroupCreationMetadata | null;
   admin: string | null;
   parentEntity: {
@@ -43,6 +44,7 @@ export interface GroupUpdatePayload {
   purpose?: string | null;
   scriptureReferences?: GroupScripture[] | null;
   settings?: GroupSettings;
+  backgroundImage?: string | null;
 }
 
 export interface GroupBackgroundResult {
@@ -122,6 +124,7 @@ export interface PrayerGroup {
   purpose: string;
   description: string;
   backgroundImage: string | null;
+  backgroundImages?: string[];
   tradition: string | null;
   scripture: GroupScripture | null;
   memberCount: number;
@@ -130,6 +133,8 @@ export interface PrayerGroup {
   canInvite: boolean;
   canManageMembers: boolean;
   canLeave: boolean;
+  canCreatePrayerRequests: boolean;
+  memberInvitesLocked?: boolean;
 }
 
 export interface PrayerGroupSurfaceData {

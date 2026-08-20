@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { colors, fonts } from "../../../../theme/tokens";
+import { fonts, type ColorTokens } from "../../../../theme/tokens";
+import { useTheme, useThemedStyles } from "../../../../theme/ThemeProvider";
 import type { GroupScripture } from "../../types";
 import { PlusIcon, SparkleIcon } from "../Icons";
 import {
@@ -34,6 +35,147 @@ interface GroupPurposeSectionProps {
   onRegenerate: () => void;
 }
 
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
+    headingRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 8,
+    },
+    headingActions: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    label: {
+      color: colors.mutedStrong,
+      fontFamily: fonts.bodyMedium,
+      fontSize: 12,
+    },
+    purpose: {
+      color: colors.mutedStrong,
+      fontFamily: fonts.body,
+      fontSize: 12,
+      lineHeight: 19,
+      paddingVertical: 4,
+    },
+    empty: {
+      color: colors.muted,
+      fontFamily: fonts.body,
+      fontSize: 11,
+      fontStyle: "italic",
+    },
+    input: {
+      minHeight: 42,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.glassBorder,
+      backgroundColor: colors.glassFill,
+      color: colors.title,
+      fontFamily: fonts.body,
+      fontSize: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    purposeInput: {
+      minHeight: 104,
+    },
+    verseInput: {
+      minHeight: 82,
+    },
+    reasonInput: {
+      minHeight: 68,
+    },
+    formActions: {
+      flexDirection: "row",
+      justifyContent: "flex-end",
+      alignItems: "center",
+      gap: 7,
+    },
+    smallAction: {
+      minHeight: 36,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 5,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: colors.glassBorder,
+      paddingHorizontal: 11,
+    },
+    smallActionText: {
+      color: colors.mutedStrong,
+      fontFamily: fonts.bodyMedium,
+      fontSize: 10,
+    },
+    saveButton: {
+      minHeight: 36,
+      borderRadius: 18,
+      backgroundColor: colors.buttonPrimary,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 14,
+    },
+    saveText: {
+      color: colors.buttonOnPrimary,
+      fontFamily: fonts.bodyMedium,
+      fontSize: 10,
+    },
+    scriptureHeader: {
+      marginTop: 8,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    scripture: {
+      borderBottomWidth: 1,
+      borderBottomColor: colors.glassBorderSoft,
+      paddingVertical: 10,
+      gap: 5,
+    },
+    scriptureTitleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+    },
+    citation: {
+      flex: 1,
+      color: colors.title,
+      fontFamily: fonts.displayMedium,
+      fontSize: 13,
+    },
+    verse: {
+      color: colors.mutedStrong,
+      fontFamily: fonts.body,
+      fontSize: 11,
+      fontStyle: "italic",
+      lineHeight: 17,
+    },
+    reason: {
+      color: colors.muted,
+      fontFamily: fonts.body,
+      fontSize: 10,
+      lineHeight: 15,
+    },
+    remove: {
+      color: colors.error,
+      fontFamily: fonts.body,
+      fontSize: 10,
+    },
+    form: {
+      gap: 8,
+      borderTopWidth: 1,
+      borderTopColor: colors.glassBorderSoft,
+      paddingTop: 12,
+    },
+    disabled: {
+      opacity: 0.4,
+    },
+  });
+}
+
 export function GroupPurposeSection({
   purpose,
   purposeDraft,
@@ -59,10 +201,13 @@ export function GroupPurposeSection({
   onRemoveScripture,
   onRegenerate,
 }: GroupPurposeSectionProps) {
+  const styles = useThemedStyles(createStyles);
+  const { colors, appearance } = useTheme();
   const addDisabled =
     addPending ||
     !scriptureDraft.citation.trim() ||
     !scriptureDraft.text.trim();
+  const keyboardAppearance = appearance === "light" ? "light" : "dark";
 
   return (
     <GroupDrawerSection title="Purpose and scripture">
@@ -94,6 +239,7 @@ export function GroupPurposeSection({
           <TextInput
             accessibilityLabel="Group purpose"
             editable={!purposePending}
+            keyboardAppearance={keyboardAppearance}
             multiline
             onChangeText={onPurposeDraftChange}
             placeholder="This group's purpose is to…"
@@ -182,6 +328,7 @@ export function GroupPurposeSection({
             accessibilityLabel="Scripture citation"
             autoCapitalize="words"
             editable={!addPending}
+            keyboardAppearance={keyboardAppearance}
             onChangeText={(citation) =>
               onScriptureDraftChange({ ...scriptureDraft, citation })
             }
@@ -193,6 +340,7 @@ export function GroupPurposeSection({
           <TextInput
             accessibilityLabel="Scripture verse text"
             editable={!addPending}
+            keyboardAppearance={keyboardAppearance}
             multiline
             onChangeText={(text) =>
               onScriptureDraftChange({ ...scriptureDraft, text })
@@ -206,6 +354,7 @@ export function GroupPurposeSection({
           <TextInput
             accessibilityLabel="Why this scripture matters"
             editable={!addPending}
+            keyboardAppearance={keyboardAppearance}
             multiline
             onChangeText={(reason) =>
               onScriptureDraftChange({ ...scriptureDraft, reason })
@@ -258,6 +407,7 @@ function SmallAction({
   busy?: boolean;
   onPress: () => void;
 }) {
+  const styles = useThemedStyles(createStyles);
   return (
     <Pressable
       accessibilityLabel={label}
@@ -272,142 +422,3 @@ function SmallAction({
     </Pressable>
   );
 }
-
-const styles = StyleSheet.create({
-  headingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  headingActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  label: {
-    color: colors.mutedStrong,
-    fontFamily: fonts.bodyMedium,
-    fontSize: 12,
-  },
-  purpose: {
-    color: colors.mutedStrong,
-    fontFamily: fonts.body,
-    fontSize: 12,
-    lineHeight: 19,
-    paddingVertical: 4,
-  },
-  empty: {
-    color: colors.muted,
-    fontFamily: fonts.body,
-    fontSize: 11,
-    fontStyle: "italic",
-  },
-  input: {
-    minHeight: 42,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    backgroundColor: colors.glassFill,
-    color: colors.white,
-    fontFamily: fonts.body,
-    fontSize: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  purposeInput: {
-    minHeight: 104,
-  },
-  verseInput: {
-    minHeight: 82,
-  },
-  reasonInput: {
-    minHeight: 68,
-  },
-  formActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    alignItems: "center",
-    gap: 7,
-  },
-  smallAction: {
-    minHeight: 36,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    paddingHorizontal: 11,
-  },
-  smallActionText: {
-    color: colors.mutedStrong,
-    fontFamily: fonts.bodyMedium,
-    fontSize: 10,
-  },
-  saveButton: {
-    minHeight: 36,
-    borderRadius: 18,
-    backgroundColor: colors.white,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 14,
-  },
-  saveText: {
-    color: colors.black,
-    fontFamily: fonts.bodyMedium,
-    fontSize: 10,
-  },
-  scriptureHeader: {
-    marginTop: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  scripture: {
-    borderBottomWidth: 1,
-    borderBottomColor: colors.glassBorderSoft,
-    paddingVertical: 10,
-    gap: 5,
-  },
-  scriptureTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  citation: {
-    flex: 1,
-    color: colors.white,
-    fontFamily: fonts.displayMedium,
-    fontSize: 13,
-  },
-  verse: {
-    color: colors.mutedStrong,
-    fontFamily: fonts.body,
-    fontSize: 11,
-    fontStyle: "italic",
-    lineHeight: 17,
-  },
-  reason: {
-    color: colors.muted,
-    fontFamily: fonts.body,
-    fontSize: 10,
-    lineHeight: 15,
-  },
-  remove: {
-    color: colors.error,
-    fontFamily: fonts.body,
-    fontSize: 10,
-  },
-  form: {
-    gap: 8,
-    borderTopWidth: 1,
-    borderTopColor: colors.glassBorderSoft,
-    paddingTop: 12,
-  },
-  disabled: {
-    opacity: 0.4,
-  },
-});

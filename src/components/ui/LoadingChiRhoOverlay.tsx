@@ -10,7 +10,8 @@ import {
 } from "react-native";
 import { Image } from "expo-image";
 import Svg, { Circle } from "react-native-svg";
-import { colors, fonts } from "../../theme/tokens";
+import { fonts, type ColorTokens } from "../../theme/tokens";
+import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
 
 const chiRhoIcon = require("../../../assets/onboarding/chirho.svg");
 const MINIMUM_VISIBLE_MS = 500;
@@ -20,10 +21,62 @@ interface LoadingChiRhoOverlayProps {
   label?: string;
 }
 
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
+    overlay: {
+      position: "absolute",
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+      zIndex: 1000,
+      elevation: 1000,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.loading,
+      paddingHorizontal: 32,
+    },
+    spinner: {
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    glow: {
+      position: "absolute",
+      width: "54%",
+      height: "54%",
+      borderRadius: 999,
+      backgroundColor: colors.accentFillMid,
+      shadowColor: colors.accent,
+      shadowOpacity: 0.28,
+      shadowRadius: 28,
+    },
+    logoWrap: {
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    logo: {
+      width: 92,
+      height: 124,
+    },
+    label: {
+      minHeight: 18,
+      marginTop: 12,
+      color: colors.mutedStrong,
+      fontFamily: fonts.monoMedium,
+      fontSize: 10,
+      letterSpacing: 0.7,
+      textAlign: "center",
+      textTransform: "uppercase",
+    },
+  });
+}
+
 export function LoadingChiRhoOverlay({
   visible,
   label = "Gathering your prayers…",
 }: LoadingChiRhoOverlayProps) {
+  const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const [mounted, setMounted] = useState(visible);
   const [reduceMotion, setReduceMotion] = useState(false);
@@ -207,7 +260,7 @@ export function LoadingChiRhoOverlay({
               cy={100}
               r={90}
               fill="none"
-              stroke="rgba(255,248,240,0.72)"
+              stroke={colors.creamStroke}
               strokeWidth={2.5}
               strokeLinecap="round"
               strokeDasharray="430 135"
@@ -228,7 +281,7 @@ export function LoadingChiRhoOverlay({
             contentFit="contain"
             source={chiRhoIcon}
             style={styles.logo}
-            tintColor="rgba(255,248,240,0.88)"
+            tintColor={colors.creamTint}
           />
         </Animated.View>
       </Animated.View>
@@ -238,51 +291,3 @@ export function LoadingChiRhoOverlay({
     </Animated.View>
   );
 }
-
-const styles = StyleSheet.create({
-  overlay: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    zIndex: 1000,
-    elevation: 1000,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#030403",
-    paddingHorizontal: 32,
-  },
-  spinner: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  glow: {
-    position: "absolute",
-    width: "54%",
-    height: "54%",
-    borderRadius: 999,
-    backgroundColor: "rgba(249,115,22,0.12)",
-    shadowColor: colors.accent,
-    shadowOpacity: 0.28,
-    shadowRadius: 28,
-  },
-  logoWrap: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  logo: {
-    width: 92,
-    height: 124,
-  },
-  label: {
-    minHeight: 18,
-    marginTop: 12,
-    color: colors.mutedStrong,
-    fontFamily: fonts.monoMedium,
-    fontSize: 10,
-    letterSpacing: 0.7,
-    textAlign: "center",
-    textTransform: "uppercase",
-  },
-});

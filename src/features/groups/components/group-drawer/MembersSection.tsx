@@ -1,10 +1,11 @@
 import { Pressable, Text, View } from "react-native";
+import { useTheme } from "../../../../theme/ThemeProvider";
 import type { GroupMember } from "../../types";
 import { GroupAvatar } from "../GroupAvatar";
 import {
   GroupDrawerError,
   GroupDrawerSection,
-  styles,
+  useGroupDrawerStyles,
 } from "./GroupDrawerControls";
 
 interface MembersSectionProps {
@@ -24,6 +25,8 @@ export function MembersSection({
   getError,
   onRemove,
 }: MembersSectionProps) {
+  const styles = useGroupDrawerStyles();
+  const { colors } = useTheme();
   return (
     <GroupDrawerSection title="Members">
       {members.length === 0 ? (
@@ -42,7 +45,7 @@ export function MembersSection({
             <View key={member.memberId}>
               <View style={styles.memberRow}>
                 <GroupAvatar
-                  borderColor="rgba(255,255,255,0.1)"
+                  borderColor={colors.glassBorder}
                   name={name}
                   size={34}
                   style={styles.memberAvatar}

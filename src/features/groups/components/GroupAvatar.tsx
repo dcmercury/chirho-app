@@ -1,7 +1,8 @@
 import { Image } from "expo-image";
 import { StyleSheet, Text, View, type ViewStyle } from "react-native";
 import { resolveImage } from "../../../lib/assets";
-import { colors, fonts } from "../../../theme/tokens";
+import { fonts, type ColorTokens } from "../../../theme/tokens";
+import { useTheme, useThemedStyles } from "../../../theme/ThemeProvider";
 
 interface GroupAvatarProps {
   uri?: string | null;
@@ -15,9 +16,12 @@ export function GroupAvatar({
   uri,
   name,
   size = 36,
-  borderColor = colors.white,
+  borderColor,
   style,
 }: GroupAvatarProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const resolvedBorder = borderColor ?? colors.white;
   return (
     <View
       style={[
@@ -26,7 +30,7 @@ export function GroupAvatar({
           width: size,
           height: size,
           borderRadius: size / 2,
-          borderColor,
+          borderColor: resolvedBorder,
         },
         style,
       ]}
@@ -47,16 +51,18 @@ export function GroupAvatar({
   );
 }
 
-const styles = StyleSheet.create({
-  avatar: {
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-    borderWidth: 2,
-    backgroundColor: "rgba(255,255,255,0.1)",
-  },
-  initial: {
-    color: colors.mutedStrong,
-    fontFamily: fonts.bodyMedium,
-  },
-});
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
+    avatar: {
+      alignItems: "center",
+      justifyContent: "center",
+      overflow: "hidden",
+      borderWidth: 2,
+      backgroundColor: colors.glassFillStrong,
+    },
+    initial: {
+      color: colors.mutedStrong,
+      fontFamily: fonts.bodyMedium,
+    },
+  });
+}

@@ -1,5 +1,5 @@
 import { Pressable, Text, View } from "react-native";
-import { styles } from "./GroupDrawerControls";
+import { useGroupDrawerStyles } from "./GroupDrawerControls";
 
 interface GroupDrawerHeaderProps {
   groupName: string;
@@ -12,6 +12,7 @@ export function GroupDrawerHeader({
   memberCount,
   onClose,
 }: GroupDrawerHeaderProps) {
+  const styles = useGroupDrawerStyles();
   return (
     <>
       <Pressable

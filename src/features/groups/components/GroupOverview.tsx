@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import {
   Pressable,
   RefreshControl,
@@ -8,7 +9,9 @@ import {
 } from "react-native";
 import { ScrollView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, fonts } from "../../../theme/tokens";
+import { SwipeChevron } from "../../../components/ui/SwipeChevron";
+import { fonts, type ColorTokens } from "../../../theme/tokens";
+import { useTheme, useThemedStyles } from "../../../theme/ThemeProvider";
 import type {
   GroupMember,
   PrayerGroup,
@@ -59,14 +62,47 @@ export function GroupOverview({
   onOpenMembers,
 }: GroupOverviewProps) {
   const insets = useSafeAreaInsets();
+  const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
   const { height } = useWindowDimensions();
   const activeMembers = members
     .filter((member) => member.status === "active")
     .slice(0, 5);
   const displayContent = splitPurpose(group.purpose, group.scripture?.text);
+  const canOpenPrayers = prayerRequestCount > 0 && !requestOpen;
+  const scrollOffsetRef = useRef(0);
+  const viewportHeightRef = useRef(0);
+  const contentHeightRef = useRef(0);
+  const touchStartRef = useRef<{
+    pageY: number;
+    canOpenPrayers: boolean;
+  } | null>(null);
+
+  const handleTouchStart = (pageY: number) => {
+    const offset = scrollOffsetRef.current;
+    const viewportHeight = viewportHeightRef.current;
+    const contentHeight = contentHeightRef.current;
+    const contentFits = contentHeight <= viewportHeight + 4;
+    touchStartRef.current = {
+      pageY,
+      canOpenPrayers: canOpenPrayers && (contentFits || offset <= 4),
+    };
+  };
+
+  const handleTouchEnd = (pageY: number) => {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    if (!start) return;
+    if (pageY - start.pageY >= 56 && start.canOpenPrayers) {
+      onOpenPrayers();
+    }
+  };
 
   return (
+    <View style={styles.root}>
     <ScrollView
+      alwaysBounceVertical={!canOpenPrayers}
+      bounces={!canOpenPrayers}
       contentContainerStyle={[
         styles.content,
         {
@@ -74,14 +110,31 @@ export function GroupOverview({
           paddingBottom: insets.bottom + 128,
         },
       ]}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          tintColor={colors.white}
-        />
-      }
       keyboardShouldPersistTaps="handled"
+      onContentSizeChange={(_, contentHeight) => {
+        contentHeightRef.current = contentHeight;
+      }}
+      onLayout={(event) => {
+        viewportHeightRef.current = event.nativeEvent.layout.height;
+      }}
+      onScroll={(event) => {
+        scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+      }}
+      onTouchCancel={() => {
+        touchStartRef.current = null;
+      }}
+      onTouchEnd={(event) => handleTouchEnd(event.nativeEvent.pageY)}
+      onTouchStart={(event) => handleTouchStart(event.nativeEvent.pageY)}
+      refreshControl={
+        canOpenPrayers ? undefined : (
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.title}
+          />
+        )
+      }
+      scrollEventThrottle={16}
     >
       <View style={styles.body}>
         <Stagger delay={200}>
@@ -168,13 +221,15 @@ export function GroupOverview({
             </View>
             {!requestOpen ? (
               <View style={styles.rightActions}>
-                <Pressable
-                  accessibilityLabel="New prayer request"
-                  onPress={onOpenRequest}
-                  style={[styles.circle, styles.newCircle]}
-                >
-                  <PlusIcon color={colors.accent} size={14} />
-                </Pressable>
+                {group.canCreatePrayerRequests ? (
+                  <Pressable
+                    accessibilityLabel="New prayer request"
+                    onPress={onOpenRequest}
+                    style={[styles.circle, styles.newCircle]}
+                  >
+                    <PlusIcon color={colors.accent} size={14} />
+                  </Pressable>
+                ) : null}
                 <Pressable
                   accessibilityLabel={`View ${prayerRequestCount} prayer ${
                     prayerRequestCount === 1 ? "request" : "requests"
@@ -190,6 +245,21 @@ export function GroupOverview({
         </Stagger>
       </View>
     </ScrollView>
+    {canOpenPrayers ? (
+      <View
+        style={[
+          styles.swipeNavigation,
+          { bottom: Math.max(insets.bottom, 12) },
+        ]}
+      >
+        <SwipeChevron
+          accessibilityLabel="View prayer requests, swipe down"
+          direction="down"
+          onPress={onOpenPrayers}
+        />
+      </View>
+    ) : null}
+    </View>
   );
 }
 
@@ -205,7 +275,9 @@ function splitPurpose(purpose: string, scripture?: string | null) {
   return { intro: trimmed, main: "" };
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
+  root: { flex: 1 },
   content: {
     flexGrow: 1,
     justifyContent: "center",
@@ -213,14 +285,14 @@ const styles = StyleSheet.create({
   },
   body: { gap: 12 },
   label: {
-    color: colors.accent,
+    color: colors.accentText,
     fontFamily: fonts.mono,
     fontSize: 10.4,
     letterSpacing: 0.62,
     textTransform: "uppercase",
   },
   title: {
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.displayMedium,
     fontSize: 32,
     lineHeight: 35,
@@ -228,7 +300,7 @@ const styles = StyleSheet.create({
   },
   scripture: {
     maxWidth: "90%",
-    color: "rgba(255,255,255,0.45)",
+    color: colors.mutedMid,
     fontFamily: fonts.body,
     fontSize: 12.8,
     lineHeight: 20.5,
@@ -239,7 +311,7 @@ const styles = StyleSheet.create({
     paddingLeft: 16,
     borderLeftWidth: 2,
     borderLeftColor: colors.accent,
-    color: "rgba(220,220,220,0.85)",
+    color: colors.bodyOnPhoto,
     fontFamily: fonts.body,
     fontSize: 15.2,
     lineHeight: 27.4,
@@ -280,19 +352,26 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
     borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.3)",
-    backgroundColor: "rgba(255,255,255,0.05)",
+    borderColor: colors.glassBorderStrong,
+    backgroundColor: colors.glassFill,
     alignItems: "center",
     justifyContent: "center",
   },
   inviteCircle: {
     borderStyle: "dotted",
-    borderColor: "rgba(255,255,255,0.6)",
-    backgroundColor: "rgba(255,255,255,0.08)",
+    borderColor: colors.glassBorderLouder,
+    backgroundColor: colors.glassFillHover,
   },
   newCircle: {
-    borderColor: "rgba(249,115,22,0.4)",
-    backgroundColor: "rgba(249,115,22,0.15)",
+    borderColor: colors.accentBorderSelected,
+    backgroundColor: colors.accentFillSelected,
   },
   error: { color: colors.error, fontFamily: fonts.body, fontSize: 11 },
-});
+  swipeNavigation: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+  });
+}

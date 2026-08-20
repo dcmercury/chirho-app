@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Platform,
   Pressable,
   RefreshControl,
@@ -12,24 +13,31 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { useAuth, useUser } from "@clerk/expo";
 import { useRouter, type Href } from "expo-router";
-import { colors, fonts } from "../../theme/tokens";
-import { images, isPrivateImagePath, resolveImage } from "../../lib/assets";
+import { fonts, type ColorTokens } from "../../theme/tokens";
+import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
+import { privateImageCachePolicy, resolveImage } from "../../lib/assets";
+import { parseAppearance } from "../../lib/appearancePreference";
+import { selectedDashboardBackgrounds } from "../../lib/dashboardBackgrounds";
+import { setBackgroundMusicEnabled } from "../../lib/backgroundMusicPreference";
 import {
   addLovedOne,
+  createGroup,
   createPrayerFocus,
   generateLovedOnePrayer,
   generatePrayerCardAudio,
   getLovedOnePhotos,
   getMobileHome,
   saveLovedOneConfig,
+  uploadLovedOnePhoto,
   updatePrayerFocus,
 } from "../../lib/api";
 import { GridOverlay } from "../ui/GridOverlay";
-import { DisplayTitle } from "../ui/DisplayTitle";
 import { PrayerCard } from "../ui/PrayerCard";
 import { LovedOne } from "../ui/LovedOne";
+import { KenBurnsImage, lovedOneImagePaths } from "../ui/KenBurnsImage";
 import { LoadingChiRhoOverlay } from "../ui/LoadingChiRhoOverlay";
 import { AddLovedOneModal } from "./AddLovedOneModal";
+import { CreateGroupModal } from "./CreateGroupModal";
 import { LovedOnePhotosModal } from "./LovedOnePhotosModal";
 import { PrayerDetailModal } from "./PrayerDetailModal";
 import { PrayerFocusModal } from "./PrayerFocusModal";
@@ -43,14 +51,18 @@ import type {
   PrayerFocus,
   PrayerFocusInput,
 } from "../../types/home";
+import { communityAllowsPersonalPrayer } from "../../types/home";
 
 async function prefetchHomeImages(result: MobileHomeResponse, token: string) {
   const paths = [
-    result.community?.backgroundImage,
+    ...selectedDashboardBackgrounds(
+      result.community?.backgroundImage,
+      result.home.profile.dashboardBackgrounds,
+    ),
     ...result.home.cards.slice(0, 2).map((card) => card.image),
     ...result.home.lovedOnes
       .slice(0, 5)
-      .map((person) => person.primaryPhoto?.contentPath || person.avatar),
+      .flatMap((person) => lovedOneImagePaths(person)),
     ...result.home.groups.slice(0, 3).map((group) => group.image),
   ];
   const sources = paths
@@ -84,7 +96,7 @@ async function prefetchHomeImages(result: MobileHomeResponse, token: string) {
     Promise.allSettled(
       sources.map(({ path, source }) =>
         Image.prefetch(source.uri, {
-          cachePolicy: isPrivateImagePath(path) ? "memory" : "memory-disk",
+          cachePolicy: privateImageCachePolicy(path) ?? "memory-disk",
           headers: source.headers,
         }),
       ),
@@ -141,10 +153,18 @@ async function hydrateLovedOnePhotos(
           card.subjectType === "loved_one" && card.subjectId
             ? photosById.get(card.subjectId)
             : undefined;
-        const fromTitle = card.title.match(/\bfor\s+(.+)$/i)?.[1]?.trim().toLowerCase();
+        const fromTitle =
+          card.title.match(/\bfor\s+(.+)$/i)?.[1]?.trim().toLowerCase() ||
+          (card.subjectType === "loved_one"
+            ? card.title.trim().toLowerCase()
+            : undefined);
         const paths = fromId || (fromTitle ? photosByName.get(fromTitle) : undefined);
         if (!paths?.length) return card;
-        return { ...card, image: paths[index % paths.length] };
+        return {
+          ...card,
+          image: paths[index % paths.length],
+          images: paths,
+        };
       }),
     },
   };
@@ -154,6 +174,8 @@ export function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { getToken } = useAuth();
+  const styles = useThemedStyles(createStyles);
+  const { colors, setAppearance } = useTheme();
   const getTokenRef = useRef(getToken);
   const { user } = useUser();
   const firstName = user?.firstName || "friend";
@@ -180,11 +202,29 @@ export function HomeScreen() {
     null,
   );
   const [prayerFocusOpen, setPrayerFocusOpen] = useState(false);
+  const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [selectedFocus, setSelectedFocus] = useState<PrayerFocus | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [savingLovedOne, setSavingLovedOne] = useState(false);
+  const [savingGroup, setSavingGroup] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const generatingLovedOneRef = useRef(false);
+  const showPersonalPrayer = communityAllowsPersonalPrayer(
+    response?.community,
+  );
+
+  useEffect(() => {
+    console.info("[HomeFeatures]", {
+      hasCommunity: Boolean(response?.community),
+      communityuuid: response?.community?.communityuuid ?? null,
+      name: response?.community?.name ?? null,
+      licenseTier: response?.community?.licenseTier ?? null,
+      personalPrayer: response?.community?.features?.personalPrayer ?? null,
+      dailyPrayers: response?.community?.features?.dailyPrayers ?? null,
+      showPersonalPrayer,
+      features: response?.community?.features ?? null,
+    });
+  }, [response, showPersonalPrayer]);
 
   useEffect(() => {
     getTokenRef.current = getToken;
@@ -243,6 +283,15 @@ export function HomeScreen() {
           await getMobileHome(token),
           token,
         );
+        console.info("[HomeFeatures] home payload", {
+          hasCommunity: Boolean(result.community),
+          communityuuid: result.community?.communityuuid ?? null,
+          name: result.community?.name ?? null,
+          licenseTier: result.community?.licenseTier ?? null,
+          personalPrayer: result.community?.features?.personalPrayer ?? null,
+          dailyPrayers: result.community?.features?.dailyPrayers ?? null,
+          allowPersonalPrayer: communityAllowsPersonalPrayer(result.community),
+        });
         setResponse(result);
         if (!refresh) await prefetchHomeImages(result, token);
       } catch (err) {
@@ -260,6 +309,17 @@ export function HomeScreen() {
   }, [loadHome]);
 
   const home: HomeData | null = response?.home || null;
+
+  useEffect(() => {
+    if (typeof home?.profile.backgroundMusicEnabled !== "boolean") return;
+    setBackgroundMusicEnabled(home.profile.backgroundMusicEnabled);
+  }, [home?.profile.backgroundMusicEnabled]);
+
+  useEffect(() => {
+    const theme = home?.profile.appSettings.theme;
+    if (theme !== "light" && theme !== "dark") return;
+    setAppearance(parseAppearance(theme));
+  }, [home?.profile.appSettings.theme, setAppearance]);
   const selectedCardIndex =
     selectedCard && home
       ? home.cards.findIndex((card) =>
@@ -268,9 +328,10 @@ export function HomeScreen() {
             : card === selectedCard,
         )
       : -1;
-  const background = response?.community?.backgroundImage
-    ? resolveImage(response.community.backgroundImage)
-    : images.intro;
+  const dashboardBackgrounds = selectedDashboardBackgrounds(
+    response?.community?.backgroundImage,
+    home?.profile.dashboardBackgrounds,
+  );
 
   const showAdjacentRecentPrayer = (direction: -1 | 1) => {
     if (!home || selectedCardIndex < 0) return;
@@ -315,15 +376,16 @@ export function HomeScreen() {
   const handleLovedOnePress = async (person: HomeLovedOne) => {
     if (generatingLovedOneRef.current) return;
     generatingLovedOneRef.current = true;
-    const backgroundImage =
-      person.primaryPhoto?.contentPath ||
-      person.backgroundImage ||
-      "/cover1.jpg";
+    const images = lovedOneImagePaths(person);
+    const backgroundImage = images[0] || "/cover1.jpg";
+    const timeOfDayLabel =
+      new Date().getHours() < 12 ? "Morning Prayer" : "Evening Prayer";
     setSelectedCard({
-      title: `Prayer for ${person.name}`,
-      verse: person.intention,
+      title: person.name,
+      verse: timeOfDayLabel,
       text: `Preparing a prayer for ${person.name}...`,
       image: backgroundImage,
+      images,
     });
     setPrayerLoading(true);
     try {
@@ -334,7 +396,12 @@ export function HomeScreen() {
         token,
         true,
       );
-      const pendingPrayer = { ...prayer, audioStatus: "pending" as const };
+      const pendingPrayer = {
+        ...prayer,
+        image: images[0] || prayer.image,
+        images,
+        audioStatus: "pending" as const,
+      };
       setSelectedCard(pendingPrayer);
       setResponse((current) =>
         current
@@ -374,20 +441,25 @@ export function HomeScreen() {
     } catch (err) {
       setPrayerLoading(false);
       setSelectedCard({
-        title: `Prayer for ${person.name}`,
-        verse: "",
+        title: person.name,
+        verse: timeOfDayLabel,
         text:
           err instanceof Error
             ? err.message
             : "Unable to generate a prayer. Please try again.",
         image: backgroundImage,
+        images,
       });
     } finally {
       generatingLovedOneRef.current = false;
     }
   };
 
-  const handleAddLovedOne = async (name: string, categories: string[]) => {
+  const handleAddLovedOne = async (
+    name: string,
+    categories: string[],
+    photoDataUris: string[] = [],
+  ) => {
     setSavingLovedOne(true);
     setMutationError(null);
     try {
@@ -396,13 +468,36 @@ export function HomeScreen() {
       if (categories.length) {
         await saveLovedOneConfig(lovedOne.id, categories, token);
       }
+      for (const imageData of photoDataUris) {
+        await uploadLovedOnePhoto(lovedOne.id, imageData, token);
+      }
       await loadHome(true);
-      queuePhotoModal(lovedOne);
       setAddLovedOneOpen(false);
     } catch (err) {
       setMutationError(err instanceof Error ? err.message : "Unable to add loved one");
     } finally {
       setSavingLovedOne(false);
+    }
+  };
+
+  const handleCreateGroup = async (name: string) => {
+    setSavingGroup(true);
+    setMutationError(null);
+    try {
+      const token = await requireCurrentToken();
+      const group = await createGroup(name, token);
+      await loadHome(true);
+      setCreateGroupOpen(false);
+      router.push({
+        pathname: "/(app)/groups/[groupuuid]",
+        params: { groupuuid: group.groupuuid },
+      });
+    } catch (err) {
+      setMutationError(
+        err instanceof Error ? err.message : "Unable to create this group",
+      );
+    } finally {
+      setSavingGroup(false);
     }
   };
 
@@ -441,25 +536,55 @@ export function HomeScreen() {
 
   return (
     <View style={styles.root}>
-      <Image source={background} style={StyleSheet.absoluteFill} contentFit="cover" />
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.8)" }]} />
+      <KenBurnsImage
+        path={dashboardBackgrounds[0]}
+        paths={dashboardBackgrounds}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }]} />
       <GridOverlay />
 
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingTop: insets.top + 24, paddingBottom: 104 + insets.bottom },
+          { paddingTop: insets.top + 24, paddingBottom: 32 + insets.bottom },
         ]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => loadHome(true)}
-            tintColor={colors.white}
+            tintColor={colors.title}
           />
         }
         showsVerticalScrollIndicator={false}
       >
-        <DisplayTitle title="Welcome" subtitle={`${firstName}!`} />
+        <View style={styles.welcome}>
+          <Pressable
+            accessibilityLabel="Open profile and settings"
+            accessibilityRole="button"
+            onPress={() => setProfileOpen(true)}
+            style={({ pressed }) => [
+              styles.profileTrigger,
+              pressed && styles.pressed,
+            ]}
+          >
+            {home?.profile.avatar ? (
+              <Image
+                source={resolveImage(home.profile.avatar)}
+                style={styles.profileTriggerAvatar}
+                contentFit="cover"
+              />
+            ) : (
+              <Text style={styles.navN}>
+                {(home?.profile.name || firstName).slice(0, 1).toUpperCase()}
+              </Text>
+            )}
+          </Pressable>
+          <View style={styles.welcomeCopy}>
+            <Text style={styles.welcomeGreeting}>{daypartGreeting()}</Text>
+            <Text style={styles.welcomeName}>{firstName}!</Text>
+          </View>
+        </View>
 
         {error && !home ? (
           <View style={styles.errorCard}>
@@ -471,7 +596,7 @@ export function HomeScreen() {
           </View>
         ) : home ? (
           <>
-            {home.dailyDeck ? (
+            {showPersonalPrayer && home.dailyDeck ? (
               <>
                 <Text style={styles.section}>Today's Prayer Deck</Text>
                 <Pressable
@@ -503,6 +628,8 @@ export function HomeScreen() {
               </>
             ) : null}
 
+            {showPersonalPrayer ? (
+              <>
             <Text style={styles.section}>Recent Prayer Cards</Text>
             {home?.cards.length ? (
               <ScrollView
@@ -515,7 +642,6 @@ export function HomeScreen() {
                     key={card.prayeruuid || `${card.title}-${i}`}
                     card={card}
                     index={i}
-                    token={sessionToken}
                     onPress={() => {
                       setDetailNavigationDirection(1);
                       setSelectedCard(card);
@@ -552,7 +678,6 @@ export function HomeScreen() {
                     person={person}
                     compact
                     showIntention={false}
-                    token={sessionToken}
                     onPress={() => handleLovedOnePress(person)}
                   />
                 ))}
@@ -618,9 +743,42 @@ export function HomeScreen() {
                 Add a focus to include in your daily prayer deck.
               </Text>
             )}
+              </>
+            ) : null}
 
             <View style={styles.sectionRow}>
               <Text style={styles.section}>Prayer Groups</Text>
+              {!response?.community ||
+              response.community.createBlockedReason !== "members" ? (
+                <Pressable
+                  accessibilityLabel="Start a prayer group"
+                  accessibilityRole="button"
+                  accessibilityState={{
+                    disabled: response?.community?.canCreateGroups === false,
+                  }}
+                  onPress={() => {
+                    if (response?.community?.canCreateGroups === false) {
+                      Alert.alert(
+                        "Group limit reached",
+                        response.community.createBlockedReason === "user_limit"
+                          ? "You have reached the group limit for this church."
+                          : "This church’s plan does not include more groups.",
+                      );
+                      return;
+                    }
+                    setMutationError(null);
+                    setCreateGroupOpen(true);
+                  }}
+                  style={({ pressed }) => [
+                    styles.plus,
+                    pressed && styles.pressed,
+                    response?.community?.canCreateGroups === false &&
+                      styles.plusDisabled,
+                  ]}
+                >
+                  <Text style={styles.plusText}>+</Text>
+                </Pressable>
+              ) : null}
             </View>
             {home?.groups.length ? (
               <ScrollView
@@ -644,10 +802,9 @@ export function HomeScreen() {
                       pressed && styles.pressed,
                     ]}
                   >
-                    <Image
-                      source={resolveImage(group.image)}
+                    <KenBurnsImage
+                      path={group.image}
                       style={styles.groupImg}
-                      contentFit="cover"
                     />
                     {group.prayerCount ? (
                       <View style={styles.groupBadge}>
@@ -683,29 +840,6 @@ export function HomeScreen() {
           </>
         ) : null}
       </ScrollView>
-
-      <Pressable
-        accessibilityLabel="Open profile and settings"
-        accessibilityRole="button"
-        onPress={() => setProfileOpen(true)}
-        style={({ pressed }) => [
-          styles.profileTrigger,
-          { bottom: Math.max(insets.bottom, 12) },
-          pressed && styles.pressed,
-        ]}
-      >
-        {home?.profile.avatar ? (
-          <Image
-            source={resolveImage(home.profile.avatar)}
-            style={styles.profileTriggerAvatar}
-            contentFit="cover"
-          />
-        ) : (
-          <Text style={styles.navN}>
-            {(home?.profile.name || firstName).slice(0, 1).toUpperCase()}
-          </Text>
-        )}
-      </Pressable>
 
       <PrayerDetailModal
         card={selectedCard}
@@ -748,6 +882,13 @@ export function HomeScreen() {
         onClose={() => setPhotoLovedOne(null)}
         onChanged={() => loadHome(true)}
       />
+      <CreateGroupModal
+        visible={createGroupOpen}
+        saving={savingGroup}
+        error={createGroupOpen ? mutationError : null}
+        onClose={() => setCreateGroupOpen(false)}
+        onSubmit={handleCreateGroup}
+      />
       <PrayerFocusModal
         visible={prayerFocusOpen}
         focus={selectedFocus}
@@ -770,7 +911,6 @@ export function HomeScreen() {
         prayerFocuses={home?.prayerFocuses || []}
         groups={home?.groups || []}
         community={response?.community || null}
-        token={sessionToken}
         onClose={() => setProfileOpen(false)}
         onDismiss={openQueuedPhotoModal}
         onChanged={() => loadHome(true)}
@@ -783,13 +923,47 @@ export function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function daypartGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.canvas,
   },
   scroll: {
     paddingHorizontal: 24,
+  },
+  welcome: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 16,
+  },
+  welcomeCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  welcomeGreeting: {
+    fontFamily: fonts.mono,
+    fontSize: 8.8,
+    color: colors.accentText,
+    textTransform: "uppercase",
+    letterSpacing: 0.44,
+    marginBottom: 4,
+  },
+  welcomeName: {
+    fontFamily: fonts.displayMedium,
+    fontSize: 36,
+    lineHeight: 36,
+    fontWeight: "500",
+    letterSpacing: -0.9,
+    color: colors.title,
   },
   errorCard: {
     marginTop: 24,
@@ -800,7 +974,7 @@ const styles = StyleSheet.create({
     padding: 18,
   },
   errorTitle: {
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.displayMedium,
     fontSize: 16,
     marginBottom: 6,
@@ -814,13 +988,13 @@ const styles = StyleSheet.create({
   retry: {
     alignSelf: "flex-start",
     borderRadius: 18,
-    backgroundColor: colors.white,
+    backgroundColor: colors.buttonPrimary,
     paddingHorizontal: 16,
     paddingVertical: 9,
     marginTop: 14,
   },
   retryText: {
-    color: colors.black,
+    color: colors.buttonOnPrimary,
     fontFamily: fonts.bodyMedium,
     fontSize: 11,
   },
@@ -830,22 +1004,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "rgba(249,115,22,0.38)",
-    backgroundColor: "rgba(249,115,22,0.1)",
+    borderColor: colors.accentBorderStrong,
+    backgroundColor: colors.accentFill,
     paddingHorizontal: 18,
     paddingVertical: 16,
     marginBottom: 16,
   },
   deckCopy: { flex: 1, minWidth: 0 },
   deckEyebrow: {
-    color: colors.accent,
+    color: colors.accentText,
     fontFamily: fonts.monoMedium,
     fontSize: 9,
     letterSpacing: 0.7,
     textTransform: "uppercase",
   },
   deckTitle: {
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.displayMedium,
     fontSize: 17,
     marginTop: 5,
@@ -857,7 +1031,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   deckArrow: {
-    color: colors.accent,
+    color: colors.accentText,
     fontFamily: fonts.displayMedium,
     fontSize: 23,
     marginLeft: 14,
@@ -890,14 +1064,17 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.15)",
+    borderColor: colors.glassBorderRow,
     alignItems: "center",
     justifyContent: "center",
   },
   plusText: {
-    color: colors.white,
+    color: colors.title,
     fontSize: 16,
     lineHeight: 18,
+  },
+  plusDisabled: {
+    opacity: 0.35,
   },
   pressed: {
     opacity: 0.7,
@@ -932,11 +1109,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(249,115,22,0.12)",
+    backgroundColor: colors.accentFillMid,
     marginBottom: 9,
   },
   focusTitle: {
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.displayMedium,
     fontSize: 12,
   },
@@ -990,7 +1167,7 @@ const styles = StyleSheet.create({
   },
   groupName: {
     flexShrink: 1,
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.displayMedium,
     fontSize: 11,
     fontWeight: "500",
@@ -1019,26 +1196,25 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   profileTrigger: {
-    position: "absolute",
-    left: "50%",
-    marginLeft: -36,
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.15)",
-    backgroundColor: "rgba(0,0,0,0.55)",
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: colors.title,
+    backgroundColor: colors.overlaySoft,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
   navN: {
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.displayMedium,
     fontSize: 16,
   },
   profileTriggerAvatar: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
   },
-});
+  });
+}

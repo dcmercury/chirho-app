@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
-import { colors } from "../../../theme/tokens";
+import { useTheme } from "../../../theme/ThemeProvider";
 import type { HomeProfile } from "../../../types/home";
-import { InlineError, ManageAvatar, styles } from "./ProfileControls";
+import { InlineError, ManageAvatar, useProfileStyles } from "./ProfileControls";
 
 export function AccountSection({
   account,
@@ -25,6 +25,8 @@ export function AccountSection({
   onSave: (firstName: string, lastName: string) => Promise<boolean>;
   onChangeAvatar: () => void;
 }) {
+  const styles = useProfileStyles();
+  const { appearance, colors } = useTheme();
   const [firstName, setFirstName] = useState(account.firstName || "");
   const [lastName, setLastName] = useState(account.lastName || "");
   const [expanded, setExpanded] = useState(false);
@@ -109,6 +111,7 @@ export function AccountSection({
               accessibilityLabel="First name"
               editable={!pending}
               onChangeText={setFirstName}
+              keyboardAppearance={appearance === "light" ? "light" : "dark"}
               placeholder="First name"
               placeholderTextColor={colors.muted}
               style={[styles.input, styles.nameField]}
@@ -118,6 +121,7 @@ export function AccountSection({
               accessibilityLabel="Last name"
               editable={!pending}
               onChangeText={setLastName}
+              keyboardAppearance={appearance === "light" ? "light" : "dark"}
               placeholder="Last name"
               placeholderTextColor={colors.muted}
               style={[styles.input, styles.nameField]}

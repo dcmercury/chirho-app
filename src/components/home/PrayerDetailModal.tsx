@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  getBackgroundMusicEnabled,
+  subscribeBackgroundMusicEnabled,
+} from "../../lib/backgroundMusicPreference";
+import {
   ActivityIndicator,
+  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -9,14 +14,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Animated, {
-  Easing,
-  FadeInDown,
-  FadeInUp,
-  ReduceMotion,
-} from "react-native-reanimated";
 import {
   setAudioModeAsync,
   useAudioPlayer,
@@ -25,20 +23,87 @@ import {
 import {
   API_BASE,
   DEFAULT_BACKGROUND_MUSIC,
-  isPrivateImagePath,
   resolveAudioUrl,
-  resolveImage,
 } from "../../lib/assets";
-import { trackPrayerShare } from "../../lib/api";
-import { colors, fonts } from "../../theme/tokens";
+import { publishPrayerCard, trackPrayerShare } from "../../lib/api";
+import { fonts, type ColorTokens } from "../../theme/tokens";
+import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
 import type { HomePrayerCard } from "../../types/home";
+import { KenBurnsImage } from "../ui/KenBurnsImage";
 import { SwipeChevron } from "../ui/SwipeChevron";
+import { Stagger } from "../../features/groups/components/Stagger";
 import {
   CloseIcon,
   PauseIcon,
   PlayIcon,
   ShareIcon,
 } from "../../features/groups/components/Icons";
+
+const BODY_START_MS = 450;
+const BODY_STEP_MS = 100;
+const MAX_PRAYER_SEGMENTS = 4;
+
+function prayerSegments(text: string): string[] {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+  const paragraphs = trimmed
+    .split(/\n\s*\n/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const parts =
+    paragraphs.length > 1 ? paragraphs : splitSentences(paragraphs[0] || trimmed);
+  if (parts.length <= MAX_PRAYER_SEGMENTS) return parts;
+  const joiner = paragraphs.length > 1 ? "\n\n" : " ";
+  return [
+    ...parts.slice(0, MAX_PRAYER_SEGMENTS - 1),
+    parts.slice(MAX_PRAYER_SEGMENTS - 1).join(joiner),
+  ];
+}
+
+function splitSentences(text: string): string[] {
+  const tokens = text.split(/([.!?]+)\s+/);
+  const sentences: string[] = [];
+  for (let index = 0; index < tokens.length; index += 2) {
+    const sentence = `${tokens[index] || ""}${tokens[index + 1] || ""}`.trim();
+    if (sentence) sentences.push(sentence);
+  }
+  return sentences.length ? sentences : [text];
+}
+
+const MUSIC_VOLUME = 0.14;
+const MUSIC_FADE_IN_MS = 900;
+const MUSIC_FADE_OUT_MS = 700;
+
+function fadePlayerVolume(
+  player: { volume: number },
+  to: number,
+  duration: number,
+  onDone?: () => void,
+) {
+  const from = player.volume;
+  const startedAt = Date.now();
+  let frame = 0;
+  let cancelled = false;
+
+  const tick = () => {
+    if (cancelled) return;
+    const progress = Math.min(1, (Date.now() - startedAt) / duration);
+    const eased = progress * progress * (3 - 2 * progress);
+    player.volume = from + (to - from) * eased;
+    if (progress < 1) {
+      frame = requestAnimationFrame(tick);
+      return;
+    }
+    player.volume = to;
+    onDone?.();
+  };
+
+  frame = requestAnimationFrame(tick);
+  return () => {
+    cancelled = true;
+    cancelAnimationFrame(frame);
+  };
+}
 
 interface PrayerDetailModalProps {
   card: HomePrayerCard | null;
@@ -71,6 +136,11 @@ export function PrayerDetailModal({
   onPlaybackError,
   onClose,
 }: PrayerDetailModalProps) {
+  const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
+  const [backgroundMusicEnabled, setBackgroundMusicEnabled] = useState(
+    getBackgroundMusicEnabled,
+  );
   const narrationUrl =
     card?.audioAvailable === false
       ? null
@@ -80,10 +150,9 @@ export function PrayerDetailModal({
               ? `/api/prayer-audio/${card.prayeruuid}`
               : null),
         );
-  const musicUrl =
-    card?.backgroundMusicVolume === 0
-      ? null
-      : resolveAudioUrl(card?.backgroundMusicUrl || DEFAULT_BACKGROUND_MUSIC);
+  const musicUrl = backgroundMusicEnabled
+    ? resolveAudioUrl(DEFAULT_BACKGROUND_MUSIC)
+    : null;
   const narrationPlayer = useAudioPlayer(narrationUrl, {
     downloadFirst: true,
     keepAudioSessionActive: true,
@@ -94,6 +163,9 @@ export function PrayerDetailModal({
   });
   const narrationStatus = useAudioPlayerStatus(narrationPlayer);
   const musicStatus = useAudioPlayerStatus(musicPlayer);
+  const musicSessionRef = useRef<"idle" | "fading-in" | "playing" | "fading-out">(
+    "idle",
+  );
   const pendingPlayRef = useRef(false);
   const autoPlayKeyRef = useRef<string | null>(null);
   const reportedErrorRef = useRef<string | null>(null);
@@ -123,6 +195,11 @@ export function PrayerDetailModal({
     onPlaybackCompleteRef.current = onPlaybackComplete;
     onPlaybackErrorRef.current = onPlaybackError;
   }, [onPlaybackComplete, onPlaybackError]);
+
+  useEffect(
+    () => subscribeBackgroundMusicEnabled(setBackgroundMusicEnabled),
+    [],
+  );
 
   useEffect(() => {
     if (!__DEV__ || !visible) return;
@@ -160,24 +237,56 @@ export function PrayerDetailModal({
 
   useEffect(() => {
     narrationPlayer.volume = 1;
-    musicPlayer.volume = card?.backgroundMusicVolume ?? 0.14;
     musicPlayer.loop = true;
-  }, [
-    card?.backgroundMusicVolume,
-    musicPlayer,
-    narrationPlayer,
-  ]);
+  }, [musicPlayer, narrationPlayer]);
 
   useEffect(() => {
     if (!visible) {
       narrationPlayer.pause();
-      musicPlayer.pause();
       pendingPlayRef.current = false;
       autoPlayKeyRef.current = null;
       reportedErrorRef.current = null;
       setAudioMessage(null);
     }
-  }, [musicPlayer, narrationPlayer, visible]);
+  }, [narrationPlayer, visible]);
+
+  useEffect(() => {
+    const shouldPlay = visible && Boolean(musicUrl) && musicStatus.isLoaded;
+    let cancelFade: (() => void) | undefined;
+
+    if (shouldPlay) {
+      if (
+        musicSessionRef.current === "playing" ||
+        musicSessionRef.current === "fading-in"
+      ) {
+        return;
+      }
+      const startFromSilence = musicSessionRef.current === "idle";
+      musicSessionRef.current = "fading-in";
+      if (startFromSilence) {
+        musicPlayer.volume = 0;
+        void musicPlayer.seekTo?.(0);
+      }
+      musicPlayer.play();
+      cancelFade = fadePlayerVolume(musicPlayer, MUSIC_VOLUME, MUSIC_FADE_IN_MS, () => {
+        musicSessionRef.current = "playing";
+      });
+      return () => cancelFade?.();
+    }
+
+    if (musicSessionRef.current === "idle") {
+      musicPlayer.pause();
+      musicPlayer.volume = 0;
+      return;
+    }
+
+    musicSessionRef.current = "fading-out";
+    cancelFade = fadePlayerVolume(musicPlayer, 0, MUSIC_FADE_OUT_MS, () => {
+      musicPlayer.pause();
+      musicSessionRef.current = "idle";
+    });
+    return () => cancelFade?.();
+  }, [musicPlayer, musicStatus.isLoaded, musicUrl, visible]);
 
   useEffect(() => {
     if (!visible || !autoPlay || !narrationUrl) return;
@@ -187,7 +296,6 @@ export function PrayerDetailModal({
     setAudioMessage(null);
     if (narrationStatus.isLoaded) {
       narrationPlayer.play();
-      if (musicStatus.isLoaded) musicPlayer.play();
     } else {
       pendingPlayRef.current = true;
       setAudioMessage("Loading narration…");
@@ -195,8 +303,6 @@ export function PrayerDetailModal({
   }, [
     autoPlay,
     card?.prayeruuid,
-    musicPlayer,
-    musicStatus.isLoaded,
     narrationPlayer,
     narrationStatus.isLoaded,
     narrationUrl,
@@ -208,37 +314,13 @@ export function PrayerDetailModal({
     pendingPlayRef.current = false;
     setAudioMessage(null);
     narrationPlayer.play();
-    if (musicStatus.isLoaded) musicPlayer.play();
-  }, [
-    musicPlayer,
-    musicStatus.isLoaded,
-    narrationPlayer,
-    narrationStatus.isLoaded,
-  ]);
-
-  useEffect(() => {
-    if (
-      narrationStatus.playing &&
-      musicUrl &&
-      musicStatus.isLoaded &&
-      !musicStatus.playing
-    ) {
-      musicPlayer.play();
-    }
-  }, [
-    musicPlayer,
-    musicStatus.isLoaded,
-    musicStatus.playing,
-    musicUrl,
-    narrationStatus.playing,
-  ]);
+  }, [narrationPlayer, narrationStatus.isLoaded]);
 
   useEffect(() => {
     if (narrationStatus.didJustFinish) {
-      musicPlayer.pause();
       onPlaybackCompleteRef.current?.();
     }
-  }, [musicPlayer, narrationStatus.didJustFinish]);
+  }, [narrationStatus.didJustFinish]);
 
   useEffect(() => {
     if (!narrationStatus.error) return;
@@ -247,13 +329,12 @@ export function PrayerDetailModal({
       url: narrationUrl,
     });
     pendingPlayRef.current = false;
-    musicPlayer.pause();
     setAudioMessage("Narration could not be loaded. Please try again.");
     if (reportedErrorRef.current !== narrationStatus.error) {
       reportedErrorRef.current = narrationStatus.error;
       onPlaybackErrorRef.current?.();
     }
-  }, [musicPlayer, narrationStatus.error, narrationUrl]);
+  }, [narrationStatus.error, narrationUrl]);
 
   useEffect(() => {
     if (!musicStatus.error) return;
@@ -261,7 +342,7 @@ export function PrayerDetailModal({
       error: musicStatus.error,
       url: musicUrl,
     });
-    setAudioMessage("Narration is available, but music could not be loaded.");
+    setAudioMessage("Background music could not be loaded.");
   }, [musicStatus.error, musicUrl]);
 
   const toggleAudio = () => {
@@ -269,7 +350,6 @@ export function PrayerDetailModal({
     if (narrationStatus.playing || pendingPlayRef.current) {
       pendingPlayRef.current = false;
       narrationPlayer.pause();
-      musicPlayer.pause();
       setAudioMessage(null);
       return;
     }
@@ -282,19 +362,48 @@ export function PrayerDetailModal({
 
     setAudioMessage(null);
     narrationPlayer.play();
-    if (musicStatus.isLoaded) musicPlayer.play();
   };
 
-  const sharePrayer = async () => {
+  const sharePrayer = () => {
     if (!card?.prayeruuid) return;
-    if (token) {
-      trackPrayerShare(card.prayeruuid, token).catch(() => undefined);
+    const isLovedOne = card.subjectType === "loved_one";
+    Alert.alert(
+      "Share prayer",
+      isLovedOne
+        ? "This shares a public link to the prayer text. Names may appear in the prayer. Photos stay private."
+        : "This creates a public link to this prayer.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Share", onPress: () => void confirmShare() },
+      ],
+    );
+  };
+
+  const confirmShare = async () => {
+    if (!card?.prayeruuid) return;
+    if (!token) {
+      Alert.alert("Can't share yet", "Sign in to share this prayer.");
+      return;
     }
-    await Share.share({
-      title: card.title,
-      message: `${card.title}\n${API_BASE}/prayercards/${card.prayeruuid}`,
-      url: `${API_BASE}/prayercards/${card.prayeruuid}`,
-    });
+    try {
+      await publishPrayerCard(card.prayeruuid, token);
+      trackPrayerShare(card.prayeruuid, token).catch(() => undefined);
+      await Share.share({
+        title: card.title,
+        message: `${card.title}\n${API_BASE}/prayercards/${card.prayeruuid}`,
+        url: `${API_BASE}/prayercards/${card.prayeruuid}`,
+      });
+    } catch (error) {
+      const status = (error as Error & { status?: number }).status;
+      Alert.alert(
+        "Can't share yet",
+        status === 403
+          ? "Turn on Public prayer links in Privacy settings, then try again."
+          : error instanceof Error
+            ? error.message
+            : "Unable to share this prayer.",
+      );
+    }
   };
 
   const handleTouchStart = (pageY: number) => {
@@ -344,18 +453,12 @@ export function PrayerDetailModal({
     }
   };
 
-  const contentEntrance = (
-    navigationDirection === 1 ? FadeInDown : FadeInUp
-  )
-    .duration(500)
-    .easing(Easing.bezier(0.22, 1, 0.36, 1))
-    .withInitialValues({
-      opacity: 0,
-      transform: [{ translateY: navigationDirection === 1 ? 24 : -24 }],
-    })
-    .reduceMotion(ReduceMotion.System);
   const deckNavigationEnabled = Boolean(onPrevious || onNext);
   const insets = useSafeAreaInsets();
+  const staggerDirection = navigationDirection === 1 ? "down" : "up";
+  const bodySegments = prayerSegments(card?.fullPrayer || card?.text || "");
+  const afterBodyDelay =
+    BODY_START_MS + Math.max(bodySegments.length, 1) * BODY_STEP_MS;
 
   return (
     <Modal
@@ -365,12 +468,10 @@ export function PrayerDetailModal({
       onRequestClose={onClose}
     >
       <View style={styles.root}>
-        <Image
-          source={resolveImage(card?.image, token)}
+        <KenBurnsImage
+          path={card?.image}
+          paths={card?.images}
           style={StyleSheet.absoluteFill}
-          contentFit="cover"
-          cachePolicy={isPrivateImagePath(card?.image) ? "memory" : undefined}
-          transition={350}
         />
         <View style={[StyleSheet.absoluteFill, styles.overlay]} />
         <ScrollView
@@ -395,25 +496,52 @@ export function PrayerDetailModal({
           showsVerticalScrollIndicator={false}
         >
           {loading ? (
-            <ActivityIndicator color={colors.white} size="large" />
+            <ActivityIndicator color={colors.title} size="large" />
           ) : (
-            <Animated.View
-              key={card?.prayeruuid || card?.deckIndex || "prayer-detail"}
-              entering={contentEntrance}
-            >
-              <Text style={styles.verse}>{card?.verse || "PERSONAL PRAYER"}</Text>
-              <Text style={styles.title}>{card?.title}</Text>
-              <Text style={styles.prayer}>{card?.fullPrayer || card?.text}</Text>
-              {card?.date ? <Text style={styles.date}>{card.date}</Text> : null}
+            <View key={card?.prayeruuid || card?.deckIndex || "prayer-detail"}>
+              <Stagger delay={200} direction={staggerDirection}>
+                <Text style={styles.verse}>
+                  {card?.verse || "PERSONAL PRAYER"}
+                </Text>
+              </Stagger>
+              <Stagger delay={300} direction={staggerDirection}>
+                <Text style={styles.title}>{card?.title}</Text>
+              </Stagger>
+              <View style={styles.prayerBody}>
+                {bodySegments.map((segment, index) => (
+                  <Stagger
+                    key={`${index}-${segment.slice(0, 24)}`}
+                    delay={BODY_START_MS + index * BODY_STEP_MS}
+                    direction={staggerDirection}
+                  >
+                    <Text style={styles.prayer}>{segment}</Text>
+                  </Stagger>
+                ))}
+              </View>
+              {card?.date ? (
+                <Stagger delay={afterBodyDelay} direction={staggerDirection}>
+                  <Text style={styles.date}>{card.date}</Text>
+                </Stagger>
+              ) : null}
               {onPrevious ? (
-                <View style={styles.swipeNavigationBottom}>
-                  <SwipeChevron direction="down" onPress={onPrevious} />
-                </View>
+                <Stagger
+                  delay={afterBodyDelay + (card?.date ? BODY_STEP_MS : 0)}
+                  direction={staggerDirection}
+                >
+                  <View style={styles.swipeNavigationBottom}>
+                    <SwipeChevron direction="down" onPress={onPrevious} />
+                  </View>
+                </Stagger>
               ) : null}
               {displayedAudioMessage ? (
-                <Text style={styles.audioMessage}>{displayedAudioMessage}</Text>
+                <Stagger
+                  delay={afterBodyDelay + BODY_STEP_MS * 2}
+                  direction={staggerDirection}
+                >
+                  <Text style={styles.audioMessage}>{displayedAudioMessage}</Text>
+                </Stagger>
               ) : null}
-            </Animated.View>
+            </View>
           )}
         </ScrollView>
         {onNext ? (
@@ -472,7 +600,7 @@ export function PrayerDetailModal({
               pressed && styles.pressed,
             ]}
           >
-            <ShareIcon color={colors.white} size={17} />
+            <ShareIcon color={colors.title} size={17} />
           </Pressable>
           <Pressable
             accessibilityRole="button"
@@ -481,7 +609,7 @@ export function PrayerDetailModal({
             onPress={onClose}
             style={({ pressed }) => [styles.action, pressed && styles.pressed]}
           >
-            <CloseIcon color={colors.white} size={17} />
+            <CloseIcon color={colors.title} size={17} />
           </Pressable>
         </View>
       </View>
@@ -489,13 +617,14 @@ export function PrayerDetailModal({
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.black,
   },
   overlay: {
-    backgroundColor: "rgba(0,0,0,0.72)",
+    backgroundColor: colors.overlayModal,
   },
   content: {
     flexGrow: 1,
@@ -505,7 +634,7 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
   verse: {
-    color: colors.accent,
+    color: colors.accentText,
     fontFamily: fonts.monoMedium,
     fontSize: 10,
     letterSpacing: 0.8,
@@ -513,7 +642,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   title: {
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.displayMedium,
     fontSize: 36,
     fontWeight: "500",
@@ -521,8 +650,11 @@ const styles = StyleSheet.create({
     lineHeight: 40,
     marginBottom: 24,
   },
+  prayerBody: {
+    gap: 16,
+  },
   prayer: {
-    color: "rgba(255,255,255,0.82)",
+    color: colors.titleSoft,
     fontFamily: fonts.body,
     fontSize: 17,
     lineHeight: 29,
@@ -578,17 +710,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: colors.glassFillHover,
+    borderColor: colors.glassBorderHairline,
     borderWidth: 1,
   },
   actionActive: {
-    borderColor: "rgba(249,115,22,0.65)",
-    backgroundColor: "rgba(249,115,22,0.28)",
+    borderColor: colors.accentBorderActive,
+    backgroundColor: colors.accentFillSolid,
   },
   listenAction: {
-    borderColor: "rgba(249,115,22,0.45)",
-    backgroundColor: "rgba(249,115,22,0.15)",
+    borderColor: colors.accentBorderPill,
+    backgroundColor: colors.accentFillSelected,
   },
   disabled: {
     opacity: 0.35,
@@ -596,4 +728,5 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.72,
   },
-});
+  });
+}

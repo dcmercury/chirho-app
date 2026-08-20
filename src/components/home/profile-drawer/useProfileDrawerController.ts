@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Alert } from "react-native";
+import { Alert, Platform } from "react-native";
+import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { useAuth, useClerk } from "@clerk/expo";
 import {
@@ -8,7 +9,9 @@ import {
   deletePrayerFocus,
   joinCommunity,
   leaveGroup,
+  registerPushToken,
   searchCommunities,
+  selectDashboardBackground,
   sendTestNotification,
   setActiveCommunity,
   updateAccountName,
@@ -16,8 +19,14 @@ import {
   updatePrayerFocus,
   updateProfile,
   uploadAvatar,
+  uploadDashboardBackground,
   type Community,
 } from "../../../lib/api";
+import { registerForPushNotifications } from "../../../lib/push";
+import { setBackgroundMusicEnabled } from "../../../lib/backgroundMusicPreference";
+import { prepareLovedOnePhoto } from "../../../lib/lovedOnePhoto";
+import { useTheme } from "../../../theme/ThemeProvider";
+import type { Appearance } from "../../../theme/tokens";
 import type {
   DailyPrayerSettings,
   HomeProfile,
@@ -38,6 +47,7 @@ export function useProfileDrawerController(
 ) {
   const { getToken } = useAuth();
   const { signOut } = useClerk();
+  const { setAppearance } = useTheme();
   const activeKeys = useRef(new Set<string>());
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
@@ -99,6 +109,18 @@ export function useProfileDrawerController(
     }
   };
 
+  const enablePushIfNeeded = async (token: string) => {
+    const pushToken = await registerForPushNotifications({
+      requestPermission: true,
+    });
+    if (!pushToken) return;
+    await registerPushToken(
+      pushToken,
+      Platform.OS === "ios" ? "ios" : "android",
+      token,
+    ).catch(() => undefined);
+  };
+
   const pickAvatar = async () => {
     if (activeKeys.current.has("avatar")) return;
     try {
@@ -151,21 +173,23 @@ export function useProfileDrawerController(
     period: DailyPrayerPeriod,
     next: DailyPrayerSettings,
   ) =>
-    mutate(`daily-${period}`, (token) =>
-      updateProfile(
+    mutate(`daily-${period}`, async (token) => {
+      await updateProfile(
         {
           preferences: {
             dailyPrayers: serializeDailyPrayerPayload(dailyPrayers, period, next),
           },
         },
         token,
-      ),
-    );
+      );
+      if (next.enabled) await enablePushIfNeeded(token);
+    });
 
   const setNotification = (key: string, enabled: boolean) =>
-    mutate(`notification:${key}`, (token) =>
-      updateNotificationPreference(key, enabled, token),
-    );
+    mutate(`notification:${key}`, async (token) => {
+      await updateNotificationPreference(key, enabled, token);
+      if (enabled) await enablePushIfNeeded(token);
+    });
 
   const testNotification = async (key: string, label: string) => {
     let confirmation = "Test notification sent.";
@@ -181,6 +205,42 @@ export function useProfileDrawerController(
       Alert.alert("Test sent", confirmation);
     }
   };
+
+  const setBackgroundMusic = (enabled: boolean) => {
+    setBackgroundMusicEnabled(enabled);
+    return mutate("background-music", (token) =>
+      updateProfile({ preferences: { backgroundMusicEnabled: enabled } }, token),
+    );
+  };
+
+  const setTheme = (appearance: Appearance) => {
+    setAppearance(appearance);
+    return mutate("theme", (token) =>
+      updateProfile({ preferences: { theme: appearance } }, token),
+    );
+  };
+
+  const selectHomeBackground = (imageUrl: string, current: string[]) =>
+    mutate(
+      "dashboard-background:select",
+      (token) => selectDashboardBackground(imageUrl, current, token),
+      "Unable to set this background.",
+    );
+
+  const uploadHomeBackground = (current: string[]) =>
+    mutate(
+      "dashboard-background:upload",
+      async (token) => {
+        const picked = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ["images"],
+          quality: 1,
+        });
+        if (picked.canceled || !picked.assets[0]) return;
+        const imageData = await prepareLovedOnePhoto(picked.assets[0]);
+        await uploadDashboardBackground(imageData, current, token);
+      },
+      "Unable to upload this background.",
+    );
 
   const setPrivacy = (key: string, enabled: boolean) =>
     mutate(`privacy:${key}`, (token) =>
@@ -306,6 +366,8 @@ export function useProfileDrawerController(
     if (!begin(key)) return false;
     try {
       await signOut();
+      void Image.clearMemoryCache();
+      void Image.clearDiskCache();
       return true;
     } catch (error) {
       setOperationError(key, error, "Unable to sign out");
@@ -346,6 +408,10 @@ export function useProfileDrawerController(
     saveAccount,
     selectTradition,
     selectVoice,
+    setBackgroundMusic,
+    setTheme,
+    selectHomeBackground,
+    uploadHomeBackground,
     updateDailyPrayer,
     setNotification,
     testNotification,

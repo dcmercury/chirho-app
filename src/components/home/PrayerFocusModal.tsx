@@ -10,7 +10,8 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { colors, fonts } from "../../theme/tokens";
+import { fonts, type ColorTokens } from "../../theme/tokens";
+import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
 import type {
   PrayerFocus,
   PrayerFocusInput,
@@ -63,6 +64,8 @@ export function PrayerFocusModal({
   onClose: () => void;
   onSubmit: (input: PrayerFocusInput) => Promise<void>;
 }) {
+  const styles = useThemedStyles(createStyles);
+  const { colors, appearance } = useTheme();
   const [title, setTitle] = useState("");
   const [type, setType] = useState<PrayerFocusType>("other");
   const [note, setNote] = useState("");
@@ -113,6 +116,7 @@ export function PrayerFocusModal({
             onChangeText={setTitle}
             placeholder="Who or what are you praying for?"
             placeholderTextColor={colors.muted}
+            keyboardAppearance={appearance === "light" ? "light" : "dark"}
             style={styles.input}
             value={title}
           />
@@ -132,7 +136,7 @@ export function PrayerFocusModal({
                 >
                   <PrayerFocusTypeIcon
                     type={option.value}
-                    color={active ? colors.accent : colors.mutedSoft}
+                    color={active ? colors.accentText : colors.mutedSoft}
                     size={18}
                   />
                   <Text style={[styles.typeText, active && styles.optionTextActive]}>
@@ -151,6 +155,7 @@ export function PrayerFocusModal({
             onChangeText={setNote}
             placeholder="Add a little context for the prayer"
             placeholderTextColor={colors.muted}
+            keyboardAppearance={appearance === "light" ? "light" : "dark"}
             style={[styles.input, styles.noteInput]}
             textAlignVertical="top"
             value={note}
@@ -239,7 +244,8 @@ export function PrayerFocusModal({
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   content: { padding: 24, paddingBottom: 48 },
   handle: {
@@ -251,14 +257,14 @@ const styles = StyleSheet.create({
     marginBottom: 36,
   },
   eyebrow: {
-    color: colors.accent,
+    color: colors.accentText,
     fontFamily: fonts.monoMedium,
     fontSize: 10,
     letterSpacing: 1,
     marginBottom: 10,
   },
   title: {
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.displayMedium,
     fontSize: 34,
     letterSpacing: -0.8,
@@ -270,7 +276,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.glassBorder,
     backgroundColor: colors.glassFill,
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.body,
     fontSize: 16,
     paddingHorizontal: 16,
@@ -312,10 +318,10 @@ const styles = StyleSheet.create({
   },
   tagText: { color: colors.mutedSoft, fontFamily: fonts.body, fontSize: 12 },
   optionActive: {
-    backgroundColor: "rgba(249,115,22,0.14)",
-    borderColor: "rgba(249,115,22,0.45)",
+    backgroundColor: colors.accentFillPill,
+    borderColor: colors.accentBorderPill,
   },
-  optionTextActive: { color: colors.accent },
+  optionTextActive: { color: colors.accentText },
   periodLabel: { marginTop: 24 },
   periodRow: { flexDirection: "row", gap: 8 },
   periodOption: {
@@ -338,15 +344,16 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.white,
+    backgroundColor: colors.buttonPrimary,
     marginTop: 28,
   },
   submitText: {
-    color: colors.black,
+    color: colors.buttonOnPrimary,
     fontFamily: fonts.displayMedium,
     fontSize: 15,
   },
   cancel: { minHeight: 48, alignItems: "center", justifyContent: "center" },
   cancelText: { color: colors.mutedSoft, fontFamily: fonts.body, fontSize: 13 },
   disabled: { opacity: 0.35 },
-});
+  });
+}

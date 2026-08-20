@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Linking } from "react-native";
 import * as Clipboard from "expo-clipboard";
+import * as ImagePicker from "expo-image-picker";
 import {
   deleteGroup,
   getGroupAdminDetails,
@@ -10,8 +11,11 @@ import {
   previewGroupContent,
   regenerateGroupBackground,
   removeGroupMember,
+  selectGroupBackground,
   updateGroup,
+  uploadGroupBackground,
 } from "../../../../lib/api";
+import { prepareLovedOnePhoto } from "../../../../lib/lovedOnePhoto";
 import type {
   GroupAdminRecord,
   GroupInviteResult,
@@ -32,6 +36,8 @@ type ActionKey =
   | "settings:tradition"
   | "settings:invites"
   | "background"
+  | "background:select"
+  | "background:upload"
   | `scripture:remove:${number}`
   | `remove:${string}`;
 
@@ -562,7 +568,54 @@ export function useGroupDrawerController({
         }
         await refreshAfterWrite(session);
       },
-      "Unable to regenerate the group background.",
+      "Unable to generate the group background.",
+    );
+  }, [group, isAdmin, refreshAfterWrite, runAction]);
+
+  const selectBackground = useCallback(
+    (imageUrl: string) => {
+      if (!group || !isAdmin) return;
+      void runAction(
+        "background:select",
+        async (token, session) => {
+          const result = await selectGroupBackground(
+            group.groupuuid,
+            imageUrl,
+            token,
+          );
+          if (!result.success) {
+            throw new Error(result.error || "Unable to set this background.");
+          }
+          await refreshAfterWrite(session);
+        },
+        "Unable to set this background.",
+      );
+    },
+    [group, isAdmin, refreshAfterWrite, runAction],
+  );
+
+  const uploadBackground = useCallback(() => {
+    if (!group || !isAdmin) return;
+    void runAction(
+      "background:upload",
+      async (token, session) => {
+        const picked = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ["images"],
+          quality: 1,
+        });
+        if (picked.canceled || !picked.assets[0]) return;
+        const imageData = await prepareLovedOnePhoto(picked.assets[0]);
+        const result = await uploadGroupBackground(
+          group.groupuuid,
+          imageData,
+          token,
+        );
+        if (!result.success) {
+          throw new Error(result.error || "Unable to upload this photo.");
+        }
+        await refreshAfterWrite(session);
+      },
+      "Unable to upload this background.",
     );
   }, [group, isAdmin, refreshAfterWrite, runAction]);
 
@@ -604,9 +657,7 @@ export function useGroupDrawerController({
     purposeEditing,
     scriptureFormOpen,
     scriptureDraft,
-    canInvite: Boolean(
-      group && (isAdmin || group.settings.allowMemberInvites === true),
-    ),
+    canInvite: Boolean(surfaceGroup.canInvite),
     canLeave: Boolean(group && !isAdmin && surfaceGroup.canLeave),
     canRegeneratePurpose: Boolean(group?.creationMetadata?.groupType),
     clearError,
@@ -627,6 +678,8 @@ export function useGroupDrawerController({
     confirmRemoveScripture,
     regeneratePurpose,
     regenerateBackground,
+    selectBackground,
+    uploadBackground,
     confirmDelete,
   };
 }

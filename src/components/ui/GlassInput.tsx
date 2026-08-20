@@ -1,12 +1,37 @@
-import { useState } from "react";
 import { TextInput, StyleSheet, type TextInputProps } from "react-native";
-import { colors, fonts, radii } from "../../theme/tokens";
+import { useState } from "react";
+import { fonts, radii, type ColorTokens } from "../../theme/tokens";
+import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
+
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
+    input: {
+      width: "100%",
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      backgroundColor: colors.glassFill,
+      borderWidth: 1,
+      borderColor: colors.glassBorder,
+      borderRadius: radii.glass,
+      color: colors.title,
+      fontSize: 14,
+      fontFamily: fonts.body,
+    },
+    focused: {
+      borderColor: colors.glassBorderStrong,
+      backgroundColor: colors.glassFillHover,
+    },
+  });
+}
 
 export function GlassInput({ style, ...props }: TextInputProps) {
+  const { appearance, colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [focused, setFocused] = useState(false);
 
   return (
     <TextInput
+      keyboardAppearance={appearance === "light" ? "light" : "dark"}
       placeholderTextColor={colors.mutedGhost}
       onFocus={(e) => {
         setFocused(true);
@@ -21,22 +46,3 @@ export function GlassInput({ style, ...props }: TextInputProps) {
     />
   );
 }
-
-const styles = StyleSheet.create({
-  input: {
-    width: "100%",
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    backgroundColor: colors.glassFill,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    borderRadius: radii.glass,
-    color: colors.white,
-    fontSize: 14,
-    fontFamily: fonts.body,
-  },
-  focused: {
-    borderColor: colors.glassBorderStrong,
-    backgroundColor: colors.glassFillHover,
-  },
-});

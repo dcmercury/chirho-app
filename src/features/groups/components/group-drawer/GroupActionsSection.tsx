@@ -2,7 +2,7 @@ import { Pressable, Text } from "react-native";
 import {
   GroupDrawerError,
   GroupDrawerSection,
-  styles,
+  useGroupDrawerStyles,
 } from "./GroupDrawerControls";
 
 interface GroupActionsSectionProps {
@@ -16,6 +16,7 @@ export function GroupActionsSection({
   error,
   onLeave,
 }: GroupActionsSectionProps) {
+  const styles = useGroupDrawerStyles();
   return (
     <GroupDrawerSection title="Group actions">
       <Pressable

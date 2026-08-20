@@ -13,12 +13,14 @@ export function PrivacySection({
   onChange: (key: string, enabled: boolean) => void;
 }) {
   if (!privacy.length) return null;
+  const visible = privacy.filter((item) => !item.adminDisabled);
+  if (!visible.length) return null;
   return (
     <Section title="Privacy">
-      {privacy.map((item) => (
+      {visible.map((item) => (
         <ToggleRow
           key={item.key}
-          disabled={isPending(item.key)}
+          disabled={isPending(item.key) || item.adminDisabled}
           label={item.label}
           onValueChange={(enabled) => onChange(item.key, enabled)}
           value={item.enabled}

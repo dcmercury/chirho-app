@@ -1,6 +1,11 @@
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { colors, fonts, type as typography } from "../../../../theme/tokens";
+import { fonts, type as typography, type ColorTokens } from "../../../../theme/tokens";
+import { useThemedStyles } from "../../../../theme/ThemeProvider";
+
+export function useGroupDrawerStyles() {
+  return useThemedStyles(createGroupDrawerStyles);
+}
 
 export function GroupDrawerSection({
   title,
@@ -9,6 +14,7 @@ export function GroupDrawerSection({
   title: string;
   children: ReactNode;
 }) {
+  const styles = useGroupDrawerStyles();
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -18,6 +24,7 @@ export function GroupDrawerSection({
 }
 
 export function GroupDrawerError({ message }: { message?: string }) {
+  const styles = useGroupDrawerStyles();
   return message ? (
     <Text accessibilityRole="alert" style={styles.error}>
       {message}
@@ -36,6 +43,7 @@ export function GroupDrawerPill({
   disabled?: boolean;
   onPress: () => void;
 }) {
+  const styles = useGroupDrawerStyles();
   return (
     <Pressable
       accessibilityLabel={label}
@@ -56,7 +64,8 @@ export function GroupDrawerPill({
   );
 }
 
-export const styles = StyleSheet.create({
+function createGroupDrawerStyles(colors: ColorTokens) {
+  return StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.canvas,
@@ -75,7 +84,7 @@ export const styles = StyleSheet.create({
     marginBottom: 24,
   },
   title: {
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.displayMedium,
     fontSize: 27,
     textAlign: "center",
@@ -120,7 +129,7 @@ export const styles = StyleSheet.create({
     minWidth: 0,
   },
   memberName: {
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.bodyMedium,
     fontSize: 13,
   },
@@ -157,7 +166,7 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.glassBorder,
     backgroundColor: colors.glassFill,
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.body,
     fontSize: 12,
     paddingHorizontal: 12,
@@ -184,8 +193,8 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   pillSelected: {
-    backgroundColor: "rgba(249,115,22,0.14)",
-    borderColor: "rgba(249,115,22,0.45)",
+    backgroundColor: colors.accentFillPill,
+    borderColor: colors.accentBorderPill,
   },
   pillText: {
     color: colors.mutedSoft,
@@ -193,7 +202,7 @@ export const styles = StyleSheet.create({
     fontSize: 11,
   },
   pillTextSelected: {
-    color: colors.accent,
+    color: colors.accentText,
   },
   hint: {
     color: colors.muted,
@@ -203,13 +212,13 @@ export const styles = StyleSheet.create({
   primaryAction: {
     minHeight: 44,
     borderRadius: 22,
-    backgroundColor: colors.white,
+    backgroundColor: colors.buttonPrimary,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 16,
   },
   primaryActionText: {
-    color: colors.black,
+    color: colors.buttonOnPrimary,
     fontFamily: fonts.displayMedium,
     fontSize: 12,
   },
@@ -240,8 +249,8 @@ export const styles = StyleSheet.create({
     borderColor: colors.glassBorder,
   },
   copyButtonDone: {
-    borderColor: "rgba(52,211,153,0.3)",
-    backgroundColor: "rgba(52,211,153,0.12)",
+    borderColor: colors.successBorder,
+    backgroundColor: colors.successFill,
   },
   copyText: {
     color: colors.mutedStrong,
@@ -249,7 +258,7 @@ export const styles = StyleSheet.create({
     fontSize: 11,
   },
   copyTextDone: {
-    color: "#34d399",
+    color: colors.success,
   },
   leaveButton: {
     minHeight: 44,
@@ -272,4 +281,5 @@ export const styles = StyleSheet.create({
   disabled: {
     opacity: 0.4,
   },
-});
+  });
+}

@@ -8,7 +8,6 @@ import {
   View,
 } from "react-native";
 import { useAuth } from "@clerk/expo";
-import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, {
   Easing,
@@ -22,13 +21,14 @@ import {
   getPrayerDeck,
   retryPrayerDeckItem,
 } from "../../lib/api";
-import { isPrivateImagePath, resolveImage } from "../../lib/assets";
-import { colors, fonts } from "../../theme/tokens";
+import { fonts, type ColorTokens } from "../../theme/tokens";
+import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
 import type {
   HomePrayerCard,
   PrayerDeckCard,
   PrayerDeckDetail,
 } from "../../types/home";
+import { KenBurnsImage } from "../ui/KenBurnsImage";
 import { GridOverlay } from "../ui/GridOverlay";
 import {
   PrayerDeckPager,
@@ -45,6 +45,8 @@ export function PrayerDeckScreen({
 }) {
   const insets = useSafeAreaInsets();
   const { getToken } = useAuth();
+  const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
   const getTokenRef = useRef(getToken);
   const sequenceActiveRef = useRef(false);
   const pagerRef = useRef<PrayerDeckPagerHandle>(null);
@@ -254,7 +256,7 @@ export function PrayerDeckScreen({
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={colors.white} size="large" />
+        <ActivityIndicator color={colors.title} size="large" />
         <Text style={styles.loadingText}>Gathering your daily prayers…</Text>
       </View>
     );
@@ -291,13 +293,10 @@ export function PrayerDeckScreen({
           pointerEvents="none"
           style={StyleSheet.absoluteFill}
         >
-          <Image
-            source={resolveImage(currentCard.image, token)}
+          <KenBurnsImage
+            path={currentCard.image}
+            paths={currentCard.images}
             style={StyleSheet.absoluteFill}
-            contentFit="cover"
-            cachePolicy={
-              isPrivateImagePath(currentCard.image) ? "memory" : undefined
-            }
           />
         </Animated.View>
       ) : null}
@@ -312,7 +311,7 @@ export function PrayerDeckScreen({
           onPress={onClose}
           style={styles.iconButton}
         >
-          <BackIcon color={colors.white} size={18} />
+          <BackIcon color={colors.title} size={18} />
         </Pressable>
         <View style={styles.headerCopy}>
           <Text style={styles.eyebrow}>{deck.timeOfDay} prayer deck</Text>
@@ -405,7 +404,6 @@ export function PrayerDeckScreen({
               cards={cards}
               currentIndex={currentIndex}
               disabled={prayAllActive}
-              token={token}
               onIndexChange={setCurrentIndex}
               onOpenCard={(card) => {
                 setDetailNavigationDirection(1);
@@ -545,7 +543,8 @@ export function PrayerDeckScreen({
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   center: {
     flex: 1,
@@ -554,7 +553,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.canvas,
     padding: 24,
   },
-  overlay: { backgroundColor: "rgba(0,0,0,0.82)" },
+  overlay: { backgroundColor: colors.overlayDeck },
   loadingText: {
     color: colors.mutedSoft,
     fontFamily: fonts.body,
@@ -580,7 +579,7 @@ const styles = StyleSheet.create({
   headerCopy: { flex: 1, alignItems: "center" },
   headerSpacer: { width: 44 },
   eyebrow: {
-    color: colors.accent,
+    color: colors.accentText,
     fontFamily: fonts.monoMedium,
     fontSize: 9,
     letterSpacing: 0.7,
@@ -631,13 +630,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.errorBorder,
-    backgroundColor: "rgba(0,0,0,0.34)",
+    backgroundColor: colors.overlayControl,
     paddingHorizontal: 14,
     paddingTop: 14,
     marginTop: 14,
   },
   failedTitle: {
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.monoMedium,
     fontSize: 9,
     letterSpacing: 0.6,
@@ -653,7 +652,7 @@ const styles = StyleSheet.create({
   },
   failedCopy: { flex: 1, minWidth: 0, paddingVertical: 10 },
   failedLabel: {
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.bodyMedium,
     fontSize: 12,
   },
@@ -671,11 +670,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: "rgba(249,115,22,0.45)",
+    borderColor: colors.accentBorderPill,
     marginLeft: 12,
   },
   retryButtonText: {
-    color: colors.accent,
+    color: colors.accentText,
     fontFamily: fonts.bodyMedium,
     fontSize: 11,
   },
@@ -693,7 +692,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   errorTitle: {
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.displayMedium,
     fontSize: 22,
     textAlign: "center",
@@ -709,7 +708,7 @@ const styles = StyleSheet.create({
   cardStage: { marginTop: 18 },
   emptyState: { alignItems: "center", paddingVertical: 64 },
   emptyTitle: {
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.displayMedium,
     fontSize: 20,
   },
@@ -732,7 +731,7 @@ const styles = StyleSheet.create({
     borderColor: colors.glassBorderStrong,
   },
   pageButtonText: {
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.bodyMedium,
     fontSize: 12,
   },
@@ -741,12 +740,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 27,
-    backgroundColor: colors.white,
+    backgroundColor: colors.buttonPrimary,
     marginTop: 18,
     paddingHorizontal: 24,
   },
   primaryText: {
-    color: colors.black,
+    color: colors.buttonOnPrimary,
     fontFamily: fonts.displayMedium,
     fontSize: 14,
   },
@@ -769,9 +768,10 @@ const styles = StyleSheet.create({
     borderColor: colors.glassBorder,
   },
   smallActionText: {
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.bodyMedium,
     fontSize: 11,
   },
   disabled: { opacity: 0.35 },
-});
+  });
+}

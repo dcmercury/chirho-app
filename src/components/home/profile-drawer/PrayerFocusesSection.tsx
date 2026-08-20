@@ -3,7 +3,8 @@ import { Pressable, Text, View } from "react-native";
 import type { PrayerFocus, PrayerFocusInput } from "../../../types/home";
 import { PrayerFocusModal } from "../PrayerFocusModal";
 import { PrayerFocusTypeIcon } from "../PrayerFocusTypeIcon";
-import { InlineError, Section, styles } from "./ProfileControls";
+import { useTheme } from "../../../theme/ThemeProvider";
+import { InlineError, Section, useProfileStyles } from "./ProfileControls";
 
 export function PrayerFocusesSection({
   focuses,
@@ -18,6 +19,8 @@ export function PrayerFocusesSection({
   onSave: (focus: PrayerFocus, input: PrayerFocusInput) => Promise<boolean>;
   onRemove: (focusuuid: string, title: string) => void;
 }) {
+  const styles = useProfileStyles();
+  const { colors } = useTheme();
   const [editing, setEditing] = useState<PrayerFocus | null>(null);
 
   return (
@@ -28,7 +31,7 @@ export function PrayerFocusesSection({
           return (
             <View key={focus.focusuuid} style={styles.manageRow}>
               <View style={[styles.manageAvatar, styles.manageAvatarFallback]}>
-                <PrayerFocusTypeIcon type={focus.type} color="#f97316" size={17} />
+                <PrayerFocusTypeIcon type={focus.type} color={colors.accent} size={17} />
               </View>
               <View style={styles.manageCopy}>
                 <Text style={styles.manageName}>{focus.title}</Text>

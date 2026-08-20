@@ -9,12 +9,16 @@ import {
 import { Image } from "expo-image";
 import {
   acknowledgeOfferedPrayer,
+  blockGroupMember,
+  deleteGroupMessage,
+  deleteOfferedPrayer,
   generateGroupPrayer,
   getGroupMessages,
   getGroupPrayerCounts,
   getPrayerGroupSurface,
   getPrayerResponses,
   prayForGroupMessage,
+  reportGroupContent,
   sendGroupMessage,
 } from "../../lib/api";
 import { resolveImage } from "../../lib/assets";
@@ -23,7 +27,8 @@ import {
   useGroupRealtime,
 } from "../../lib/useGroupRealtime";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, fonts } from "../../theme/tokens";
+import { fonts, type ColorTokens } from "../../theme/tokens";
+import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
 import type {
   GroupMessage,
   PrayerGroupSurfaceData,
@@ -32,9 +37,10 @@ import type {
   TokenProvider,
 } from "./types";
 import { GroupBackground } from "./components/GroupBackground";
-import { GroupAvatar } from "./components/GroupAvatar";
+import { CogIcon } from "./components/Icons";
 import { GroupOverview } from "./components/GroupOverview";
 import { MembersSheet } from "./components/MembersSheet";
+import type { ReportReasonId } from "./components/ContentSafetyButton";
 import { PrayerRequestView } from "./components/PrayerRequestView";
 import { LoadingChiRhoOverlay } from "../../components/ui/LoadingChiRhoOverlay";
 
@@ -97,6 +103,8 @@ export function PrayerGroupSurface({
   onOpenHome,
 }: PrayerGroupSurfaceProps) {
   const insets = useSafeAreaInsets();
+  const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
   const [data, setData] = useState<PrayerGroupSurfaceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -116,6 +124,7 @@ export function PrayerGroupSurface({
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
   const appliedInitialRoute = useRef(false);
+  const blockedIdsRef = useRef<Set<string>>(new Set());
 
   const requireToken = useCallback(async () => {
     const token = await tokenProvider();
@@ -180,7 +189,9 @@ export function PrayerGroupSurface({
       ]);
       setData((current) => {
         if (!current) return current;
-        const merged = mergeMessages(current.messages, messages);
+        const merged = mergeMessages(current.messages, messages).filter(
+          (item) => !blockedIdsRef.current.has(item.userId),
+        );
         return {
           ...current,
           messages: merged,
@@ -196,6 +207,7 @@ export function PrayerGroupSurface({
 
   const handleRealtimeMessage = useCallback(
     (message: RealtimeGroupMessage) => {
+      if (blockedIdsRef.current.has(message.userId)) return;
       setData((current) =>
         current
           ? {
@@ -304,6 +316,123 @@ export function PrayerGroupSurface({
       await refreshPrayerState(message);
     } catch (err) {
       setActionError(messageFor(err, "Unable to save your prayer."));
+    }
+  };
+
+  const removeMessageFromDeck = (messageId: string) => {
+    if (!data) return;
+    const messages = data.messages.filter(
+      (item) => item.messageId !== messageId,
+    );
+    setData({
+      ...data,
+      messages,
+      prayerRequestCount: Math.max(0, data.prayerRequestCount - 1),
+    });
+    setCurrentIndex(Math.min(currentIndex, Math.max(messages.length - 1, 0)));
+    if (!messages.length) setMode("group");
+  };
+
+  const handleDeleteRequest = async (message: GroupMessage) => {
+    setActionError(null);
+    try {
+      const token = await requireToken();
+      await deleteGroupMessage(groupuuid, message.messageId, token);
+      removeMessageFromDeck(message.messageId);
+    } catch (err) {
+      setActionError(messageFor(err, "Unable to delete this request."));
+    }
+  };
+
+  const handleReportRequest = async (
+    message: GroupMessage,
+    reason: ReportReasonId,
+  ) => {
+    setActionError(null);
+    try {
+      const token = await requireToken();
+      await reportGroupContent(
+        groupuuid,
+        {
+          contentType: "request",
+          contentId: message.messageId,
+          reason,
+        },
+        token,
+      );
+      removeMessageFromDeck(message.messageId);
+    } catch (err) {
+      setActionError(messageFor(err, "Unable to send this report."));
+      throw err;
+    }
+  };
+
+  const handleDeleteResponse = async (
+    message: GroupMessage,
+    prayerId: string,
+  ) => {
+    setActionError(null);
+    try {
+      const token = await requireToken();
+      await deleteOfferedPrayer(groupuuid, prayerId, token);
+      setResponses((current) =>
+        current.filter((response) => response.prayerId !== prayerId),
+      );
+      await refreshPrayerState(message);
+    } catch (err) {
+      setActionError(messageFor(err, "Unable to delete this prayer."));
+    }
+  };
+
+  const handleReportResponse = async (
+    message: GroupMessage,
+    prayerId: string,
+    reason: ReportReasonId,
+  ) => {
+    setActionError(null);
+    try {
+      const token = await requireToken();
+      await reportGroupContent(
+        groupuuid,
+        {
+          contentType: "response",
+          contentId: prayerId,
+          reason,
+        },
+        token,
+      );
+      setResponses((current) =>
+        current.filter((response) => response.prayerId !== prayerId),
+      );
+    } catch (err) {
+      setActionError(messageFor(err, "Unable to send this report."));
+      throw err;
+    }
+  };
+
+  const handleBlockMember = async (clerkId: string) => {
+    setActionError(null);
+    try {
+      const token = await requireToken();
+      await blockGroupMember(clerkId, token);
+      blockedIdsRef.current.add(clerkId);
+      setResponses((current) =>
+        current.filter((response) => response.clerkId !== clerkId),
+      );
+      if (data) {
+        const messages = data.messages.filter(
+          (item) => item.userId !== clerkId,
+        );
+        setData({
+          ...data,
+          messages,
+          prayerRequestCount: messages.length,
+        });
+        setCurrentIndex(Math.min(currentIndex, Math.max(messages.length - 1, 0)));
+        if (!messages.length) setMode("group");
+      }
+    } catch (err) {
+      setActionError(messageFor(err, "Unable to block this person."));
     }
   };
 
@@ -448,6 +577,7 @@ export function PrayerGroupSurface({
   };
 
   const openRequest = () => {
+    if (!data?.group.canCreatePrayerRequests) return;
     setActionError(null);
     setGeneratedPrayer(null);
     setMode("group");
@@ -509,7 +639,14 @@ export function PrayerGroupSurface({
 
   return (
     <View style={styles.root}>
-      <GroupBackground uri={data?.group.backgroundImage || null} />
+      <GroupBackground
+        uri={data?.group.backgroundImage || null}
+        uris={
+          data?.group.backgroundImages?.length
+            ? data.group.backgroundImages
+            : undefined
+        }
+      />
       {error && !data ? (
         <View style={styles.center}>
           <Text style={styles.error}>{error}</Text>
@@ -574,7 +711,6 @@ export function PrayerGroupSurface({
               sendingPrayer={sendingPrayer}
               hasMoreMessages={data.hasMoreMessages}
               loadingOlder={loadingOlder}
-              groupAvatar={data.group.backgroundImage}
               actionError={actionError}
               onBack={() => setMode("group")}
               onPrevious={previous}
@@ -583,29 +719,31 @@ export function PrayerGroupSurface({
               onAcknowledgeOffered={handleAcknowledgeOffered}
               currentUserId={currentUser.id}
               onGenerate={handleGeneratePrayer}
+              onChangeGenerated={setGeneratedPrayer}
               onSendGenerated={handleSendGenerated}
               onDismissGenerated={() => setGeneratedPrayer(null)}
               onNewRequest={openRequest}
-              onOpenGroupDrawer={() => setMembersOpen(true)}
+              canCreatePrayerRequests={data.group.canCreatePrayerRequests}
+              isAdmin={data.group.isAdmin}
+              onDeleteRequest={handleDeleteRequest}
+              onReportRequest={handleReportRequest}
+              onDeleteResponse={handleDeleteResponse}
+              onReportResponse={handleReportResponse}
+              onBlockMember={handleBlockMember}
             />
           )}
-          {mode === "group" || data.messages.length === 0 ? (
+          {data.group.isAdmin ? (
             <Pressable
-              accessibilityLabel={`Open ${data.group.name} members and settings`}
+              accessibilityLabel={`Open ${data.group.name} settings`}
               accessibilityRole="button"
               onPress={() => setMembersOpen(true)}
               style={({ pressed }) => [
                 styles.groupDrawerTrigger,
-                { bottom: Math.max(insets.bottom, 12) },
+                { top: insets.top + 60 },
                 pressed && styles.groupDrawerTriggerPressed,
               ]}
             >
-              <GroupAvatar
-                borderColor="rgba(255,255,255,0.18)"
-                name={data.group.name}
-                size={72}
-                uri={data.group.backgroundImage}
-              />
+              <CogIcon color={colors.mutedStrong} size={18} />
             </Pressable>
           ) : null}
           <MembersSheet
@@ -646,7 +784,8 @@ function messageFor(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   center: {
     flex: 1,
@@ -666,9 +805,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 9,
     borderRadius: 18,
-    backgroundColor: colors.white,
+    backgroundColor: colors.buttonPrimary,
   },
-  retryText: { color: colors.black, fontFamily: fonts.bodyMedium, fontSize: 11 },
+  retryText: { color: colors.buttonOnPrimary, fontFamily: fonts.bodyMedium, fontSize: 11 },
   homeButton: {
     position: "absolute",
     right: 20,
@@ -677,8 +816,8 @@ const styles = StyleSheet.create({
     height: 42,
     borderRadius: 21,
     borderWidth: 1,
-    borderColor: "rgba(255,248,240,0.36)",
-    backgroundColor: "rgba(255,248,240,0.9)",
+    borderColor: colors.creamBorder,
+    backgroundColor: colors.creamFill,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -692,11 +831,20 @@ const styles = StyleSheet.create({
   },
   groupDrawerTrigger: {
     position: "absolute",
-    left: "50%",
-    marginLeft: -36,
+    right: 20,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.glassBorderHairline,
+    backgroundColor: colors.glassFillHover,
+    alignItems: "center",
+    justifyContent: "center",
   },
   groupDrawerTriggerPressed: {
     opacity: 0.72,
     transform: [{ scale: 0.97 }],
   },
-});
+  });
+}

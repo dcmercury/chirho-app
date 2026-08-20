@@ -44,3 +44,9 @@ export function formatPhoneDisplay(phone: string): string {
 export function isValidPhone(phone: string): boolean {
   return phone.replace(/\D/g, "").length === 10;
 }
+
+export function lastFourDigits(phone: string | null | undefined): string | null {
+  const digits = String(phone || "").replace(/\D/g, "");
+  if (digits.length < 4) return null;
+  return digits.slice(-4);
+}

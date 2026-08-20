@@ -37,6 +37,10 @@ export function isPrivateImagePath(path: string | undefined | null): boolean {
   );
 }
 
+export function privateImageCachePolicy(path?: string | null) {
+  return isPrivateImagePath(path) ? "memory-disk" : undefined;
+}
+
 export function resolveImage(
   path: string | undefined | null,
   token?: string | null,
@@ -74,7 +78,7 @@ export function resolveAudioUrl(path: string | undefined | null): string | null 
 }
 
 export const DEFAULT_BACKGROUND_MUSIC =
-  "/audio/background-music/ambient-morning.mp3";
+  "/audio/prayercards/Pater_Noster_1min-30.mp3";
 
 export const API_BASE =
   process.env.EXPO_PUBLIC_API_URL ?? "https://www.chirho.ai";

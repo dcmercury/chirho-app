@@ -8,6 +8,7 @@ export interface HomePrayerCard {
   verse: string;
   text: string;
   image: string;
+  images?: string[];
   fullPrayer?: string;
   date?: string;
   narrationUrl?: string | null;
@@ -125,6 +126,7 @@ export interface HomeProfile {
   traditions: {
     selected: string;
     options: ProfileOption[];
+    locked?: boolean;
   };
   voices: {
     selected: string;
@@ -140,7 +142,7 @@ export interface HomeProfile {
     enabled: boolean;
     adminDisabled?: boolean;
   }[];
-  privacy: { label: string; key: string; enabled: boolean }[];
+  privacy: { label: string; key: string; enabled: boolean; adminDisabled?: boolean }[];
   managedLovedOnes: {
     id: string;
     firstName: string;
@@ -151,6 +153,9 @@ export interface HomeProfile {
     theme: string;
     fontSize: string;
   };
+  backgroundMusicEnabled?: boolean;
+  dashboardBackground?: string | null;
+  dashboardBackgrounds?: string[];
 }
 
 export interface HomeData {
@@ -170,11 +175,49 @@ export interface HomeCommunity {
   tradition?: string | null;
   logo?: string | null;
   backgroundImage?: string | null;
+  donationLink?: string | null;
+  features?: {
+    membersCanCreateGroups: boolean;
+    membersCanInvite: boolean;
+    groupMessages: boolean;
+    groupPrayerRequests: boolean;
+    lockTradition: boolean;
+    notifyGroupInvites: boolean;
+    notifyGroupPrayers: boolean;
+    notifyGroupAnnouncements: boolean;
+    notifyGroupMemberActivity: boolean;
+    showDonation: boolean;
+    sharePrayersWithGroups: boolean;
+    dailyPrayers: boolean;
+    personalPrayer: boolean;
+  };
+  licenseTier?: string | null;
+  canCreateGroups?: boolean;
+  createBlockedReason?: "members" | "community_limit" | "user_limit" | null;
+  groupLimits?: {
+    maxGroups: number | null;
+    maxGroupsPerUser: number | null;
+  };
+  groupsUsed?: number;
 }
 
 export interface MobileHomeResponse {
   home: HomeData;
   community: HomeCommunity | null;
+}
+
+export function communityAllowsPersonalPrayer(
+  community: HomeCommunity | null | undefined,
+): boolean {
+  if (!community) return true;
+  return community.features?.personalPrayer === true;
+}
+
+export function communityAllowsDailyPrayers(
+  community: HomeCommunity | null | undefined,
+): boolean {
+  if (!community) return true;
+  return community.features?.dailyPrayers === true;
 }
 
 export interface GroupDetail {

@@ -11,7 +11,8 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
-import { colors } from "../../theme/tokens";
+import { type ColorTokens } from "../../theme/tokens";
+import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
 
 interface SwipeChevronProps {
   direction: "up" | "down";
@@ -21,6 +22,28 @@ interface SwipeChevronProps {
   loading?: boolean;
 }
 
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
+    button: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.overlayControl,
+      borderWidth: 1,
+      borderColor: colors.glassBorder,
+    },
+    pressed: {
+      backgroundColor: colors.accentFillActive,
+      borderColor: colors.accentBorderChevron,
+    },
+    disabled: {
+      opacity: 0.3,
+    },
+  });
+}
+
 export function SwipeChevron({
   direction,
   onPress,
@@ -28,6 +51,8 @@ export function SwipeChevron({
   disabled = false,
   loading = false,
 }: SwipeChevronProps) {
+  const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
   const progress = useSharedValue(0);
   const reducedMotion = useReducedMotion();
 
@@ -97,23 +122,3 @@ export function SwipeChevron({
     </Pressable>
   );
 }
-
-const styles = StyleSheet.create({
-  button: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.34)",
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-  },
-  pressed: {
-    backgroundColor: "rgba(249,115,22,0.2)",
-    borderColor: "rgba(249,115,22,0.48)",
-  },
-  disabled: {
-    opacity: 0.3,
-  },
-});

@@ -4,10 +4,31 @@ import { useAuth } from "@clerk/expo";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { PrayerDetailModal } from "../../../src/components/home/PrayerDetailModal";
 import { getPrayer } from "../../../src/lib/api";
-import { colors, fonts } from "../../../src/theme/tokens";
+import { fonts, type ColorTokens } from "../../../src/theme/tokens";
+import { useTheme, useThemedStyles } from "../../../src/theme/ThemeProvider";
 import type { HomePrayerCard } from "../../../src/types/home";
 
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
+    center: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.canvas,
+    },
+    error: {
+      color: colors.error,
+      fontFamily: fonts.body,
+      fontSize: 13,
+      padding: 24,
+      textAlign: "center",
+    },
+  });
+}
+
 export default function PrayerRoute() {
+  const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
   const { prayeruuid } = useLocalSearchParams<{ prayeruuid: string }>();
   const router = useRouter();
   const { getToken } = useAuth();
@@ -46,7 +67,7 @@ export default function PrayerRoute() {
 
   return (
     <View style={styles.center}>
-      <ActivityIndicator color={colors.white} />
+      <ActivityIndicator color={colors.title} />
       <PrayerDetailModal
         card={card}
         token={token}
@@ -57,19 +78,3 @@ export default function PrayerRoute() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.canvas,
-  },
-  error: {
-    color: colors.error,
-    fontFamily: fonts.body,
-    fontSize: 13,
-    padding: 24,
-    textAlign: "center",
-  },
-});

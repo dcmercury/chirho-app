@@ -6,11 +6,16 @@ import {
   Text,
   View,
 } from "react-native";
-import { Image } from "expo-image";
-import { isPrivateImagePath, resolveImage } from "../../../lib/assets";
-import { colors, fonts, type as typography } from "../../../theme/tokens";
+import { fonts, type as typography, type ColorTokens } from "../../../theme/tokens";
+import { useThemedStyles } from "../../../theme/ThemeProvider";
+import { AuthenticatedImage } from "../../ui/AuthenticatedImage";
+
+export function useProfileStyles() {
+  return useThemedStyles(createProfileStyles);
+}
 
 export function Section({ title, children }: { title: string; children: ReactNode }) {
+  const styles = useProfileStyles();
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -20,6 +25,7 @@ export function Section({ title, children }: { title: string; children: ReactNod
 }
 
 export function InfoRow({ label, value }: { label: string; value: string }) {
+  const styles = useProfileStyles();
   return (
     <View style={styles.infoRow}>
       <Text style={styles.infoLabel}>{label}</Text>
@@ -29,6 +35,7 @@ export function InfoRow({ label, value }: { label: string; value: string }) {
 }
 
 export function InlineError({ message }: { message?: string }) {
+  const styles = useProfileStyles();
   return message ? (
     <Text accessibilityRole="alert" style={styles.inlineError}>
       {message}
@@ -39,18 +46,16 @@ export function InlineError({ message }: { message?: string }) {
 export function ManageAvatar({
   source,
   label,
-  token,
 }: {
   source?: string | null;
   label: string;
-  token?: string | null;
 }) {
+  const styles = useProfileStyles();
   return source ? (
-    <Image
+    <AuthenticatedImage
       accessible={false}
-      cachePolicy={isPrivateImagePath(source) ? "memory" : undefined}
       contentFit="cover"
-      source={resolveImage(source, token)}
+      path={source}
       style={styles.manageAvatar}
     />
   ) : (
@@ -75,6 +80,7 @@ export function ToggleRow({
   accessory?: ReactNode;
   onValueChange: (value: boolean) => void;
 }) {
+  const styles = useProfileStyles();
   const progress = useRef(new Animated.Value(value ? 1 : 0)).current;
 
   useEffect(() => {
@@ -141,6 +147,7 @@ export function Pill({
   disabled?: boolean;
   onPress: () => void;
 }) {
+  const styles = useProfileStyles();
   return (
     <Pressable
       accessibilityLabel={label}
@@ -164,6 +171,7 @@ export function Action({
   disabled?: boolean;
   onPress: () => void;
 }) {
+  const styles = useProfileStyles();
   return (
     <Pressable
       accessibilityLabel={label}
@@ -178,7 +186,8 @@ export function Action({
   );
 }
 
-export const styles = StyleSheet.create({
+function createProfileStyles(colors: ColorTokens) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   content: { padding: 24, paddingBottom: 64 },
   handle: {
@@ -190,7 +199,7 @@ export const styles = StyleSheet.create({
     marginBottom: 24,
   },
   name: {
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.displayMedium,
     fontSize: 27,
     textAlign: "center",
@@ -211,7 +220,7 @@ export const styles = StyleSheet.create({
   },
   stat: { flex: 1, alignItems: "center", paddingVertical: 16 },
   statValue: {
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.displayMedium,
     fontSize: 20,
   },
@@ -256,7 +265,7 @@ export const styles = StyleSheet.create({
   accountSummaryPressed: { opacity: 0.68 },
   accountSummaryCopy: { flex: 1, minWidth: 0, gap: 3 },
   accountSummaryName: {
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.bodyMedium,
     fontSize: 13,
   },
@@ -275,13 +284,17 @@ export const styles = StyleSheet.create({
     transform: [{ rotate: "45deg" }],
   },
   accountCaretExpanded: { transform: [{ rotate: "-135deg" }] },
+  caretForward: {
+    transform: [{ rotate: "-45deg" }],
+  },
+  statPressed: { opacity: 0.68 },
   input: {
     minHeight: 42,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.glassBorder,
     backgroundColor: colors.glassFill,
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.body,
     fontSize: 12,
     paddingHorizontal: 12,
@@ -294,7 +307,7 @@ export const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.42)",
+    borderColor: colors.glassBorderLoud,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 16,
@@ -302,7 +315,7 @@ export const styles = StyleSheet.create({
   nameSaveDisabled: { borderColor: colors.glassBorderSoft, opacity: 0.45 },
   nameSavePressed: { backgroundColor: colors.glassFillHover },
   nameSaveText: {
-    color: colors.white,
+    color: colors.title,
     fontFamily: fonts.displayMedium,
     fontSize: 12,
   },
@@ -312,12 +325,12 @@ export const styles = StyleSheet.create({
   searchButton: {
     minWidth: 68,
     borderRadius: 10,
-    backgroundColor: colors.white,
+    backgroundColor: colors.buttonPrimary,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 10,
   },
-  searchText: { color: colors.black, fontFamily: fonts.bodyMedium, fontSize: 11 },
+  searchText: { color: colors.buttonOnPrimary, fontFamily: fonts.bodyMedium, fontSize: 11 },
   infoRow: {
     minHeight: 48,
     flexDirection: "row",
@@ -350,7 +363,7 @@ export const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: "#fffaf5",
+    backgroundColor: colors.cream,
     shadowColor: colors.black,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.28,
@@ -367,11 +380,11 @@ export const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   pillActive: {
-    backgroundColor: "rgba(249,115,22,0.14)",
-    borderColor: "rgba(249,115,22,0.45)",
+    backgroundColor: colors.accentFillPill,
+    borderColor: colors.accentBorderPill,
   },
   pillText: { color: colors.mutedSoft, fontFamily: fonts.body, fontSize: 11 },
-  pillTextActive: { color: colors.accent },
+  pillTextActive: { color: colors.accentText },
   settingGroup: { marginBottom: 8 },
   settingMeta: {
     color: colors.muted,
@@ -379,6 +392,11 @@ export const styles = StyleSheet.create({
     fontSize: 9,
     marginTop: 7,
   },
+  list: { flex: 1 },
+  manageRowBody: { flex: 1, minWidth: 0 },
+  listStatus: { paddingVertical: 36, alignItems: "center" },
+  listFooter: { paddingVertical: 18 },
+  drawerCount: { marginBottom: 12 },
   manageRow: {
     minHeight: 50,
     flexDirection: "row",
@@ -406,7 +424,7 @@ export const styles = StyleSheet.create({
     fontSize: 13,
   },
   manageCopy: { flex: 1 },
-  manageName: { color: colors.white, fontFamily: fonts.bodyMedium, fontSize: 13 },
+  manageName: { color: colors.title, fontFamily: fonts.bodyMedium, fontSize: 13 },
   manageMeta: { color: colors.muted, fontFamily: fonts.body, fontSize: 10 },
   manageActions: { flexDirection: "row", alignItems: "center" },
   manageActionTouch: {
@@ -417,19 +435,21 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   remove: { color: colors.error, fontFamily: fonts.body, fontSize: 11 },
-  join: { color: colors.accent, fontFamily: fonts.bodyMedium, fontSize: 11 },
+  join: { color: colors.accentText, fontFamily: fonts.bodyMedium, fontSize: 11 },
   empty: { color: colors.muted, fontFamily: fonts.body, fontSize: 12 },
   inlineError: { color: colors.error, fontFamily: fonts.body, fontSize: 11 },
   action: {
     minHeight: 52,
     borderRadius: 26,
-    backgroundColor: colors.white,
+    backgroundColor: colors.buttonPrimary,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 24,
   },
-  actionText: { color: colors.black, fontFamily: fonts.displayMedium, fontSize: 14 },
+  actionText: { color: colors.buttonOnPrimary, fontFamily: fonts.displayMedium, fontSize: 14 },
   deleteButton: { alignItems: "center", paddingVertical: 20 },
   deleteText: { color: colors.error, fontFamily: fonts.body, fontSize: 12 },
+  legalLink: { color: colors.muted, fontFamily: fonts.body, fontSize: 12 },
   disabled: { opacity: 0.4 },
-});
+  });
+}
