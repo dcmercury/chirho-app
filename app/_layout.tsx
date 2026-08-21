@@ -24,6 +24,7 @@ import {
   JetBrainsMono_500Medium,
 } from "@expo-google-fonts/jetbrains-mono";
 import {
+  applyIncomingNotificationBadge,
   hrefFromNotificationData,
   registerForPushNotifications,
 } from "../src/lib/push";
@@ -115,9 +116,16 @@ function RootNavigator() {
       };
 
       Notifications.getLastNotificationResponseAsync().then(openNotification);
-      const subscription =
+      const responseSubscription =
         Notifications.addNotificationResponseReceivedListener(openNotification);
-      remove = () => subscription.remove();
+      const receivedSubscription =
+        Notifications.addNotificationReceivedListener((notification) => {
+          void applyIncomingNotificationBadge(notification);
+        });
+      remove = () => {
+        responseSubscription.remove();
+        receivedSubscription.remove();
+      };
     });
 
     return () => {
