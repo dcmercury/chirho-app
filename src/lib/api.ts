@@ -720,6 +720,38 @@ export async function addLovedOne(
   return data.lovedOne;
 }
 
+export async function generateDailyPrayers(
+  timeOfDay: "morning" | "evening" | "both",
+  lovedOnesConfig: Array<{
+    name: string;
+    categories: string[];
+    virtues: string[];
+  }>,
+  token: string,
+): Promise<
+  Array<{
+    timeOfDay: "morning" | "evening";
+    title: string;
+    text: string;
+  }>
+> {
+  const data = await authenticatedRequest<{
+    prayers?: Array<{
+      timeOfDay?: "morning" | "evening";
+      title?: string;
+      text?: string;
+    }>;
+  }>("/api/user/prayers/daily/generate", token, {
+    method: "POST",
+    body: JSON.stringify({ timeOfDay, lovedOnesConfig }),
+  });
+  return (data.prayers || []).map((prayer) => ({
+    timeOfDay: prayer.timeOfDay === "evening" ? "evening" : "morning",
+    title: prayer.title || "Daily Prayer",
+    text: prayer.text || "",
+  }));
+}
+
 export async function saveLovedOneConfig(
   lovedOneId: string,
   configurations: LovedOnePrayerConfiguration[],

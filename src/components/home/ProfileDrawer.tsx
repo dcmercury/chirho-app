@@ -19,6 +19,7 @@ import {
 import { useTheme } from "../../theme/ThemeProvider";
 import { AccountSection } from "./profile-drawer/AccountSection";
 import { CommunitySection } from "./profile-drawer/CommunitySection";
+import { DailyPrayerDrawer } from "./DailyPrayerDrawer";
 import { DailyPrayersSection } from "./profile-drawer/DailyPrayersSection";
 import { DangerZoneSection } from "./profile-drawer/DangerZoneSection";
 import { GroupsSection } from "./profile-drawer/GroupsSection";
@@ -86,9 +87,13 @@ export function ProfileDrawer({
   const { appearance } = useTheme();
   const controller = useProfileDrawerController(visible, onChanged);
   const [prayerCardsOpen, setPrayerCardsOpen] = useState(false);
+  const [dailyPrayerOpen, setDailyPrayerOpen] = useState(false);
 
   useEffect(() => {
-    if (!visible) setPrayerCardsOpen(false);
+    if (!visible) {
+      setPrayerCardsOpen(false);
+      setDailyPrayerOpen(false);
+    }
   }, [visible]);
 
   if (!profile) return null;
@@ -275,6 +280,7 @@ export function ProfileDrawer({
                   next,
                 );
               }}
+              onOpenWizard={() => setDailyPrayerOpen(true)}
             />
           ) : null}
           <NotificationsSection
@@ -325,6 +331,12 @@ export function ProfileDrawer({
           count={prayerCount}
           onClose={() => setPrayerCardsOpen(false)}
           onChanged={onChanged}
+        />
+        <DailyPrayerDrawer
+          visible={dailyPrayerOpen}
+          lovedOnes={profile.managedLovedOnes}
+          onClose={() => setDailyPrayerOpen(false)}
+          onComplete={onChanged}
         />
       </View>
     </Modal>

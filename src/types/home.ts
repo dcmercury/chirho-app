@@ -240,20 +240,18 @@ export function communityAllowsPersonalPrayer(
   community: HomeCommunity | null | undefined,
   plan?: PersonalPlan | null,
 ): boolean {
+  if (!community) return true;
   if (plan?.hasPersonalPro) return true;
-  if (community) return community.features?.personalPrayer === true;
-  if (!plan) return true;
-  return false;
+  return community.features?.personalPrayer === true;
 }
 
 export function communityAllowsDailyPrayers(
   community: HomeCommunity | null | undefined,
   plan?: PersonalPlan | null,
 ): boolean {
+  if (!community) return true;
   if (plan?.hasPersonalPro) return true;
-  if (community) return community.features?.dailyPrayers === true;
-  if (!plan) return true;
-  return false;
+  return community.features?.dailyPrayers === true;
 }
 
 export function formatTrialRemaining(trialEndsAt: string | null | undefined) {

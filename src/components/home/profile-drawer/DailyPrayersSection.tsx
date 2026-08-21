@@ -1,4 +1,4 @@
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import type {
   DailyPrayerSettings,
   HomeProfile,
@@ -16,6 +16,7 @@ export function DailyPrayersSection({
   isPending,
   getError,
   onChange,
+  onOpenWizard,
 }: {
   dailyPrayers: HomeProfile["dailyPrayers"];
   isPending: (period: DailyPrayerPeriod) => boolean;
@@ -24,6 +25,7 @@ export function DailyPrayersSection({
     period: DailyPrayerPeriod,
     next: DailyPrayerSettings,
   ) => void;
+  onOpenWizard: () => void;
 }) {
   const styles = useProfileStyles();
   return (
@@ -56,6 +58,20 @@ export function DailyPrayersSection({
           </View>
         );
       })}
+      <Pressable
+        accessibilityLabel="Create morning and evening prayer"
+        accessibilityRole="button"
+        onPress={onOpenWizard}
+        style={styles.manageRow}
+      >
+        <View style={styles.manageCopy}>
+          <Text style={styles.manageName}>Create morning & evening prayer</Text>
+          <Text style={styles.manageMeta}>
+            Choose loved ones and let AI write the prayer.
+          </Text>
+        </View>
+        <View style={[styles.accountCaret, styles.caretForward]} />
+      </Pressable>
     </Section>
   );
 }
