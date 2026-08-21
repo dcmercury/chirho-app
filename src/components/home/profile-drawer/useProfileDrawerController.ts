@@ -182,7 +182,10 @@ export function useProfileDrawerController(
         },
         token,
       );
-      if (next.enabled) await enablePushIfNeeded(token);
+      if (next.enabled) {
+        await updateNotificationPreference("dailyPrayerReminders", true, token);
+        await enablePushIfNeeded(token);
+      }
     });
 
   const setNotification = (key: string, enabled: boolean) =>
