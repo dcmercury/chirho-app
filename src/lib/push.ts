@@ -149,8 +149,8 @@ export async function registerForPushNotifications(
   try {
     const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
     return tokenData.data;
-  } catch (error) {
-    console.error("Failed to get Expo push token:", error);
+  } catch {
+    if (__DEV__) console.error("Failed to get Expo push token");
     return null;
   }
 }

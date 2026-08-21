@@ -1,5 +1,9 @@
 import { Pressable, Text } from "react-native";
-import { openPrivacyPolicy } from "../../ui/PrivacyPolicyLink";
+import {
+  openPrivacyPolicy,
+  openSupport,
+  openTerms,
+} from "../../ui/PrivacyPolicyLink";
 import { Action, InlineError, useProfileStyles } from "./ProfileControls";
 
 export function DangerZoneSection({
@@ -27,6 +31,26 @@ export function DangerZoneSection({
         style={styles.deleteButton}
       >
         <Text style={styles.legalLink}>Privacy Policy</Text>
+      </Pressable>
+      <Pressable
+        accessibilityLabel="Terms of Service"
+        accessibilityRole="link"
+        onPress={() => {
+          void openTerms();
+        }}
+        style={styles.deleteButton}
+      >
+        <Text style={styles.legalLink}>Terms of Service</Text>
+      </Pressable>
+      <Pressable
+        accessibilityLabel="Support"
+        accessibilityRole="link"
+        onPress={() => {
+          void openSupport();
+        }}
+        style={styles.deleteButton}
+      >
+        <Text style={styles.legalLink}>Support</Text>
       </Pressable>
       <Action
         disabled={signOutPending}

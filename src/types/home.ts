@@ -201,10 +201,21 @@ export interface HomeCommunity {
   groupsUsed?: number;
 }
 
+export interface PendingGroupInvite {
+  invitationToken: string;
+  groupuuid: string;
+  groupName: string;
+  groupImage?: string | null;
+  firstName?: string | null;
+  phoneLastFour?: string | null;
+  expiresAt: string;
+}
+
 export interface MobileHomeResponse {
   home: HomeData;
   community: HomeCommunity | null;
   plan: PersonalPlan | null;
+  pendingInvites: PendingGroupInvite[];
 }
 
 export type PersonalPlanStatus = "free" | "trial" | "pro" | "sponsored";
@@ -221,6 +232,8 @@ export interface PersonalPlan {
   sponsoredByName: string | null;
   daysLeft: number | null;
   priceLabel: string;
+  billingEnabled: boolean;
+  complimentaryAccess: boolean;
 }
 
 export function communityAllowsPersonalPrayer(

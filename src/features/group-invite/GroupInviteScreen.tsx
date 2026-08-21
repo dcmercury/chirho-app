@@ -34,6 +34,7 @@ import { PrivacyPolicyLink } from "../../components/ui/PrivacyPolicyLink";
 import {
   GroupInviteApiError,
   acceptGroupInvitation,
+  declineGroupInvitation,
   getGroupInvitation,
   updateGroupPrayerCategories,
   type GroupInvitation,
@@ -261,6 +262,26 @@ export function GroupInviteScreen({ token }: { token: string }) {
       },
     });
   }, [router, token]);
+
+  const handleDeny = useCallback(async () => {
+    if (submittingRef.current || !invitation || !isSignedIn) return;
+    submittingRef.current = true;
+    setBusy(true);
+    setAuthError(null);
+    try {
+      const sessionToken = await getToken();
+      if (!sessionToken) throw new Error("Your session expired. Please sign in again.");
+      await declineGroupInvitation(token, sessionToken);
+      router.replace("/(app)");
+    } catch (error) {
+      setAuthError(
+        clerkErrorMessage(error, "Unable to decline this invitation."),
+      );
+    } finally {
+      submittingRef.current = false;
+      setBusy(false);
+    }
+  }, [getToken, invitation, isSignedIn, router, token]);
 
   const handleJoin = useCallback(async () => {
     if (submittingRef.current || !invitation) return;
@@ -733,6 +754,15 @@ export function GroupInviteScreen({ token }: { token: string }) {
                 />
               </Pressable>
               <PrivacyPolicyLink style={styles.legal} />
+              {isSignedIn ? (
+                <Pressable
+                  disabled={busy}
+                  onPress={handleDeny}
+                  style={styles.denyAction}
+                >
+                  <Text style={styles.denyActionText}>Decline invitation</Text>
+                </Pressable>
+              ) : null}
             </Enter>
           </>
         )}
@@ -1014,6 +1044,17 @@ function createStyles(colors: ColorTokens) {
     fontSize: 11,
     lineHeight: 16,
     marginTop: 10,
+  },
+  denyAction: {
+    alignSelf: "flex-start",
+    paddingVertical: 8,
+    marginTop: 4,
+  },
+  denyActionText: {
+    color: colors.mutedSoft,
+    fontFamily: fonts.body,
+    fontSize: 12,
+    textDecorationLine: "underline",
   },
   otpStack: {
     gap: 12,

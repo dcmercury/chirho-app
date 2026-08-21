@@ -7,12 +7,13 @@ import { Section, useProfileStyles } from "./ProfileControls";
 
 function planSummary(plan: PersonalPlan | null) {
   if (!plan) return "Manage ChiRho Personal";
+  if (plan.complimentaryAccess) return "All Personal features included";
   if (plan.status === "sponsored") {
     return plan.sponsoredByName
       ? `Covered by ${plan.sponsoredByName}`
       : "Covered by your church";
   }
-  if (plan.status === "pro") return `Pro · ${plan.priceLabel} placeholder`;
+  if (plan.status === "pro") return "ChiRho Personal access active";
   if (plan.status === "trial") {
     return formatTrialRemaining(plan.trialEndsAt) || "Free week";
   }
@@ -41,7 +42,9 @@ export function PersonalPlanSection({
       >
         <View style={styles.accountSummaryCopy}>
           <Text style={styles.accountSummaryName}>
-            {plan?.status === "pro"
+            {plan?.complimentaryAccess
+              ? "Included"
+              : plan?.status === "pro"
               ? "Pro"
               : plan?.status === "trial"
                 ? "Free week"

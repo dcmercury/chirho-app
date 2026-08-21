@@ -27,11 +27,24 @@ import {
   generatePrayerCardAudio,
   getLovedOnePhotos,
   getMobileHome,
+  previewGroupContent,
+  regenerateGroupBackground,
   saveLovedOneConfig,
+  selectGroupBackground,
+  uploadGroupBackground,
   uploadLovedOnePhoto,
   updatePersonalPlan,
   updatePrayerFocus,
 } from "../../lib/api";
+import {
+  acceptGroupInvitation,
+  declineGroupInvitation,
+} from "../../lib/groupInviteApi";
+import type { LovedOnePrayerConfiguration } from "../../lib/prayerConfig";
+import type {
+  GroupCreatePayload,
+  GroupPreviewPayload,
+} from "../../features/groups/types";
 import { GridOverlay } from "../ui/GridOverlay";
 import { PrayerCard } from "../ui/PrayerCard";
 import { LovedOne } from "../ui/LovedOne";
@@ -50,6 +63,7 @@ import type {
   HomeLovedOne,
   HomePrayerCard,
   MobileHomeResponse,
+  PendingGroupInvite,
   PrayerFocus,
   PrayerFocusInput,
 } from "../../types/home";
@@ -69,7 +83,9 @@ async function prefetchHomeImages(result: MobileHomeResponse, token: string) {
       .slice(0, 5)
       .flatMap((person) => lovedOneImagePaths(person)),
     ...result.home.groups.slice(0, 3).map((group) => group.image),
-  ];
+  ].filter(
+    (path): path is string => typeof path === "string" && path.length > 0,
+  );
   const sources = paths
     .map((path) => {
       const source = resolveImage(path, token);
@@ -84,7 +100,7 @@ async function prefetchHomeImages(result: MobileHomeResponse, token: string) {
       (
         item,
       ): item is {
-        path: string | null | undefined;
+        path: string;
         source: { uri: string; headers?: Record<string, string> };
       } => Boolean(item),
     )
@@ -217,12 +233,15 @@ export function HomeScreen() {
   const [savingLovedOne, setSavingLovedOne] = useState(false);
   const [savingGroup, setSavingGroup] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const [inviteBusyToken, setInviteBusyToken] = useState<string | null>(null);
   const generatingLovedOneRef = useRef(false);
   const showPersonalPrayer = communityAllowsPersonalPrayer(
     response?.community,
     response?.plan,
   );
-  const trialLabel = formatTrialRemaining(response?.plan?.trialEndsAt);
+  const trialLabel = response?.plan?.billingEnabled
+    ? formatTrialRemaining(response.plan.trialEndsAt)
+    : null;
 
   useEffect(() => {
     if (response?.plan?.status !== "trial") return;
@@ -231,6 +250,7 @@ export function HomeScreen() {
   }, [response?.plan?.status]);
 
   useEffect(() => {
+    if (!__DEV__) return;
     console.info("[HomeFeatures]", {
       hasCommunity: Boolean(response?.community),
       communityuuid: response?.community?.communityuuid ?? null,
@@ -300,19 +320,17 @@ export function HomeScreen() {
           await getMobileHome(token),
           token,
         );
-        console.info("[HomeFeatures] home payload", {
-          hasCommunity: Boolean(result.community),
-          communityuuid: result.community?.communityuuid ?? null,
-          name: result.community?.name ?? null,
-          licenseTier: result.community?.licenseTier ?? null,
-          personalPrayer: result.community?.features?.personalPrayer ?? null,
-          dailyPrayers: result.community?.features?.dailyPrayers ?? null,
-          allowPersonalPrayer: communityAllowsPersonalPrayer(
-            result.community,
-            result.plan,
-          ),
-          planStatus: result.plan?.status ?? null,
-        });
+        if (__DEV__) {
+          console.info("[HomeFeatures] home payload", {
+            hasCommunity: Boolean(result.community),
+            licenseTier: result.community?.licenseTier ?? null,
+            allowPersonalPrayer: communityAllowsPersonalPrayer(
+              result.community,
+              result.plan,
+            ),
+            planStatus: result.plan?.status ?? null,
+          });
+        }
         setResponse(result);
         if (!refresh) await prefetchHomeImages(result, token);
       } catch (err) {
@@ -328,6 +346,34 @@ export function HomeScreen() {
   useEffect(() => {
     loadHome();
   }, [loadHome]);
+
+  const respondToInvite = useCallback(
+    async (invite: PendingGroupInvite, action: "accept" | "deny") => {
+      if (inviteBusyToken) return;
+      setInviteBusyToken(invite.invitationToken);
+      try {
+        const token = await requireCurrentToken();
+        if (action === "accept") {
+          await acceptGroupInvitation(invite.invitationToken, token);
+          router.push({
+            pathname: "/(app)/groups/[groupuuid]",
+            params: { groupuuid: invite.groupuuid },
+          });
+        } else {
+          await declineGroupInvitation(invite.invitationToken, token);
+        }
+        await loadHome(true);
+      } catch (err) {
+        Alert.alert(
+          action === "accept" ? "Unable to join" : "Unable to decline",
+          err instanceof Error ? err.message : "Please try again.",
+        );
+      } finally {
+        setInviteBusyToken(null);
+      }
+    },
+    [inviteBusyToken, loadHome, requireCurrentToken, router],
+  );
 
   const home: HomeData | null = response?.home || null;
 
@@ -478,7 +524,7 @@ export function HomeScreen() {
 
   const handleAddLovedOne = async (
     name: string,
-    categories: string[],
+    configurations: LovedOnePrayerConfiguration[],
     photoDataUris: string[] = [],
   ) => {
     setSavingLovedOne(true);
@@ -486,8 +532,8 @@ export function HomeScreen() {
     try {
       const token = await requireCurrentToken();
       const lovedOne = await addLovedOne(name, token);
-      if (categories.length) {
-        await saveLovedOneConfig(lovedOne.id, categories, token);
+      if (configurations.length) {
+        await saveLovedOneConfig(lovedOne.id, configurations, token);
       }
       for (const imageData of photoDataUris) {
         await uploadLovedOnePhoto(lovedOne.id, imageData, token);
@@ -501,12 +547,30 @@ export function HomeScreen() {
     }
   };
 
-  const handleCreateGroup = async (name: string) => {
+  const handlePreviewGroup = async (input: GroupPreviewPayload) => {
+    const token = await requireCurrentToken();
+    return previewGroupContent(input, token);
+  };
+
+  const handleCreateGroup = async (input: GroupCreatePayload) => {
     setSavingGroup(true);
     setMutationError(null);
     try {
       const token = await requireCurrentToken();
-      const group = await createGroup(name, token);
+      const group = await createGroup(input, token);
+      try {
+        for (const imageUrl of input.backgroundUrls || []) {
+          await selectGroupBackground(group.groupuuid, imageUrl, token);
+        }
+        for (const imageData of input.backgroundUploads || []) {
+          await uploadGroupBackground(group.groupuuid, imageData, token);
+        }
+        if (input.generateBackground) {
+          await regenerateGroupBackground(group.groupuuid, token);
+        }
+      } catch {
+        // Group exists; background can be set later in group settings.
+      }
       await loadHome(true);
       setCreateGroupOpen(false);
       router.push({
@@ -823,6 +887,53 @@ export function HomeScreen() {
               </>
             ) : null}
 
+            {response?.pendingInvites?.length ? (
+              <View style={styles.inviteStack}>
+                {response.pendingInvites.map((invite) => {
+                  const busy = inviteBusyToken === invite.invitationToken;
+                  return (
+                    <View key={invite.invitationToken} style={styles.inviteCard}>
+                      <Text style={styles.inviteLabel}>GROUP REQUEST</Text>
+                      <Text style={styles.inviteTitle}>{invite.groupName}</Text>
+                      <Text style={styles.inviteHint}>
+                        {invite.phoneLastFour
+                          ? `Sent to the number ending in ${invite.phoneLastFour}. Accept or decline.`
+                          : "Accept or decline this group invitation."}
+                      </Text>
+                      <View style={styles.inviteActions}>
+                        <Pressable
+                          accessibilityRole="button"
+                          disabled={busy}
+                          onPress={() => respondToInvite(invite, "deny")}
+                          style={({ pressed }) => [
+                            styles.inviteDeny,
+                            pressed && styles.pressed,
+                            busy && styles.plusDisabled,
+                          ]}
+                        >
+                          <Text style={styles.inviteDenyText}>Decline</Text>
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          disabled={busy}
+                          onPress={() => respondToInvite(invite, "accept")}
+                          style={({ pressed }) => [
+                            styles.inviteAccept,
+                            pressed && styles.pressed,
+                            busy && styles.plusDisabled,
+                          ]}
+                        >
+                          <Text style={styles.inviteAcceptText}>
+                            {busy ? "Please wait…" : "Accept"}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            ) : null}
+
             <View style={styles.sectionRow}>
               <Text style={styles.section}>Prayer Groups</Text>
               {!response?.community ||
@@ -964,6 +1075,7 @@ export function HomeScreen() {
         saving={savingGroup}
         error={createGroupOpen ? mutationError : null}
         onClose={() => setCreateGroupOpen(false)}
+        onGeneratePreview={handlePreviewGroup}
         onSubmit={handleCreateGroup}
       />
       <PersonalPlanDrawer
@@ -1173,6 +1285,68 @@ function createStyles(colors: ColorTokens) {
   },
   plusDisabled: {
     opacity: 0.35,
+  },
+  inviteStack: {
+    gap: 10,
+    marginBottom: 8,
+  },
+  inviteCard: {
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.accentBorderMuted,
+    backgroundColor: colors.accentFillMuted,
+    gap: 6,
+  },
+  inviteLabel: {
+    color: colors.accentText,
+    fontFamily: fonts.monoMedium,
+    fontSize: 9,
+    letterSpacing: 0.7,
+  },
+  inviteTitle: {
+    color: colors.title,
+    fontFamily: fonts.displayMedium,
+    fontSize: 18,
+    letterSpacing: -0.3,
+  },
+  inviteHint: {
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  inviteActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+  },
+  inviteDeny: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.glassBorderStrong,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inviteDenyText: {
+    color: colors.mutedStrong,
+    fontFamily: fonts.bodyMedium,
+    fontSize: 12,
+  },
+  inviteAccept: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 20,
+    backgroundColor: colors.buttonPrimary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inviteAcceptText: {
+    color: colors.buttonOnPrimary,
+    fontFamily: fonts.displayMedium,
+    fontSize: 12,
   },
   pressed: {
     opacity: 0.7,

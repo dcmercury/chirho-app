@@ -229,8 +229,8 @@ export function PrayerDetailModal({
       playsInSilentMode: true,
       shouldPlayInBackground: true,
       shouldRouteThroughEarpiece: false,
-    }).catch((error) => {
-      console.error("[Audio] Unable to configure playback:", error);
+    }).catch(() => {
+      if (__DEV__) console.error("[Audio] Unable to configure playback");
       setAudioMessage("Audio playback could not be prepared.");
     });
   }, [visible]);
@@ -324,10 +324,7 @@ export function PrayerDetailModal({
 
   useEffect(() => {
     if (!narrationStatus.error) return;
-    console.error("[Audio] Narration failed:", {
-      error: narrationStatus.error,
-      url: narrationUrl,
-    });
+    if (__DEV__) console.error("[Audio] Narration failed");
     pendingPlayRef.current = false;
     setAudioMessage("Narration could not be loaded. Please try again.");
     if (reportedErrorRef.current !== narrationStatus.error) {
@@ -338,10 +335,7 @@ export function PrayerDetailModal({
 
   useEffect(() => {
     if (!musicStatus.error) return;
-    console.warn("[Audio] Background music failed:", {
-      error: musicStatus.error,
-      url: musicUrl,
-    });
+    if (__DEV__) console.warn("[Audio] Background music failed");
     setAudioMessage("Background music could not be loaded.");
   }, [musicStatus.error, musicUrl]);
 

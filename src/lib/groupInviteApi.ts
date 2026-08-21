@@ -82,9 +82,28 @@ export async function acceptGroupInvitation(
 ): Promise<AcceptGroupInvitationResult> {
   const response = await fetch(`${API_BASE}${invitePath(invitationToken)}`, {
     method: "POST",
-    headers: authenticatedHeaders(sessionToken),
+    headers: {
+      ...authenticatedHeaders(sessionToken),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ action: "accept" }),
   });
   return parseResponse<AcceptGroupInvitationResult>(response);
+}
+
+export async function declineGroupInvitation(
+  invitationToken: string,
+  sessionToken: string,
+): Promise<{ success: boolean; declined?: boolean }> {
+  const response = await fetch(`${API_BASE}${invitePath(invitationToken)}`, {
+    method: "POST",
+    headers: {
+      ...authenticatedHeaders(sessionToken),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ action: "deny" }),
+  });
+  return parseResponse<{ success: boolean; declined?: boolean }>(response);
 }
 
 export async function updateGroupPrayerCategories(

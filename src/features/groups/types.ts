@@ -67,6 +67,17 @@ export interface GroupPreviewResult {
   scriptureReferences: GroupScripture[];
 }
 
+export interface GroupCreatePayload {
+  name: string;
+  description?: string;
+  purpose?: string;
+  scriptureReferences?: GroupScripture[];
+  creationMetadata?: GroupCreationMetadata;
+  backgroundUrls?: string[];
+  backgroundUploads?: string[];
+  generateBackground?: boolean;
+}
+
 export interface GroupMemberProfile {
   firstName: string | null;
   lastName: string | null;

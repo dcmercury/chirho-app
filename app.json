@@ -103,7 +103,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Choose photos of loved ones to display privately on your personal prayer cards.",
+          "photosPermission": "Choose photos for your profile, prayer groups, and private loved-one prayer cards.",
           "cameraPermission": false,
           "microphonePermission": false
         }

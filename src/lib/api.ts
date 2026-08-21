@@ -1,10 +1,12 @@
 import { API_BASE } from "./assets";
+import type { LovedOnePrayerConfiguration } from "./prayerConfig";
 import type {
   GroupDetail,
   HomeCommunity,
   HomePrayerCard,
   LovedOnePhoto,
   MobileHomeResponse,
+  PendingGroupInvite,
   PersonalPlan,
   PrayerDeckCard,
   PrayerDeckDetail,
@@ -18,6 +20,7 @@ import type {
   GroupInviteResult,
   GroupMember,
   GroupMessage,
+  GroupCreatePayload,
   GroupPreviewPayload,
   GroupPreviewResult,
   GroupScripture,
@@ -64,10 +67,12 @@ async function authenticatedRequest<T>(
       },
     });
   } catch (error) {
-    console.error(
-      `[API] ✕ ${method} ${url} (${Date.now() - startedAt}ms)`,
-      error,
-    );
+    if (__DEV__) {
+      console.error(
+        `[API] ✕ ${method} ${url} (${Date.now() - startedAt}ms)`,
+        error,
+      );
+    }
     throw new Error(
       `Could not reach the API at ${API_BASE}. Make sure the backend is running.`,
       { cause: error },
@@ -86,7 +91,9 @@ async function authenticatedRequest<T>(
       (data as { error?: string }).error || `Request failed (${response.status})`,
     ) as Error & { status?: number };
     error.status = response.status;
-    console.error(`[API] ${response.status} ${method} ${url}`, error.message);
+    if (__DEV__) {
+      console.error(`[API] ${response.status} ${method} ${url}`, error.message);
+    }
     throw error;
   }
   return data as T;
@@ -431,6 +438,7 @@ export async function getMobileHome(
             }
           | null;
         plan?: PersonalPlan | null;
+        pendingInvites?: PendingGroupInvite[];
       }
     | MobileHomeResponse["home"]
   >("/api/mobile/home", token);
@@ -443,6 +451,7 @@ export async function getMobileHome(
       },
       community: null,
       plan: null,
+      pendingInvites: [],
     };
   }
   const rawCommunity = data.community;
@@ -459,11 +468,15 @@ export async function getMobileHome(
         logo:
           "logo" in rawCommunity
             ? rawCommunity.logo || null
-            : rawCommunity.branding?.logo || null,
+            : "branding" in rawCommunity
+              ? rawCommunity.branding?.logo || null
+              : null,
         backgroundImage:
           "backgroundImage" in rawCommunity
             ? rawCommunity.backgroundImage || null
-            : rawCommunity.activeBackground?.url || null,
+            : "activeBackground" in rawCommunity
+              ? rawCommunity.activeBackground?.url || null
+              : null,
         donationLink: rawCommunity.donationLink || null,
         features: rawCommunity.features,
         licenseTier:
@@ -481,6 +494,9 @@ export async function getMobileHome(
     },
     community,
     plan: data.plan || null,
+    pendingInvites: Array.isArray(data.pendingInvites)
+      ? data.pendingInvites
+      : [],
   };
 }
 
@@ -706,7 +722,7 @@ export async function addLovedOne(
 
 export async function saveLovedOneConfig(
   lovedOneId: string,
-  categories: string[],
+  configurations: LovedOnePrayerConfiguration[],
   token: string,
 ): Promise<void> {
   await authenticatedRequest(
@@ -715,9 +731,9 @@ export async function saveLovedOneConfig(
     {
       method: "POST",
       body: JSON.stringify({
-        configurations: categories.map((category) => ({
-          category: category.toLowerCase(),
-          virtues: ["love", "peace", "grace"],
+        configurations: configurations.map((item) => ({
+          category: item.category.toLowerCase(),
+          virtues: item.virtues,
         })),
       }),
     },
@@ -1045,18 +1061,24 @@ export async function previewGroupContent(
 }
 
 export async function createGroup(
-  name: string,
+  input: GroupCreatePayload,
   token: string,
 ): Promise<{ groupuuid: string; name: string }> {
   const data = await authenticatedRequest<{
     group?: { groupuuid?: string; name?: string };
   }>("/api/groups", token, {
     method: "POST",
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({
+      name: input.name,
+      description: input.description || input.name,
+      purpose: input.purpose,
+      scriptureReferences: input.scriptureReferences,
+      creationMetadata: input.creationMetadata,
+    }),
   });
   const groupuuid = data.group?.groupuuid;
   if (!groupuuid) throw new Error("The group could not be created.");
-  return { groupuuid, name: data.group?.name || name };
+  return { groupuuid, name: data.group?.name || input.name };
 }
 
 export async function leaveGroup(
