@@ -50,6 +50,13 @@ import { PrayerCard } from "../ui/PrayerCard";
 import { LovedOne } from "../ui/LovedOne";
 import { KenBurnsImage, lovedOneImagePaths } from "../ui/KenBurnsImage";
 import { LoadingChiRhoOverlay } from "../ui/LoadingChiRhoOverlay";
+import {
+  hasExistingSetupData,
+  isSetupOnboardingComplete,
+  markSetupOnboardingComplete,
+  remainingSetupChapters,
+} from "../../lib/setupOnboarding";
+import { SetupOnboarding } from "../onboarding/SetupOnboarding";
 import { AddLovedOneModal } from "./AddLovedOneModal";
 import { CreateGroupModal } from "./CreateGroupModal";
 import { LovedOnePhotosModal } from "./LovedOnePhotosModal";
@@ -234,6 +241,8 @@ export function HomeScreen() {
   const [savingGroup, setSavingGroup] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [inviteBusyToken, setInviteBusyToken] = useState<string | null>(null);
+  const [setupReady, setSetupReady] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
   const generatingLovedOneRef = useRef(false);
   const showPersonalPrayer = communityAllowsPersonalPrayer(
     response?.community,
@@ -376,6 +385,36 @@ export function HomeScreen() {
   );
 
   const home: HomeData | null = response?.home || null;
+
+  useEffect(() => {
+    if (setupReady || loading) return;
+    if (error && !home) {
+      setSetupReady(true);
+      return;
+    }
+    if (!home || !user?.id) return;
+    let cancelled = false;
+    void (async () => {
+      const completed = await isSetupOnboardingComplete(user.id);
+      if (cancelled) return;
+      const hasData = hasExistingSetupData(home);
+      if (hasData && !completed) {
+        void markSetupOnboardingComplete(user.id);
+      }
+      const chapters = hasData
+        ? []
+        : remainingSetupChapters(
+            home,
+            response?.community ?? null,
+            response?.plan ?? null,
+          );
+      setSetupOpen(!completed && !hasData && chapters.length > 0);
+      setSetupReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [error, home, loading, response?.community, response?.plan, setupReady, user?.id]);
 
   useEffect(() => {
     if (typeof home?.profile.backgroundMusicEnabled !== "boolean") return;
@@ -633,7 +672,7 @@ export function HomeScreen() {
     }
   };
 
-  if (loading) {
+  if (loading || (!error && !setupReady)) {
     return (
       <View style={styles.root}>
         <LoadingChiRhoOverlay
@@ -641,6 +680,23 @@ export function HomeScreen() {
           visible
         />
       </View>
+    );
+  }
+
+  if (setupOpen && home) {
+    return (
+      <SetupOnboarding
+        firstName={firstName}
+        home={home}
+        community={response?.community ?? null}
+        plan={response?.plan ?? null}
+        onRefresh={() => loadHome(true)}
+        onFinished={async () => {
+          if (user?.id) await markSetupOnboardingComplete(user.id);
+          await loadHome(true);
+          setSetupOpen(false);
+        }}
+      />
     );
   }
 

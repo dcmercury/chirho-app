@@ -14,6 +14,8 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { fonts, type as typography, type ColorTokens } from "../../theme/tokens";
 import { useThemedStyles } from "../../theme/ThemeProvider";
 import { generateDailyPrayers, saveLovedOneConfig } from "../../lib/api";
+import { Stagger } from "../../features/groups/components/Stagger";
+import { WizardBackdrop } from "../ui/WizardBackdrop";
 import {
   PRAYER_CATEGORIES,
   PRAYER_VIRTUES,
@@ -50,11 +52,15 @@ function emptyDraft(): PersonDraft {
 export function DailyPrayerDrawer({
   visible,
   lovedOnes,
+  dismissLabel = "Cancel",
+  preselectLovedOnes = false,
   onClose,
   onComplete,
 }: {
   visible: boolean;
   lovedOnes: HomeProfile["managedLovedOnes"];
+  dismissLabel?: string;
+  preselectLovedOnes?: boolean;
   onClose: () => void;
   onComplete: () => Promise<void> | void;
 }) {
@@ -81,7 +87,24 @@ export function DailyPrayerDrawer({
       setPrayers([]);
       setBusy(false);
       setError(null);
+      return;
     }
+    if (!preselectLovedOnes || !lovedOnes.length) return;
+    const selected = lovedOnes.slice(0, 5);
+    setSelectedIds(selected.map((person) => person.id));
+    setDrafts(
+      Object.fromEntries(
+        selected.map((person) => [
+          person.id,
+          {
+            categories: person.categories || [],
+            virtues: {},
+          },
+        ]),
+      ),
+    );
+    // Preselect only when the drawer opens, not when the parent refreshes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
   const selectedPeople = useMemo(
@@ -317,6 +340,7 @@ export function DailyPrayerDrawer({
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           style={styles.root}
         >
+          <WizardBackdrop />
           <ScrollView
             contentContainerStyle={styles.content}
             keyboardShouldPersistTaps="handled"
@@ -394,8 +418,14 @@ export function DailyPrayerDrawer({
                 ) : null}
               </View>
             ) : null}
-            <Text style={styles.title}>{title}</Text>
-            <Text style={styles.subtitle}>{subtitle}</Text>
+            <View key={`${step}-${personIndex}-${categoryIndex}`}>
+              <Stagger delay={80}>
+                <Text style={styles.title}>{title}</Text>
+              </Stagger>
+              <Stagger delay={180}>
+                <Text style={styles.subtitle}>{subtitle}</Text>
+              </Stagger>
+              <Stagger delay={280}>
 
             {step === "people" ? (
               lovedOnes.length ? (
@@ -537,6 +567,8 @@ export function DailyPrayerDrawer({
               </View>
             ) : null}
 
+              </Stagger>
+              <Stagger delay={400}>
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
             {step === "people" && lovedOnes.length ? (
@@ -596,6 +628,8 @@ export function DailyPrayerDrawer({
                 <Text style={styles.submitText}>Done</Text>
               </Pressable>
             ) : null}
+              </Stagger>
+            </View>
 
             <View style={styles.actions}>
               {step !== "people" ? (
@@ -616,7 +650,7 @@ export function DailyPrayerDrawer({
                 onPress={onClose}
                 style={[styles.secondary, busy && styles.disabled]}
               >
-                <Text style={styles.cancelText}>Cancel</Text>
+                <Text style={styles.cancelText}>{dismissLabel}</Text>
               </Pressable>
             </View>
           </ScrollView>

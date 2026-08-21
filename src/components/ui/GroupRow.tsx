@@ -13,9 +13,9 @@ function createStyles(colors: ColorTokens) {
       gap: 12,
       padding: 10,
       borderRadius: radii.glass,
-      backgroundColor: colors.groupFill,
+      backgroundColor: colors.cardFill,
       borderWidth: 1,
-      borderColor: colors.glassBorderSoft,
+      borderColor: colors.cardBorder,
     },
     img: {
       width: 40,

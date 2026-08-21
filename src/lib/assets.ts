@@ -13,6 +13,15 @@ export const images = {
   avatar3: require("../../assets/onboarding/avatar3.png") as ImageSource,
 };
 
+export const ONBOARDING_COVERS = [
+  "/cover1.jpg",
+  "/cover2.jpg",
+  "/cover3.jpg",
+  "/cover4.jpg",
+  "/cover5.jpg",
+  "/cover6.jpg",
+];
+
 export const video = {
   intro: require("../../assets/onboarding/intro.mp4"),
 };

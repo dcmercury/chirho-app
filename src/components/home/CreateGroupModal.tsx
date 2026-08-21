@@ -15,6 +15,8 @@ import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { fonts, type as typography, type ColorTokens } from "../../theme/tokens";
 import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
+import { Stagger } from "../../features/groups/components/Stagger";
+import { WizardBackdrop } from "../ui/WizardBackdrop";
 import { resolveImage } from "../../lib/assets";
 import { STOCK_GROUP_BACKGROUNDS } from "../../lib/groupBackgrounds";
 import { prepareLovedOnePhoto } from "../../lib/lovedOnePhoto";
@@ -48,6 +50,7 @@ export function CreateGroupModal({
   visible,
   saving,
   error,
+  dismissLabel = "Cancel",
   onClose,
   onGeneratePreview,
   onSubmit,
@@ -55,6 +58,7 @@ export function CreateGroupModal({
   visible: boolean;
   saving: boolean;
   error: string | null;
+  dismissLabel?: string;
   onClose: () => void;
   onGeneratePreview: (
     input: GroupPreviewPayload,
@@ -420,6 +424,7 @@ export function CreateGroupModal({
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.root}
       >
+        <WizardBackdrop />
         <ScrollView
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
@@ -477,10 +482,16 @@ export function CreateGroupModal({
               })}
             </View>
           ) : null}
-          <Text style={styles.title}>{step?.title || "Start a group"}</Text>
-          {step?.subtitle ? (
-            <Text style={styles.subtitle}>{step.subtitle}</Text>
-          ) : null}
+          <View key={flow.step}>
+            <Stagger delay={80}>
+              <Text style={styles.title}>{step?.title || "Start a group"}</Text>
+            </Stagger>
+            {step?.subtitle ? (
+              <Stagger delay={180}>
+                <Text style={styles.subtitle}>{step.subtitle}</Text>
+              </Stagger>
+            ) : null}
+            <Stagger delay={280}>
 
           {step?.options?.length ? (
             <View
@@ -756,6 +767,8 @@ export function CreateGroupModal({
             )
           ) : null}
 
+            </Stagger>
+            <Stagger delay={400}>
           {displayError ? (
             <Text accessibilityRole="alert" style={styles.error}>
               {displayError}
@@ -816,6 +829,8 @@ export function CreateGroupModal({
               </Text>
             </Pressable>
           ) : null}
+            </Stagger>
+          </View>
 
           <View style={styles.actions}>
             {flow.step !== "step1" ? (
@@ -841,7 +856,7 @@ export function CreateGroupModal({
                 saving && styles.disabled,
               ]}
             >
-              <Text style={styles.cancelText}>Cancel</Text>
+              <Text style={styles.cancelText}>{dismissLabel}</Text>
             </Pressable>
           </View>
         </ScrollView>

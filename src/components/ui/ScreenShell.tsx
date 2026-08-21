@@ -1,5 +1,6 @@
 import { type ReactNode } from "react";
 import { View, StyleSheet } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { VideoView, type VideoPlayer } from "expo-video";
 import Animated, {
@@ -19,6 +20,7 @@ export function ScreenShell({
   player,
   videoVisible,
   videoFaded,
+  header,
   children,
   footer,
 }: {
@@ -28,9 +30,11 @@ export function ScreenShell({
   player?: VideoPlayer | null;
   videoVisible?: boolean;
   videoFaded?: boolean;
+  header?: ReactNode;
   children: ReactNode;
   footer: ReactNode;
 }) {
+  const insets = useSafeAreaInsets();
   const { overlayAt } = useTheme();
   const styles = useThemedStyles(createStyles);
   return (
@@ -75,6 +79,15 @@ export function ScreenShell({
         pointerEvents="none"
       />
 
+      {header ? (
+        <View
+          pointerEvents="box-none"
+          style={[styles.header, { top: insets.top + 8 }]}
+        >
+          {header}
+        </View>
+      ) : null}
+
       <View style={styles.content}>
         <View style={styles.body}>{children}</View>
         {footer}
@@ -95,6 +108,11 @@ function createStyles(colors: ColorTokens) {
     },
     videoFaded: {
       opacity: 0,
+    },
+    header: {
+      position: "absolute",
+      right: 24,
+      zIndex: 30,
     },
     content: {
       flex: 1,

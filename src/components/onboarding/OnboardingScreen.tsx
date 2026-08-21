@@ -122,9 +122,7 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
     steps.slice(0, currentStep + 1).filter((s) => s.type === "info").length - 1;
   const step = steps[currentStep];
   const isSignInStep = step?.type === "signin";
-  const isLastInfoStep =
-    step?.type === "info" &&
-    currentStep === steps.reduce((last, s, i) => (s.type === "info" ? i : last), 0);
+  const isFirstInfoStep = step?.type === "info" && currentStep === 0;
   const hasVideo = step?.video != null;
 
   const goAfterAuth = useCallback(() => {
@@ -218,6 +216,18 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
     const signInIdx = steps.findIndex((s) => s.type === "signin");
     if (signInIdx !== -1) goToStep(signInIdx);
   }, [goToStep]);
+
+  const handleSignUpClick = useCallback(() => {
+    const signUpIdx = steps.findIndex((s) => s.type === "signin");
+    if (signUpIdx === -1) return;
+    setSignUpMode(true);
+    goToStep(signUpIdx);
+  }, [goToStep]);
+
+  const handleInfoBack = useCallback(() => {
+    if (currentStep <= 0) return;
+    goToStep(currentStep - 1);
+  }, [currentStep, goToStep]);
 
   const handleBackFromSignIn = useCallback(() => {
     goToStep(0);
@@ -517,10 +527,14 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
           </OrangeCaption>
           <GlassInput
             value={firstName}
-            onChangeText={setFirstName}
+            onChangeText={(v) =>
+              setFirstName(v.replace(/[^\p{L}\s'-]/gu, ""))
+            }
             placeholder="First Name"
             autoFocus
             autoCapitalize="words"
+            autoComplete="given-name"
+            textContentType="givenName"
           />
           <GlassInput
             value={phoneNumber}
@@ -696,16 +710,29 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
         player={player}
         videoVisible={hasVideo}
         videoFaded={videoEnded}
+        header={
+          !isSignInStep ? (
+            <Pressable
+              onPress={handleSignUpClick}
+              style={({ pressed }) => [
+                styles.signUp,
+                pressed && { transform: [{ scale: 1.05 }] },
+              ]}
+            >
+              <Text style={styles.signUpText}>Sign Up</Text>
+            </Pressable>
+          ) : null
+        }
         footer={
           <StepFooter
             variant={isSignInStep ? "auth" : "info"}
             dots={infoSteps.length}
             activeDot={infoStepIndex}
             footerLabel={signUpMode && isSignInStep ? "Sign Up" : step.footerLabel}
-            isLastInfoStep={isLastInfoStep}
+            isFirstInfoStep={isFirstInfoStep}
             onNext={handleNextStep}
             onSignIn={handleSignInClick}
-            onBack={handleBackFromSignIn}
+            onBack={isSignInStep ? handleBackFromSignIn : handleInfoBack}
           />
         }
       >
@@ -782,6 +809,19 @@ function createStyles(colors: ColorTokens) {
     lineHeight: 16,
     textAlign: "center",
     fontFamily: fonts.body,
+  },
+  signUp: {
+    height: 32,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    backgroundColor: colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  signUpText: {
+    color: colors.white,
+    fontSize: 13,
+    fontFamily: fonts.displayMedium,
   },
   });
 }

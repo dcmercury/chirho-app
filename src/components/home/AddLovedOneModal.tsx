@@ -15,6 +15,8 @@ import * as ImagePicker from "expo-image-picker";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { fonts, type as typography, type ColorTokens } from "../../theme/tokens";
 import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
+import { Stagger } from "../../features/groups/components/Stagger";
+import { WizardBackdrop } from "../ui/WizardBackdrop";
 import {
   MAX_LOVED_ONE_PHOTOS,
   prepareLovedOnePhoto,
@@ -41,6 +43,7 @@ interface AddLovedOneModalProps {
   visible: boolean;
   saving: boolean;
   error: string | null;
+  dismissLabel?: string;
   onClose: () => void;
   onDismiss?: () => void;
   onSubmit: (
@@ -54,6 +57,7 @@ export function AddLovedOneModal({
   visible,
   saving,
   error,
+  dismissLabel = "Cancel",
   onClose,
   onDismiss,
   onSubmit,
@@ -265,6 +269,7 @@ export function AddLovedOneModal({
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.root}
       >
+        <WizardBackdrop />
         <ScrollView
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
@@ -349,8 +354,14 @@ export function AddLovedOneModal({
               ) : null}
             </View>
           ) : null}
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.subtitle}>{subtitle}</Text>
+          <View key={`${step}-${categoryIndex}`}>
+            <Stagger delay={80}>
+              <Text style={styles.title}>{title}</Text>
+            </Stagger>
+            <Stagger delay={180}>
+              <Text style={styles.subtitle}>{subtitle}</Text>
+            </Stagger>
+            <Stagger delay={280}>
 
           {step === "name" ? (
             <>
@@ -474,6 +485,8 @@ export function AddLovedOneModal({
             </View>
           ) : null}
 
+            </Stagger>
+            <Stagger delay={400}>
           {photoError || error || stepError ? (
             <Text style={styles.error}>{photoError || error || stepError}</Text>
           ) : null}
@@ -542,6 +555,8 @@ export function AddLovedOneModal({
               </Text>
             </Pressable>
           ) : null}
+            </Stagger>
+          </View>
 
           <View style={styles.actions}>
             {step !== "name" ? (
@@ -562,7 +577,7 @@ export function AddLovedOneModal({
               onPress={onClose}
               style={[styles.secondary, (saving || picking) && styles.disabled]}
             >
-              <Text style={styles.cancelText}>Cancel</Text>
+              <Text style={styles.cancelText}>{dismissLabel}</Text>
             </Pressable>
           </View>
         </ScrollView>
