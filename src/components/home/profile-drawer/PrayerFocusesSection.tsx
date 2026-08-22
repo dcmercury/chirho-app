@@ -1,10 +1,16 @@
 import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { PrayerFocus, PrayerFocusInput } from "../../../types/home";
+import { AuthenticatedImage } from "../../ui/AuthenticatedImage";
 import { PrayerFocusModal } from "../PrayerFocusModal";
 import { PrayerFocusTypeIcon } from "../PrayerFocusTypeIcon";
 import { useTheme } from "../../../theme/ThemeProvider";
 import { InlineError, Section, useProfileStyles } from "./ProfileControls";
+
+function focusPhotoPath(focus: PrayerFocus): string | undefined {
+  const photos = focus.photos || [];
+  return (photos.find((photo) => photo.isPrimary) || photos[0])?.contentPath;
+}
 
 export function PrayerFocusesSection({
   focuses,
@@ -24,14 +30,26 @@ export function PrayerFocusesSection({
   const [editing, setEditing] = useState<PrayerFocus | null>(null);
 
   return (
-    <Section title="Prayer focuses">
+    <Section title="Things">
       {focuses.length ? (
         focuses.map((focus) => {
           const pending = isPending(focus.focusuuid);
           return (
             <View key={focus.focusuuid} style={styles.manageRow}>
               <View style={[styles.manageAvatar, styles.manageAvatarFallback]}>
-                <PrayerFocusTypeIcon type={focus.type} color={colors.accent} size={17} />
+                {focusPhotoPath(focus) ? (
+                  <AuthenticatedImage
+                    contentFit="cover"
+                    path={focusPhotoPath(focus)}
+                    style={StyleSheet.absoluteFill}
+                  />
+                ) : (
+                  <PrayerFocusTypeIcon
+                    type={focus.type}
+                    color={colors.accent}
+                    size={17}
+                  />
+                )}
               </View>
               <View style={styles.manageCopy}>
                 <Text style={styles.manageName}>{focus.title}</Text>
@@ -65,7 +83,7 @@ export function PrayerFocusesSection({
           );
         })
       ) : (
-        <Text style={styles.empty}>No prayer focuses yet.</Text>
+        <Text style={styles.empty}>Nothing here yet.</Text>
       )}
       <InlineError
         message={focuses.map((focus) => getError(focus.focusuuid)).find(Boolean)}

@@ -1,22 +1,24 @@
 import { StyleSheet, View } from "react-native";
-import { ONBOARDING_COVERS } from "../../lib/assets";
-import { overlayColor } from "../../theme/tokens";
+import { useBackgroundLibrary } from "../../lib/backgroundLibrary";
+import { type ColorTokens } from "../../theme/tokens";
+import { useThemedStyles } from "../../theme/ThemeProvider";
+import { GridOverlay } from "./GridOverlay";
 import { KenBurnsImage } from "./KenBurnsImage";
 
-export function WizardBackdrop() {
-  return (
-    <>
-      <KenBurnsImage paths={[...ONBOARDING_COVERS]} style={StyleSheet.absoluteFill} />
-      <View
-        pointerEvents="none"
-        style={[StyleSheet.absoluteFill, styles.overlay]}
-      />
-    </>
-  );
+function createStyles(colors: ColorTokens) {
+  return StyleSheet.create({
+    overlay: { backgroundColor: colors.overlayGroup },
+  });
 }
 
-const styles = StyleSheet.create({
-  overlay: {
-    backgroundColor: overlayColor(0.7),
-  },
-});
+export function WizardBackdrop() {
+  const styles = useThemedStyles(createStyles);
+  const { urls } = useBackgroundLibrary();
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <KenBurnsImage paths={urls} style={StyleSheet.absoluteFill} />
+      <View style={[StyleSheet.absoluteFill, styles.overlay]} />
+      <GridOverlay />
+    </View>
+  );
+}

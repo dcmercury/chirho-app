@@ -8,7 +8,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { Image } from "expo-image";
@@ -17,8 +16,9 @@ import { fonts, type as typography, type ColorTokens } from "../../theme/tokens"
 import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
 import { Stagger } from "../../features/groups/components/Stagger";
 import { WizardBackdrop } from "../ui/WizardBackdrop";
+import { GlassInput } from "../ui/GlassInput";
 import { resolveImage } from "../../lib/assets";
-import { STOCK_GROUP_BACKGROUNDS } from "../../lib/groupBackgrounds";
+import { useBackgroundLibrary } from "../../lib/backgroundLibrary";
 import { prepareLovedOnePhoto } from "../../lib/lovedOnePhoto";
 import { PlusIcon, SparkleIcon } from "../../features/groups/components/Icons";
 import type {
@@ -66,7 +66,7 @@ export function CreateGroupModal({
   onSubmit: (input: GroupCreatePayload) => Promise<void>;
 }) {
   const styles = useThemedStyles(createStyles);
-  const { colors, appearance } = useTheme();
+  const { colors } = useTheme();
   const [flow, setFlow] = useState<GroupCreationFlowData>(initialGroupFlow);
   const [selectedContexts, setSelectedContexts] = useState<string[]>([]);
   const [selectedFocuses, setSelectedFocuses] = useState<string[]>([]);
@@ -80,6 +80,7 @@ export function CreateGroupModal({
     { uri: string; imageData: string }[]
   >([]);
   const [generateBackground, setGenerateBackground] = useState(false);
+  const { urls: libraryUrls } = useBackgroundLibrary();
   const [pickingBackground, setPickingBackground] = useState(false);
   const [stepError, setStepError] = useState<string | null>(null);
 
@@ -321,7 +322,7 @@ export function CreateGroupModal({
         focuses: flow.selectedFocuses || [],
       },
       backgroundUrls: selectedBackgrounds.filter((url) =>
-        STOCK_GROUP_BACKGROUNDS.includes(url),
+        libraryUrls.includes(url),
       ),
       backgroundUploads: selectedBackgrounds
         .map(
@@ -334,11 +335,8 @@ export function CreateGroupModal({
   };
 
   const backgroundImages = useMemo(
-    () => [
-      ...STOCK_GROUP_BACKGROUNDS,
-      ...backgroundUploads.map((item) => item.uri),
-    ],
-    [backgroundUploads],
+    () => [...libraryUrls, ...backgroundUploads.map((item) => item.uri)],
+    [backgroundUploads, libraryUrls],
   );
 
   const toggleBackground = (url: string) => {
@@ -579,15 +577,13 @@ export function CreateGroupModal({
                   })}
                 </View>
               ) : null}
-              <TextInput
+              <GlassInput
                 accessibilityLabel="Group name"
                 editable={!saving}
                 onChangeText={setGroupName}
                 placeholder={
                   step?.custom_field?.placeholder || "Name this prayer group"
                 }
-                placeholderTextColor={colors.muted}
-                keyboardAppearance={appearance === "light" ? "light" : "dark"}
                 maxLength={50}
                 style={styles.input}
                 value={groupName}
@@ -639,13 +635,11 @@ export function CreateGroupModal({
                     <Text style={styles.regenText}>Regenerate</Text>
                   </Pressable>
                 </View>
-                <TextInput
+                <GlassInput
                   editable={!saving}
                   multiline
                   onChangeText={setPurpose}
                   placeholder="This group's purpose is to…"
-                  placeholderTextColor={colors.muted}
-                  keyboardAppearance={appearance === "light" ? "light" : "dark"}
                   style={[styles.input, styles.purposeInput]}
                   value={purpose}
                 />
@@ -1030,15 +1024,6 @@ function createStyles(colors: ColorTokens) {
       marginTop: 3,
     },
     input: {
-      minHeight: 42,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: colors.glassBorder,
-      backgroundColor: colors.glassFill,
-      color: colors.title,
-      fontFamily: fonts.body,
-      fontSize: 12,
-      paddingHorizontal: 12,
       marginBottom: 8,
     },
     purposeInput: {

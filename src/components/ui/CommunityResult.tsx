@@ -12,8 +12,6 @@ function createStyles(colors: ColorTokens) {
     },
     input: {
       paddingRight: 36,
-      fontSize: 12.8,
-      paddingVertical: 12,
     },
     icon: {
       position: "absolute",

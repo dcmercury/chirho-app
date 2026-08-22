@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { LoadingChiRhoOverlay } from "../ui/LoadingChiRhoOverlay";
 import {
   setAudioModeAsync,
   useAudioPlayer,
@@ -29,6 +30,7 @@ import { publishPrayerCard, trackPrayerShare } from "../../lib/api";
 import { fonts, type ColorTokens } from "../../theme/tokens";
 import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
 import type { HomePrayerCard } from "../../types/home";
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { KenBurnsImage } from "../ui/KenBurnsImage";
 import { SwipeChevron } from "../ui/SwipeChevron";
 import { Stagger } from "../../features/groups/components/Stagger";
@@ -449,6 +451,9 @@ export function PrayerDetailModal({
 
   const deckNavigationEnabled = Boolean(onPrevious || onNext);
   const insets = useSafeAreaInsets();
+  const [fadeWidth, setFadeWidth] = useState(0);
+  const [actionBarHeight, setActionBarHeight] = useState(0);
+  const fadeHeight = (actionBarHeight || 84) + 56;
   const staggerDirection = navigationDirection === 1 ? "down" : "up";
   const bodySegments = prayerSegments(card?.fullPrayer || card?.text || "");
   const afterBodyDelay =
@@ -472,6 +477,7 @@ export function PrayerDetailModal({
           alwaysBounceVertical={false}
           bounces={!deckNavigationEnabled}
           contentContainerStyle={styles.content}
+          style={styles.scrollArea}
           onContentSizeChange={(_, height) => {
             contentHeightRef.current = height;
           }}
@@ -489,9 +495,7 @@ export function PrayerDetailModal({
           scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
         >
-          {loading ? (
-            <ActivityIndicator color={colors.title} size="large" />
-          ) : (
+          {loading ? null : (
             <View key={card?.prayeruuid || card?.deckIndex || "prayer-detail"}>
               <Stagger delay={200} direction={staggerDirection}>
                 <Text style={styles.verse}>
@@ -548,63 +552,96 @@ export function PrayerDetailModal({
             <SwipeChevron direction="up" onPress={onNext} />
           </View>
         ) : null}
-        {deckPosition ? (
-          <Text style={styles.deckPosition}>{deckPosition} · Swipe</Text>
-        ) : null}
-        <View style={styles.actions}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={
-              audioPreparing
-                ? "Preparing prayer audio"
-                : narrationStatus.playing
-                  ? "Pause prayer"
-                  : "Listen to prayer"
-            }
-            accessibilityState={{ disabled: !narrationUrl }}
-            disabled={!narrationUrl}
-            hitSlop={4}
-            onPress={toggleAudio}
-            style={({ pressed }) => [
-              styles.action,
-              styles.listenAction,
-              narrationStatus.playing && styles.actionActive,
-              !narrationUrl && styles.disabled,
-              pressed && styles.pressed,
-            ]}
-          >
-            {audioPreparing || pendingPlayRef.current ? (
-              <ActivityIndicator color={colors.accent} size="small" />
-            ) : narrationStatus.playing ? (
-              <PauseIcon color={colors.accent} size={17} />
-            ) : (
-              <PlayIcon color={colors.accent} size={17} />
-            )}
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Share prayer"
-            accessibilityState={{ disabled: !card?.prayeruuid }}
-            disabled={!card?.prayeruuid}
-            hitSlop={4}
-            onPress={sharePrayer}
-            style={({ pressed }) => [
-              styles.action,
-              !card?.prayeruuid && styles.disabled,
-              pressed && styles.pressed,
-            ]}
-          >
-            <ShareIcon color={colors.title} size={17} />
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Close prayer"
-            hitSlop={4}
-            onPress={onClose}
-            style={({ pressed }) => [styles.action, pressed && styles.pressed]}
-          >
-            <CloseIcon color={colors.title} size={17} />
-          </Pressable>
+        <View
+          pointerEvents="none"
+          onLayout={(event) => setFadeWidth(event.nativeEvent.layout.width)}
+          style={[styles.bottomFade, { height: fadeHeight }]}
+        >
+          {fadeWidth > 0 ? (
+            <Svg height={fadeHeight} width={fadeWidth}>
+              <Defs>
+                <LinearGradient id="prayerBottomFade" x1="0" x2="0" y1="0" y2="1">
+                  <Stop offset="0" stopColor="#000000" stopOpacity="0" />
+                  <Stop offset="0.6" stopColor="#000000" stopOpacity="0.55" />
+                  <Stop offset="1" stopColor="#000000" stopOpacity="0.92" />
+                </LinearGradient>
+              </Defs>
+              <Rect fill="url(#prayerBottomFade)" height="100%" width="100%" />
+            </Svg>
+          ) : null}
+        </View>
+        <LoadingChiRhoOverlay
+          variant="watermark"
+          visible={loading}
+          label="Writing your prayer…"
+        />
+        <View
+          onLayout={(event) =>
+            setActionBarHeight(event.nativeEvent.layout.height)
+          }
+          style={[
+            styles.actionBar,
+            { paddingBottom: Math.max(insets.bottom, 16) },
+          ]}
+        >
+          <Text style={styles.deckPosition}>
+            {deckPosition ? `${deckPosition} · Swipe` : ""}
+          </Text>
+          <View style={styles.actions}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                audioPreparing
+                  ? "Preparing prayer audio"
+                  : narrationStatus.playing
+                    ? "Pause prayer"
+                    : "Listen to prayer"
+              }
+              accessibilityState={{ disabled: !narrationUrl }}
+              disabled={!narrationUrl}
+              hitSlop={4}
+              onPress={toggleAudio}
+              style={({ pressed }) => [
+                styles.action,
+                styles.listenAction,
+                narrationStatus.playing && styles.actionActive,
+                !narrationUrl && styles.disabled,
+                pressed && styles.pressed,
+              ]}
+            >
+              {audioPreparing || pendingPlayRef.current ? (
+                <ActivityIndicator color={colors.accent} size="small" />
+              ) : narrationStatus.playing ? (
+                <PauseIcon color={colors.accent} size={17} />
+              ) : (
+                <PlayIcon color={colors.accent} size={17} />
+              )}
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Share prayer"
+              accessibilityState={{ disabled: !card?.prayeruuid }}
+              disabled={!card?.prayeruuid}
+              hitSlop={4}
+              onPress={sharePrayer}
+              style={({ pressed }) => [
+                styles.action,
+                !card?.prayeruuid && styles.disabled,
+                pressed && styles.pressed,
+              ]}
+            >
+              <ShareIcon color={colors.title} size={17} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close prayer"
+              hitSlop={4}
+              onPress={onClose}
+              style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+            >
+              <CloseIcon color={colors.title} size={17} />
+            </Pressable>
+          </View>
         </View>
       </View>
     </Modal>
@@ -620,12 +657,23 @@ function createStyles(colors: ColorTokens) {
   overlay: {
     backgroundColor: colors.overlayModal,
   },
+  scrollArea: {
+    flex: 1,
+    zIndex: 0,
+  },
   content: {
     flexGrow: 1,
     justifyContent: "center",
     paddingHorizontal: 28,
     paddingTop: 90,
-    paddingBottom: 100,
+    paddingBottom: 28,
+  },
+  bottomFade: {
+    position: "absolute",
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 1,
   },
   verse: {
     color: colors.accentText,
@@ -669,9 +717,7 @@ function createStyles(colors: ColorTokens) {
     marginTop: 14,
   },
   deckPosition: {
-    position: "absolute",
-    bottom: 42,
-    left: 28,
+    flex: 1,
     color: colors.mutedSoft,
     fontFamily: fonts.mono,
     fontSize: 8,
@@ -689,11 +735,14 @@ function createStyles(colors: ColorTokens) {
     alignItems: "center",
     marginTop: 16,
   },
+  actionBar: {
+    zIndex: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 24,
+    paddingTop: 14,
+  },
   actions: {
-    position: "absolute",
-    bottom: 28,
-    left: 24,
-    right: 24,
     flexDirection: "row",
     justifyContent: "flex-end",
     gap: 10,

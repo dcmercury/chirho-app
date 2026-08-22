@@ -161,16 +161,6 @@ function createGroupDrawerStyles(colors: ColorTokens) {
   input: {
     minWidth: 0,
     flex: 1,
-    minHeight: 40,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    backgroundColor: colors.glassFill,
-    color: colors.title,
-    fontFamily: fonts.body,
-    fontSize: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
   },
   firstNameInput: {
     flex: 0.75,

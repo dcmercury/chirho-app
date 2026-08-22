@@ -21,25 +21,31 @@ export interface HomePrayerCard {
 export type PrayerFocusType =
   | "church"
   | "pet"
+  | "country"
   | "health"
   | "situation"
   | "other";
 
 export type PrayerFocusPeriod = "morning" | "evening" | "both";
 
+export type PrayerFocusSpecies = "cat" | "dog" | "other";
+
 export interface PrayerFocus {
   focusuuid: string;
   title: string;
   type: PrayerFocusType;
+  species?: PrayerFocusSpecies | null;
+  gender?: LovedOneGender | null;
   note?: string | null;
   categories: string[];
   virtues: string[];
   period: PrayerFocusPeriod;
   active: boolean;
   order: number;
+  photos?: MediaPhoto[];
 }
 
-export type PrayerFocusInput = Omit<PrayerFocus, "focusuuid">;
+export type PrayerFocusInput = Omit<PrayerFocus, "focusuuid" | "photos">;
 
 export interface DailyDeckSummary {
   deckuuid: string;
@@ -71,17 +77,22 @@ export interface PrayerDeckCard extends HomePrayerCard {
   deckIndex: number;
 }
 
-export interface LovedOnePhoto {
+export interface MediaPhoto {
   mediauuid: string;
   contentPath: string;
   isPrimary: boolean;
 }
+
+export type LovedOnePhoto = MediaPhoto;
+
+export type LovedOneGender = "male" | "female";
 
 export interface HomeLovedOne {
   id: string;
   name: string;
   avatar: string;
   intention: string;
+  gender?: LovedOneGender;
   backgroundImage?: string;
   primaryPhoto?: LovedOnePhoto | null;
   photos?: LovedOnePhoto[];
@@ -122,6 +133,7 @@ export interface HomeProfile {
     lastName: string;
     phone: string;
     email: string;
+    gender?: LovedOneGender;
   };
   traditions: {
     selected: string;
@@ -146,6 +158,7 @@ export interface HomeProfile {
   managedLovedOnes: {
     id: string;
     firstName: string;
+    gender?: LovedOneGender;
     hasConfig: boolean;
     categories: string[];
   }[];

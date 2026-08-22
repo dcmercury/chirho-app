@@ -29,6 +29,7 @@ import {
   groupBackgroundGallery,
   selectedGroupBackgrounds,
 } from "../../../lib/groupBackgrounds";
+import { useBackgroundLibrary } from "../../../lib/backgroundLibrary";
 
 interface MembersSheetProps {
   visible: boolean;
@@ -62,6 +63,7 @@ export function MembersSheet({
     onExit,
   });
   const drawerGroup = controller.group;
+  const { urls: libraryUrls } = useBackgroundLibrary();
   const displayName = drawerGroup?.name || group.name;
   const settingsPending = Boolean(
     controller.pending["settings:tradition"] ||
@@ -177,6 +179,7 @@ export function MembersSheet({
               images={groupBackgroundGallery(
                 drawerGroup.backgroundImage,
                 drawerGroup.backgroundImages,
+                libraryUrls,
               )}
               onRegenerate={controller.regenerateBackground}
               onSelect={controller.selectBackground}

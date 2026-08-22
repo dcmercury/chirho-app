@@ -15,6 +15,8 @@ import {
   sendTestNotification,
   setActiveCommunity,
   updateAccountName,
+  updateAccountGender,
+  updateLovedOne,
   updateNotificationPreference,
   updatePrayerFocus,
   updateProfile,
@@ -22,6 +24,7 @@ import {
   uploadDashboardBackground,
   type Community,
 } from "../../../lib/api";
+import { backgroundIdForUrl } from "../../../lib/backgroundLibrary";
 import { registerForPushNotifications } from "../../../lib/push";
 import { setBackgroundMusicEnabled } from "../../../lib/backgroundMusicPreference";
 import { prepareLovedOnePhoto } from "../../../lib/lovedOnePhoto";
@@ -30,6 +33,7 @@ import type { Appearance } from "../../../theme/tokens";
 import type {
   DailyPrayerSettings,
   HomeProfile,
+  LovedOneGender,
   PrayerFocus,
   PrayerFocusInput,
 } from "../../../types/home";
@@ -155,6 +159,13 @@ export function useProfileDrawerController(
       "Unable to update your name",
     );
 
+  const saveAccountGender = (gender: LovedOneGender) =>
+    mutate(
+      "account-gender",
+      (token) => updateAccountGender(gender, token),
+      "Unable to save gender",
+    );
+
   const selectTradition = (tradition: string) =>
     mutate("tradition", (token) =>
       updateProfile({ preferences: { defaultTradition: tradition } }, token),
@@ -226,7 +237,10 @@ export function useProfileDrawerController(
   const selectHomeBackground = (imageUrl: string, current: string[]) =>
     mutate(
       "dashboard-background:select",
-      (token) => selectDashboardBackground(imageUrl, current, token),
+      (token) =>
+        selectDashboardBackground(imageUrl, current, token, {
+          backgrounduuid: backgroundIdForUrl(imageUrl),
+        }),
       "Unable to set this background.",
     );
 
@@ -250,10 +264,17 @@ export function useProfileDrawerController(
       updateProfile({ privacy: { [key]: enabled } }, token),
     );
 
+  const setLovedOneGender = (id: string, gender: LovedOneGender) =>
+    mutate(
+      `loved-one:${id}`,
+      (token) => updateLovedOne(id, { gender }, token),
+      "Unable to save gender",
+    );
+
   const confirmRemoveLovedOne = (id: string, firstName: string) => {
     Alert.alert(
       `Remove ${firstName}?`,
-      "This removes them from your loved ones.",
+      "This removes them from the people you pray for.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -417,6 +438,7 @@ export function useProfileDrawerController(
     errors,
     pickAvatar,
     saveAccount,
+    saveAccountGender,
     selectTradition,
     selectVoice,
     setBackgroundMusic,
@@ -427,6 +449,7 @@ export function useProfileDrawerController(
     setNotification,
     testNotification,
     setPrivacy,
+    setLovedOneGender,
     confirmRemoveLovedOne,
     savePrayerFocus,
     confirmRemovePrayerFocus,

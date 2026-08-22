@@ -1,5 +1,6 @@
 import { Pressable, Text, View } from "react-native";
-import type { HomeProfile } from "../../../types/home";
+import type { HomeProfile, LovedOneGender } from "../../../types/home";
+import { GenderCircles } from "../../ui/GenderCircles";
 import {
   InlineError,
   ManageAvatar,
@@ -14,6 +15,7 @@ export function LovedOnesSection({
   error,
   onManage,
   onRemove,
+  onGenderChange,
 }: {
   lovedOnes: HomeProfile["managedLovedOnes"];
   avatarById: Record<string, string | undefined>;
@@ -21,10 +23,11 @@ export function LovedOnesSection({
   error?: string;
   onManage: (id: string, firstName: string) => void;
   onRemove: (id: string, firstName: string) => void;
+  onGenderChange: (id: string, gender: LovedOneGender) => void;
 }) {
   const styles = useProfileStyles();
   return (
-    <Section title="Loved ones">
+    <Section title="People">
       {lovedOnes.length ? (
         lovedOnes.map((person) => {
           const pending = isPending(person.id);
@@ -40,6 +43,12 @@ export function LovedOnesSection({
                   {person.categories.join(", ") || "No categories"}
                 </Text>
               </View>
+              <GenderCircles
+                disabled={pending}
+                onChange={(gender) => onGenderChange(person.id, gender)}
+                size="sm"
+                value={person.gender}
+              />
               <View style={styles.manageActions}>
                 <Pressable
                   accessibilityLabel={`Manage photos of ${person.firstName}`}
@@ -66,7 +75,7 @@ export function LovedOnesSection({
           );
         })
       ) : (
-        <Text style={styles.empty}>No loved ones yet.</Text>
+        <Text style={styles.empty}>No people yet.</Text>
       )}
       <InlineError message={error} />
     </Section>

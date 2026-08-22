@@ -266,6 +266,7 @@ export function DailyPrayerDrawer({
           name: person.firstName,
           categories: draft.categories,
           virtues,
+          ...(person.gender ? { gender: person.gender } : {}),
         };
       });
       await Promise.all(

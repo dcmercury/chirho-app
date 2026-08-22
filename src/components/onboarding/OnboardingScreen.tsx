@@ -20,7 +20,8 @@ import Animated, {
 import welcome from "../../data/welcome.json";
 import type { WelcomeStep } from "../../types/welcome";
 import type { Community } from "../../lib/api";
-import { clerkErrorMessage, joinCommunity, searchCommunities } from "../../lib/api";
+import type { LovedOneGender } from "../../types/home";
+import { clerkErrorMessage, joinCommunity, searchCommunities, updateAccountGender } from "../../lib/api";
 import { resolveImage, video } from "../../lib/assets";
 import {
   formatPhoneDisplay,
@@ -44,6 +45,7 @@ import {
   CommunitySelected,
 } from "../ui/CommunityResult";
 import { GlassInput } from "../ui/GlassInput";
+import { GenderCircles } from "../ui/GenderCircles";
 import { OtpInput } from "../ui/OtpInput";
 import { PrimaryButton } from "../ui/PrimaryButton";
 import { GhostBack } from "../ui/GhostBack";
@@ -101,6 +103,7 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
 
   const [signUpMode, setSignUpMode] = useState(false);
   const [firstName, setFirstName] = useState("");
+  const [gender, setGender] = useState<LovedOneGender | null>(null);
   const [signUpStep, setSignUpStep] = useState<"community" | "phone">("community");
   const [joinOption, setJoinOption] = useState<"church-group" | "just-myself" | null>(
     null,
@@ -236,6 +239,7 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
     setAuthError(null);
     setSignUpMode(false);
     setFirstName("");
+    setGender(null);
     setSignUpStep("community");
     setJoinOption(null);
     setSelectedGroup(null);
@@ -351,6 +355,15 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
         const result = await signUp.attemptPhoneNumberVerification({ code: otpCode });
         if (result.status === "complete") {
           await setSignUpActive({ session: result.createdSessionId });
+          if (gender) {
+            try {
+              await new Promise((r) => setTimeout(r, 500));
+              const token = await getToken();
+              if (token) await updateAccountGender(gender, token);
+            } catch {
+              // Account gender can be set later in Profile.
+            }
+          }
           if (selectedGroup) {
             await new Promise((r) => setTimeout(r, 500));
             await handleJoin();
@@ -536,6 +549,9 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
             autoComplete="given-name"
             textContentType="givenName"
           />
+          {firstName.trim() ? (
+            <GenderCircles onChange={setGender} value={gender} />
+          ) : null}
           <GlassInput
             value={phoneNumber}
             onChangeText={(v) => {
@@ -550,7 +566,11 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
           <PrimaryButton
             label={authenticating ? "Sending code..." : "Sign Up"}
             onPress={handleSignUp}
-            disabled={authenticating || !isValidPhone(phoneNumber)}
+            disabled={
+              authenticating ||
+              !isValidPhone(phoneNumber) ||
+              (Boolean(firstName.trim()) && !gender)
+            }
             loading={authenticating}
           />
           <PrivacyPolicyLink style={styles.legal} />

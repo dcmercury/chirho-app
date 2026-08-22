@@ -7,7 +7,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { Image } from "expo-image";
@@ -16,7 +15,10 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { fonts, type as typography, type ColorTokens } from "../../theme/tokens";
 import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
 import { Stagger } from "../../features/groups/components/Stagger";
+import { BackIcon, CloseIcon } from "../../features/groups/components/Icons";
 import { WizardBackdrop } from "../ui/WizardBackdrop";
+import { GlassInput } from "../ui/GlassInput";
+import { GenderCircles } from "../ui/GenderCircles";
 import {
   MAX_LOVED_ONE_PHOTOS,
   prepareLovedOnePhoto,
@@ -28,6 +30,8 @@ import {
   prayerVirtueLabel,
   type LovedOnePrayerConfiguration,
 } from "../../lib/prayerConfig";
+import type { HomeLovedOne, LovedOneGender } from "../../types/home";
+import { LovedOne } from "../ui/LovedOne";
 
 interface PendingPhoto {
   id: string;
@@ -44,12 +48,15 @@ interface AddLovedOneModalProps {
   saving: boolean;
   error: string | null;
   dismissLabel?: string;
+  existingLovedOnes?: HomeLovedOne[];
+  onSelectExisting?: (person: HomeLovedOne) => void;
   onClose: () => void;
   onDismiss?: () => void;
   onSubmit: (
     name: string,
     configurations: LovedOnePrayerConfiguration[],
     photoDataUris: string[],
+    gender: LovedOneGender,
   ) => Promise<void>;
 }
 
@@ -58,14 +65,17 @@ export function AddLovedOneModal({
   saving,
   error,
   dismissLabel = "Cancel",
+  existingLovedOnes = [],
+  onSelectExisting,
   onClose,
   onDismiss,
   onSubmit,
 }: AddLovedOneModalProps) {
   const styles = useThemedStyles(createStyles);
-  const { colors, appearance } = useTheme();
+  const { colors } = useTheme();
   const [step, setStep] = useState<LovedOneStep>("name");
   const [name, setName] = useState("");
+  const [gender, setGender] = useState<LovedOneGender | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [categoryVirtues, setCategoryVirtues] = useState<Record<string, string[]>>(
     {},
@@ -84,6 +94,7 @@ export function AddLovedOneModal({
     if (!visible) {
       setStep("name");
       setName("");
+      setGender(null);
       setSelectedCategories([]);
       setCategoryVirtues({});
       setCategoryIndex(0);
@@ -169,6 +180,7 @@ export function AddLovedOneModal({
       firstName,
       configurations,
       photos.map((photo) => photo.imageData),
+      gender!,
     );
   };
 
@@ -206,7 +218,7 @@ export function AddLovedOneModal({
   };
 
   const continueFromName = () => {
-    if (!firstName) return;
+    if (!firstName || !gender) return;
     setStepError(null);
     setStep("categories");
   };
@@ -236,6 +248,36 @@ export function AddLovedOneModal({
     setStep("review");
   };
 
+  const busy = saving || picking;
+
+  const primaryAction =
+    step === "name"
+      ? {
+          label: "Continue",
+          onPress: continueFromName,
+          disabled: !firstName || !gender || busy,
+        }
+      : step === "categories"
+        ? {
+            label: "Continue",
+            onPress: continueFromCategories,
+            disabled: saving || !selectedCategories.length,
+          }
+        : step === "virtues"
+          ? {
+              label:
+                categoryIndex < selectedCategories.length - 1
+                  ? "Next area"
+                  : "Review",
+              onPress: continueFromVirtues,
+              disabled: saving || !currentVirtues.length,
+            }
+          : {
+              label: saving ? "Adding…" : "Add",
+              onPress: submit,
+              disabled: !firstName || busy,
+            };
+
   const title =
     step === "name"
       ? "Add a loved one"
@@ -249,7 +291,7 @@ export function AddLovedOneModal({
 
   const subtitle =
     step === "name"
-      ? "A first name is enough. Photos stay private."
+      ? "A first name and M or F is enough. Photos stay private."
       : step === "categories"
         ? "Tap the parts of life you’d like to pray for."
         : step === "virtues"
@@ -365,16 +407,48 @@ export function AddLovedOneModal({
 
           {step === "name" ? (
             <>
-              <TextInput
+              {/* Seeing familiar faces first stops people re-adding someone. */}
+              {existingLovedOnes.length && onSelectExisting ? (
+                <>
+                  <Text style={styles.label}>ALREADY ADDED</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.existingRail}
+                    keyboardShouldPersistTaps="handled"
+                  >
+                    {existingLovedOnes.map((person) => (
+                      <LovedOne
+                        key={person.id || person.name}
+                        person={person}
+                        compact
+                        showIntention={false}
+                        onPress={() => onSelectExisting(person)}
+                      />
+                    ))}
+                  </ScrollView>
+                </>
+              ) : null}
+              <GlassInput
                 autoFocus
                 editable={!saving}
                 onChangeText={setName}
                 placeholder="First name"
-                placeholderTextColor={colors.muted}
-                keyboardAppearance={appearance === "light" ? "light" : "dark"}
                 style={styles.input}
                 value={name}
               />
+              {firstName ? (
+                <>
+                  <Text style={styles.label}>GENDER</Text>
+                  <View style={styles.genderRow}>
+                    <GenderCircles
+                      disabled={saving}
+                      onChange={setGender}
+                      value={gender}
+                    />
+                  </View>
+                </>
+              ) : null}
               <Text style={styles.label}>PHOTOS</Text>
               <Text style={styles.privacy}>
                 Photos stay private and appear only on your personal prayer cards.
@@ -491,59 +565,6 @@ export function AddLovedOneModal({
             <Text style={styles.error}>{photoError || error || stepError}</Text>
           ) : null}
 
-          {step === "name" ? (
-            <Pressable
-              disabled={!firstName || saving || picking}
-              onPress={continueFromName}
-              style={[
-                styles.submit,
-                (!firstName || saving || picking) && styles.disabled,
-              ]}
-            >
-              <Text style={styles.submitText}>Continue</Text>
-            </Pressable>
-          ) : null}
-
-          {step === "categories" ? (
-            <Pressable
-              disabled={saving}
-              onPress={continueFromCategories}
-              style={[
-                styles.submit,
-                !selectedCategories.length && styles.disabled,
-              ]}
-            >
-              <Text style={styles.submitText}>Continue</Text>
-            </Pressable>
-          ) : null}
-
-          {step === "virtues" ? (
-            <Pressable
-              disabled={saving}
-              onPress={continueFromVirtues}
-              style={[styles.submit, !currentVirtues.length && styles.disabled]}
-            >
-              <Text style={styles.submitText}>
-                {categoryIndex < selectedCategories.length - 1
-                  ? "Next area"
-                  : "Review"}
-              </Text>
-            </Pressable>
-          ) : null}
-
-          {step === "review" ? (
-            <Pressable
-              disabled={!firstName || saving || picking}
-              onPress={submit}
-              style={[
-                styles.submit,
-                (!firstName || saving || picking) && styles.disabled,
-              ]}
-            >
-              <Text style={styles.submitText}>{saving ? "Adding..." : "Add"}</Text>
-            </Pressable>
-          ) : null}
-
           {step === "categories" ? (
             <Pressable
               disabled={saving || picking}
@@ -559,25 +580,42 @@ export function AddLovedOneModal({
           </View>
 
           <View style={styles.actions}>
-            {step !== "name" ? (
+            <View style={styles.actionCircles}>
+              {step !== "name" ? (
+                <Pressable
+                  accessibilityLabel="Back"
+                  accessibilityRole="button"
+                  disabled={saving || picking}
+                  hitSlop={8}
+                  onPress={goBack}
+                  style={[
+                    styles.circle,
+                    styles.backCircle,
+                    (saving || picking) && styles.disabled,
+                  ]}
+                >
+                  <BackIcon color={colors.accent} size={14} />
+                </Pressable>
+              ) : null}
               <Pressable
+                accessibilityLabel={dismissLabel}
+                accessibilityRole="button"
                 disabled={saving || picking}
-                onPress={goBack}
-                style={[
-                  styles.secondary,
-                  styles.backButton,
-                  (saving || picking) && styles.disabled,
-                ]}
+                hitSlop={8}
+                onPress={onClose}
+                style={[styles.circle, (saving || picking) && styles.disabled]}
               >
-                <Text style={styles.backText}>Back</Text>
+                <CloseIcon color={colors.mutedStrong} size={14} />
               </Pressable>
-            ) : null}
+            </View>
             <Pressable
-              disabled={saving || picking}
-              onPress={onClose}
-              style={[styles.secondary, (saving || picking) && styles.disabled]}
+              accessibilityLabel={primaryAction.label}
+              accessibilityRole="button"
+              disabled={primaryAction.disabled}
+              onPress={primaryAction.onPress}
+              style={[styles.submit, primaryAction.disabled && styles.disabled]}
             >
-              <Text style={styles.cancelText}>{dismissLabel}</Text>
+              <Text style={styles.submitText}>{primaryAction.label}</Text>
             </Pressable>
           </View>
         </ScrollView>
@@ -671,15 +709,9 @@ function createStyles(colors: ColorTokens) {
     marginBottom: 24,
   },
   input: {
-    minHeight: 42,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    backgroundColor: colors.glassFill,
-    color: colors.title,
-    fontFamily: fonts.body,
-    fontSize: 12,
-    paddingHorizontal: 12,
+    marginBottom: 16,
+  },
+  genderRow: {
     marginBottom: 24,
   },
   privacy: {
@@ -782,17 +814,17 @@ function createStyles(colors: ColorTokens) {
     marginTop: 12,
   },
   submit: {
-    minHeight: 52,
-    borderRadius: 26,
+    height: 36,
+    paddingHorizontal: 18,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.buttonPrimary,
-    marginTop: 24,
   },
   submitText: {
     color: colors.buttonOnPrimary,
     fontFamily: fonts.displayMedium,
-    fontSize: 14,
+    fontSize: 12,
   },
   skip: {
     minHeight: 44,
@@ -805,33 +837,35 @@ function createStyles(colors: ColorTokens) {
     fontFamily: fonts.bodyMedium,
     fontSize: 11,
   },
+  existingRail: {
+    flexGrow: 0,
+    gap: 4,
+    paddingBottom: 20,
+  },
   actions: {
     flexDirection: "row",
-    gap: 8,
+    alignItems: "center",
+    justifyContent: "space-between",
     marginTop: 12,
   },
-  secondary: {
-    flex: 1,
-    minHeight: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: colors.glassBorderLoud,
+  actionCircles: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  circle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: colors.glassBorderStrong,
+    backgroundColor: colors.glassFill,
     alignItems: "center",
     justifyContent: "center",
   },
-  backButton: {
-    borderColor: colors.accentBorderPill,
-    backgroundColor: colors.accentFillPill,
-  },
-  backText: {
-    color: colors.accentText,
-    fontFamily: fonts.displayMedium,
-    fontSize: 12,
-  },
-  cancelText: {
-    color: colors.title,
-    fontFamily: fonts.displayMedium,
-    fontSize: 12,
+  backCircle: {
+    borderColor: colors.accentBorderSelected,
+    backgroundColor: colors.accentFillSelected,
   },
   disabled: { opacity: 0.4 },
   });

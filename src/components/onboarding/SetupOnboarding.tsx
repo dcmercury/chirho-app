@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Text,
   View,
+  type ImageSourcePropType,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@clerk/expo";
@@ -13,31 +14,35 @@ import Animated, {
   FadeInDown,
   ReduceMotion,
 } from "react-native-reanimated";
-import { fonts, overlayColor, type as typography, type ColorTokens } from "../../theme/tokens";
+import { fonts, type as typography, type ColorTokens } from "../../theme/tokens";
 import { useThemedStyles } from "../../theme/ThemeProvider";
-import { KenBurnsImage } from "../ui/KenBurnsImage";
-import { GridOverlay } from "../ui/GridOverlay";
+import { WizardBackdrop } from "../ui/WizardBackdrop";
 import { ChiRhoMark } from "../ui/ChiRhoMark";
-import { ONBOARDING_COVERS } from "../../lib/assets";
 import {
   addLovedOne,
   createGroup,
   previewGroupContent,
   regenerateGroupBackground,
   saveLovedOneConfig,
+  selectDashboardBackground,
   selectGroupBackground,
   uploadGroupBackground,
   uploadLovedOnePhoto,
 } from "../../lib/api";
+import { DEFAULT_DASHBOARD_BACKGROUND } from "../../lib/dashboardBackgrounds";
 import {
   remainingSetupChapters,
   type SetupChapter,
 } from "../../lib/setupOnboarding";
+import { WallpaperCarousel, type WallpaperItem } from "../wallpaper";
+import { useBackgroundLibrary } from "../../lib/backgroundLibrary";
+import { images, resolveImageUri } from "../../lib/assets";
 import {
   communityAllowsDailyPrayers,
   type HomeCommunity,
   type HomeData,
   type HomeProfile,
+  type LovedOneGender,
   type PersonalPlan,
 } from "../../types/home";
 import type { LovedOnePrayerConfiguration } from "../../lib/prayerConfig";
@@ -53,6 +58,12 @@ const CHAPTER_COPY: Record<
   SetupChapter,
   { title: string; detail: string; expect: string; action: string }
 > = {
+  background: {
+    title: "Choose a home background",
+    detail: "Swipe the scenes. The one in the center becomes your home.",
+    expect: "Swipe to find a scene that feels like home. You can change this later.",
+    action: "Choose a background",
+  },
   group: {
     title: "Create a prayer group",
     detail: "A circle to share intentions and pray together.",
@@ -62,9 +73,9 @@ const CHAPTER_COPY: Record<
   },
   lovedOne: {
     title: "Add someone to pray for",
-    detail: "A first name is enough. Daily prayers will follow.",
+    detail: "A first name and M or F is enough. Daily prayers will follow.",
     expect:
-      "A first name is enough. You can add a photo and choose what to pray for. Daily prayers will follow from what you pick.",
+      "A first name and M or F is enough. You can add a photo and choose what to pray for. Daily prayers will follow from what you pick.",
     action: "Continue",
   },
   prayer: {
@@ -106,6 +117,9 @@ export function SetupOnboarding({
   const [prayerOpen, setPrayerOpen] = useState(false);
   const [savingGroup, setSavingGroup] = useState(false);
   const [savingLovedOne, setSavingLovedOne] = useState(false);
+  const [savingWallpaper, setSavingWallpaper] = useState(false);
+  const [selectedWallpaper, setSelectedWallpaper] =
+    useState<WallpaperItem | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lovedOnes, setLovedOnes] = useState<HomeProfile["managedLovedOnes"]>(
     home.profile.managedLovedOnes,
@@ -119,6 +133,29 @@ export function SetupOnboarding({
 
   const chapter = chapters[index] ?? null;
   const allowDailyPrayers = communityAllowsDailyPrayers(community, plan);
+
+  // The bundled default leads, followed by whatever the admin library offers.
+  const { backgrounds } = useBackgroundLibrary();
+  const wallpapers = useMemo<WallpaperItem[]>(
+    () => [
+      {
+        id: "default",
+        title: "ChiRho",
+        path: DEFAULT_DASHBOARD_BACKGROUND,
+        // The bundled asset is a module ref both image APIs accept; only the
+        // expo-image typing in assets.ts disagrees.
+        image: images.intro as unknown as ImageSourcePropType,
+      },
+      ...backgrounds.map((background) => ({
+        id: background.backgrounduuid,
+        title: background.title,
+        path: background.url,
+        // The carousel uses a plain RN Image, so it needs the proxied URL.
+        image: { uri: resolveImageUri(background.url) || background.url },
+      })),
+    ],
+    [backgrounds],
+  );
 
   const requireToken = useCallback(async () => {
     const token = await getToken();
@@ -177,10 +214,37 @@ export function SetupOnboarding({
   );
 
   const openChapterDrawer = () => {
-    if (!chapter) return;
+    if (!chapter || chapter === "background") return;
     setGroupOpen(chapter === "group");
     setLovedOneOpen(chapter === "lovedOne");
     setPrayerOpen(chapter === "prayer");
+  };
+
+  const handleSaveWallpaper = async () => {
+    const path = selectedWallpaper?.path || DEFAULT_DASHBOARD_BACKGROUND;
+    if (path === DEFAULT_DASHBOARD_BACKGROUND) {
+      advance();
+      return;
+    }
+    setSavingWallpaper(true);
+    setError(null);
+    try {
+      const token = await requireToken();
+      // Sends the library uuid so the server freezes a copy in the user's own
+      // storage rather than pointing at art an admin can later replace.
+      await selectDashboardBackground(path, [], token, {
+        backgrounduuid: selectedWallpaper?.id,
+        replace: true,
+      });
+      await onRefresh();
+      advance();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Unable to save this background",
+      );
+    } finally {
+      setSavingWallpaper(false);
+    }
   };
 
   const skipChapter = () => {
@@ -231,12 +295,13 @@ export function SetupOnboarding({
     name: string,
     configurations: LovedOnePrayerConfiguration[],
     photoDataUris: string[] = [],
+    gender: LovedOneGender,
   ) => {
     setSavingLovedOne(true);
     setError(null);
     try {
       const token = await requireToken();
-      const lovedOne = await addLovedOne(name, token);
+      const lovedOne = await addLovedOne(name, token, gender);
       if (configurations.length) {
         await saveLovedOneConfig(lovedOne.id, configurations, token);
       }
@@ -246,6 +311,7 @@ export function SetupOnboarding({
       const created = {
         id: lovedOne.id,
         firstName: lovedOne.firstName,
+        gender: lovedOne.gender,
         hasConfig: configurations.length > 0,
         categories: configurations.map((item) => item.category),
       };
@@ -287,11 +353,48 @@ export function SetupOnboarding({
     };
   }, [chapter, chapters.length, firstName, index, phase]);
 
+  if (phase === "chapters" && chapter === "background") {
+    return (
+      <View style={styles.root}>
+        <WallpaperCarousel
+          data={wallpapers}
+          subtitle="Swipe to choose a background"
+          onIndexChange={(_next, item) => setSelectedWallpaper(item)}
+          bottomInset={120 + insets.bottom}
+          footer={
+            <View
+              style={[
+                styles.wallpaperActions,
+                { paddingBottom: 16 + insets.bottom },
+              ]}
+            >
+              {error ? <Text style={styles.wallpaperError}>{error}</Text> : null}
+              <Pressable
+                disabled={savingWallpaper}
+                onPress={() => void handleSaveWallpaper()}
+                style={[styles.submit, styles.wallpaperSubmit]}
+              >
+                <Text style={styles.submitText}>
+                  {savingWallpaper ? "Saving…" : "Use this background"}
+                </Text>
+              </Pressable>
+              <Pressable
+                disabled={savingWallpaper}
+                onPress={skipChapter}
+                style={styles.skip}
+              >
+                <Text style={styles.skipText}>Keep the default</Text>
+              </Pressable>
+            </View>
+          }
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.root}>
-      <KenBurnsImage paths={[...ONBOARDING_COVERS]} style={StyleSheet.absoluteFill} />
-      <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.overlay]} />
-      <GridOverlay />
+      <WizardBackdrop />
       <View
         pointerEvents="none"
         style={[styles.watermark, { top: insets.top + 16 }]}
@@ -438,10 +541,6 @@ export function SetupOnboarding({
 function createStyles(colors: ColorTokens) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.canvas },
-    overlay: {
-      ...StyleSheet.absoluteFill,
-      backgroundColor: overlayColor(0.7),
-    },
     watermark: {
       position: "absolute",
       right: 20,
@@ -553,6 +652,19 @@ function createStyles(colors: ColorTokens) {
       color: colors.accentText,
       fontFamily: fonts.bodyMedium,
       fontSize: 11,
+    },
+    wallpaperActions: {
+      paddingHorizontal: 24,
+    },
+    wallpaperSubmit: {
+      marginTop: 0,
+    },
+    wallpaperError: {
+      color: colors.error,
+      fontFamily: fonts.body,
+      fontSize: 12,
+      textAlign: "center",
+      marginBottom: 12,
     },
   });
 }

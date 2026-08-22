@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import { ActivityIndicator, Platform, View } from "react-native";
+import { ActivityIndicator, AppState, Platform, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -24,10 +24,12 @@ import {
   JetBrainsMono_500Medium,
 } from "@expo-google-fonts/jetbrains-mono";
 import {
+  clearAppIconBadge,
   hrefFromNotificationData,
   registerForPushNotifications,
+  syncAppIconBadge,
 } from "../src/lib/push";
-import { registerPushToken } from "../src/lib/api";
+import { registerPushToken, syncAppBadgeCount } from "../src/lib/api";
 import { ThemeProvider, useTheme } from "../src/theme/ThemeProvider";
 import { colors } from "../src/theme/tokens";
 
@@ -95,9 +97,30 @@ function RootNavigator() {
   }, [isSignedIn]);
 
   useEffect(() => {
-    if (!isSignedIn || Platform.OS === "web" || !Device.isDevice) return;
+    if (!authLoaded || Platform.OS === "web" || !Device.isDevice) return;
+    if (!isSignedIn) {
+      void clearAppIconBadge();
+      return;
+    }
+
     let cancelled = false;
     let remove = () => {};
+
+    const persistBadge = async (count: number) => {
+      const sessionToken = await getTokenRef.current();
+      if (!sessionToken || cancelled) return;
+      try {
+        await syncAppBadgeCount(count, sessionToken);
+      } catch {
+        // Local icon badge is already correct; server sync is best-effort.
+      }
+    };
+
+    const syncBadge = async (dismissIdentifier?: string) => {
+      const count = await syncAppIconBadge({ dismissIdentifier });
+      if (cancelled) return;
+      await persistBadge(count);
+    };
 
     import("expo-notifications").then((Notifications) => {
       if (cancelled) return;
@@ -105,26 +128,40 @@ function RootNavigator() {
         response: Awaited<
           ReturnType<typeof Notifications.getLastNotificationResponseAsync>
         >,
+        dismiss: boolean,
       ) => {
+        if (!response) return;
         const href = hrefFromNotificationData(
-          response?.notification.request.content.data as
+          response.notification.request.content.data as
             | Record<string, unknown>
             | undefined,
         );
+        if (dismiss) {
+          void syncBadge(response.notification.request.identifier);
+        }
         if (href) router.push(href);
       };
 
-      Notifications.getLastNotificationResponseAsync().then(openNotification);
-      const subscription =
-        Notifications.addNotificationResponseReceivedListener(openNotification);
-      remove = () => subscription.remove();
+      Notifications.getLastNotificationResponseAsync().then((response) =>
+        openNotification(response, false),
+      );
+      const tapped = Notifications.addNotificationResponseReceivedListener(
+        (response) => openNotification(response, true),
+      );
+      remove = () => tapped.remove();
     });
+
+    const appState = AppState.addEventListener("change", (state) => {
+      if (state === "active") void syncBadge();
+    });
+    void syncBadge();
 
     return () => {
       cancelled = true;
       remove();
+      appState.remove();
     };
-  }, [isSignedIn, router]);
+  }, [authLoaded, isSignedIn, router]);
 
   if (!fontsReady || !authLoaded) {
     return (

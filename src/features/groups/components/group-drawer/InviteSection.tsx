@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
+import { GlassInput } from "../../../../components/ui/GlassInput";
 import { useTheme } from "../../../../theme/ThemeProvider";
 import type { GroupInviteResult } from "../../types";
 import { CheckIcon, CopyIcon } from "../Icons";
@@ -92,7 +93,7 @@ export function InviteSection({
       ) : (
         <>
           <View style={styles.inputRow}>
-            <TextInput
+            <GlassInput
               accessibilityLabel="Invitee first name"
               autoCapitalize="words"
               editable={!pending}
@@ -101,11 +102,10 @@ export function InviteSection({
                 onClearError();
               }}
               placeholder="First name"
-              placeholderTextColor={colors.mutedGhost}
               style={[styles.input, styles.firstNameInput]}
               value={firstName}
             />
-            <TextInput
+            <GlassInput
               accessibilityLabel="Invitee phone number"
               editable={!pending}
               keyboardType="phone-pad"
@@ -114,12 +114,11 @@ export function InviteSection({
                 onClearError();
               }}
               placeholder="(555) 123-4567"
-              placeholderTextColor={colors.mutedGhost}
               style={styles.input}
               value={phone}
             />
           </View>
-          <TextInput
+          <GlassInput
             accessibilityLabel="Custom invitation message"
             editable={!pending}
             multiline
@@ -128,7 +127,6 @@ export function InviteSection({
               onClearError();
             }}
             placeholder="Personal message (optional)"
-            placeholderTextColor={colors.mutedGhost}
             style={[styles.input, styles.messageInput]}
             textAlignVertical="top"
             value={customMessage}

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Pressable, Text, TextInput, View, Linking } from "react-native";
-import { useTheme } from "../../../theme/ThemeProvider";
+import { Pressable, Text, View, Linking } from "react-native";
 import type { HomeCommunity } from "../../../types/home";
+import { GlassInput } from "../../ui/GlassInput";
 import { InlineError, ManageAvatar, useProfileStyles } from "./ProfileControls";
 import type { CommunitySearchResult } from "./types";
 
@@ -27,7 +27,6 @@ export function CommunitySection({
   onLeave: (name: string) => void;
 }) {
   const styles = useProfileStyles();
-  const { colors } = useTheme();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<CommunitySearchResult[]>([]);
   const searchGeneration = useRef(0);
@@ -94,7 +93,7 @@ export function CommunitySection({
         </Pressable>
       ) : null}
       <View style={styles.communitySearch}>
-        <TextInput
+        <GlassInput
           accessibilityLabel="Find a church or community"
           editable={!searchPending}
           onChangeText={setQuery}
@@ -102,7 +101,6 @@ export function CommunitySection({
             void search();
           }}
           placeholder="Find a church or community"
-          placeholderTextColor={colors.muted}
           style={[styles.input, styles.communityInput]}
           value={query}
         />

@@ -7,7 +7,7 @@ import {
   type PersonalPlan,
 } from "../types/home";
 
-export type SetupChapter = "group" | "lovedOne" | "prayer";
+export type SetupChapter = "background" | "group" | "lovedOne" | "prayer";
 
 const keyFor = (userId: string) => `chirho.setupOnboarding.${userId}`;
 
@@ -47,7 +47,7 @@ export function remainingSetupChapters(
 ): SetupChapter[] {
   if (hasExistingSetupData(home)) return [];
 
-  const chapters: SetupChapter[] = [];
+  const chapters: SetupChapter[] = ["background"];
   const lovedOneCount =
     (home.lovedOnes?.length || 0) +
     (home.profile?.managedLovedOnes?.length || 0);

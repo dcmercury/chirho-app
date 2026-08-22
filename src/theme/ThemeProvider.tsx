@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { StyleSheet } from "react-native";
+import { Appearance as SystemAppearance, StyleSheet } from "react-native";
 import * as SystemUI from "expo-system-ui";
 import {
   loadAppearance,
@@ -33,7 +33,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     loadAppearance().then((stored) => {
-      if (!cancelled) setAppearanceState(stored);
+      if (!cancelled) {
+        setAppearanceState(stored);
+        SystemAppearance.setColorScheme(stored);
+      }
     });
     return () => {
       cancelled = true;
@@ -43,6 +46,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const setAppearance = useCallback((next: Appearance) => {
     const resolved = parseAppearance(next);
     setAppearanceState(resolved);
+    SystemAppearance.setColorScheme(resolved);
     void saveAppearance(resolved);
   }, []);
 

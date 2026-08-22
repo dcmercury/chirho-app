@@ -154,3 +154,24 @@ export async function registerForPushNotifications(
     return null;
   }
 }
+
+export async function clearAppIconBadge(): Promise<void> {
+  if (Platform.OS === "web") return;
+  const Notifications = await import("expo-notifications");
+  await Notifications.setBadgeCountAsync(0);
+}
+
+export async function syncAppIconBadge(options?: {
+  dismissIdentifier?: string;
+}): Promise<number> {
+  if (Platform.OS === "web") return 0;
+  const Notifications = await import("expo-notifications");
+  if (options?.dismissIdentifier) {
+    await Notifications.dismissNotificationAsync(options.dismissIdentifier);
+  }
+  const presented = await Notifications.getPresentedNotificationsAsync();
+  const count = presented.length;
+  await Notifications.setBadgeCountAsync(count);
+  return count;
+}
+

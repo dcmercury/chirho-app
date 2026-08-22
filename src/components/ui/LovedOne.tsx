@@ -1,4 +1,4 @@
-import { Pressable, Text, StyleSheet } from "react-native";
+import { Pressable, Text, StyleSheet, View } from "react-native";
 import { fonts, type ColorTokens } from "../../theme/tokens";
 import { useThemedStyles } from "../../theme/ThemeProvider";
 import type { LovedOnePhoto } from "../../types/home";
@@ -12,18 +12,19 @@ function createStyles(colors: ColorTokens) {
       gap: 8,
     },
     itemCompact: {
-      width: 72,
+      width: 64,
     },
     pressed: {
       opacity: 0.65,
       transform: [{ scale: 0.96 }],
     },
-    avatar: {
+    avatarRing: {
       width: 56,
       height: 56,
       borderRadius: 28,
-      borderWidth: 2,
-      borderColor: colors.glassBorderRow,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      overflow: "hidden",
     },
     name: {
       fontFamily: fonts.displayMedium,
@@ -75,10 +76,12 @@ export function LovedOne({
         pressed && styles.pressed,
       ]}
     >
-      <KenBurnsImage
-        paths={imagePaths}
-        style={styles.avatar}
-      />
+      <View style={styles.avatarRing}>
+        <KenBurnsImage
+          paths={imagePaths}
+          style={StyleSheet.absoluteFill}
+        />
+      </View>
       <Text style={styles.name} numberOfLines={1}>
         {person.name}
       </Text>

@@ -5,13 +5,13 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { fonts, type ColorTokens } from "../../../theme/tokens";
 import { useTheme, useThemedStyles } from "../../../theme/ThemeProvider";
+import { GlassInput } from "../../../components/ui/GlassInput";
 import { SwipeChevron } from "../../../components/ui/SwipeChevron";
 import type {
   GroupMember,
@@ -103,7 +103,7 @@ export function PrayerRequestView({
 }: PrayerRequestViewProps) {
   const insets = useSafeAreaInsets();
   const styles = useThemedStyles(createStyles);
-  const { colors, appearance } = useTheme();
+  const { colors } = useTheme();
   const safeIndex = Math.min(currentIndex, Math.max(messages.length - 1, 0));
   const message = messages[safeIndex];
   const author = message ? getMember(members, message.userId) : null;
@@ -230,11 +230,10 @@ export function PrayerRequestView({
               {generatedPrayer ? (
                 <View style={styles.generatedBlock}>
                   <Text style={styles.responseLabel}>GENERATED PRAYER</Text>
-                  <TextInput
+                  <GlassInput
                     editable={!sendingPrayer}
                     multiline
                     onChangeText={onChangeGenerated}
-                    keyboardAppearance={appearance === "light" ? "light" : "dark"}
                     style={styles.generatedText}
                     textAlignVertical="top"
                     value={generatedPrayer}
@@ -728,14 +727,10 @@ function createStyles(colors: ColorTokens) {
   generatedText: {
     minHeight: 132,
     padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
     borderColor: colors.accentBorderFaint,
     backgroundColor: colors.accentFillFaint,
     color: colors.subtitle,
-    fontFamily: fonts.body,
-    fontSize: 12,
-    lineHeight: 19,
+    lineHeight: 20,
     fontStyle: "italic",
   },
   generatedActions: { flexDirection: "row", gap: 8 },

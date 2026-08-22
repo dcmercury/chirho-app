@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
-import { useTheme } from "../../../theme/ThemeProvider";
-import type { HomeProfile } from "../../../types/home";
+import { Pressable, Text, View } from "react-native";
+import type { HomeProfile, LovedOneGender } from "../../../types/home";
+import { GenderCircles } from "../../ui/GenderCircles";
+import { GlassInput } from "../../ui/GlassInput";
 import { InlineError, ManageAvatar, useProfileStyles } from "./ProfileControls";
 
 export function AccountSection({
@@ -9,30 +10,36 @@ export function AccountSection({
   avatar,
   visible,
   pending,
+  genderPending,
   avatarPending,
   error,
+  genderError,
   avatarError,
   onSave,
+  onSaveGender,
   onChangeAvatar,
 }: {
   account: HomeProfile["account"];
   avatar: string;
   visible: boolean;
   pending: boolean;
+  genderPending: boolean;
   avatarPending: boolean;
   error?: string;
+  genderError?: string;
   avatarError?: string;
   onSave: (firstName: string, lastName: string) => Promise<boolean>;
+  onSaveGender: (gender: LovedOneGender) => Promise<boolean>;
   onChangeAvatar: () => void;
 }) {
   const styles = useProfileStyles();
-  const { appearance, colors } = useTheme();
   const [firstName, setFirstName] = useState(account.firstName || "");
   const [lastName, setLastName] = useState(account.lastName || "");
   const [expanded, setExpanded] = useState(false);
   const wasVisible = useRef(false);
   const authoritativeFirstName = account.firstName || "";
   const authoritativeLastName = account.lastName || "";
+  const lockedGender = account.gender;
   const dirty =
     firstName.trim() !== authoritativeFirstName.trim() ||
     lastName.trim() !== authoritativeLastName.trim();
@@ -107,53 +114,60 @@ export function AccountSection({
       {expanded ? (
         <>
           <View style={styles.nameFields}>
-            <TextInput
+            <GlassInput
               accessibilityLabel="First name"
               editable={!pending}
               onChangeText={setFirstName}
-              keyboardAppearance={appearance === "light" ? "light" : "dark"}
               placeholder="First name"
-              placeholderTextColor={colors.muted}
               style={[styles.input, styles.nameField]}
               value={firstName}
             />
-            <TextInput
+            <GlassInput
               accessibilityLabel="Last name"
               editable={!pending}
               onChangeText={setLastName}
-              keyboardAppearance={appearance === "light" ? "light" : "dark"}
               placeholder="Last name"
-              placeholderTextColor={colors.muted}
               style={[styles.input, styles.nameField]}
               value={lastName}
             />
           </View>
-          <Pressable
-            accessibilityLabel="Save name"
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !canSave }}
-            disabled={!canSave}
-            onPress={() => {
-              void onSave(firstName, lastName);
-            }}
-            style={({ pressed }) => [
-              styles.nameSave,
-              !canSave && styles.nameSaveDisabled,
-              pressed && styles.nameSavePressed,
-            ]}
-          >
-            <Text
-              style={[
-                styles.nameSaveText,
-                !canSave && styles.nameSaveTextDisabled,
+          <View style={styles.nameActions}>
+            <GenderCircles
+              disabled={Boolean(lockedGender) || genderPending}
+              onChange={(gender) => {
+                if (lockedGender) return;
+                void onSaveGender(gender);
+              }}
+              value={lockedGender}
+            />
+            <Pressable
+              accessibilityLabel="Save name"
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !canSave }}
+              disabled={!canSave}
+              onPress={() => {
+                void onSave(firstName, lastName);
+              }}
+              style={({ pressed }) => [
+                styles.nameSave,
+                !canSave && styles.nameSaveDisabled,
+                pressed && styles.nameSavePressed,
               ]}
             >
-              Save name
-            </Text>
-          </Pressable>
+              <Text
+                style={[
+                  styles.nameSaveText,
+                  !canSave && styles.nameSaveTextDisabled,
+                ]}
+              >
+                Save name
+              </Text>
+            </Pressable>
+          </View>
         </>
       ) : null}
       <InlineError message={error} />
+      <InlineError message={genderError} />
       <InlineError message={avatarError} />
     </View>
   );

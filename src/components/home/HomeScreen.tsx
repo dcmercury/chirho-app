@@ -15,15 +15,24 @@ import { useAuth, useUser } from "@clerk/expo";
 import { useRouter, type Href } from "expo-router";
 import { fonts, type ColorTokens } from "../../theme/tokens";
 import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
-import { privateImageCachePolicy, resolveImage } from "../../lib/assets";
+import {
+  FALLBACK_PRAYER_IMAGE,
+  privateImageCachePolicy,
+  resolveImage,
+} from "../../lib/assets";
 import { parseAppearance } from "../../lib/appearancePreference";
 import { selectedDashboardBackgrounds } from "../../lib/dashboardBackgrounds";
+import {
+  cachedBackgroundUrls,
+  useBackgroundLibrary,
+} from "../../lib/backgroundLibrary";
 import { setBackgroundMusicEnabled } from "../../lib/backgroundMusicPreference";
 import {
   addLovedOne,
   createGroup,
   createPrayerFocus,
   generateLovedOnePrayer,
+  generatePrayerFocusPrayer,
   generatePrayerCardAudio,
   getLovedOnePhotos,
   getMobileHome,
@@ -33,6 +42,7 @@ import {
   selectGroupBackground,
   uploadGroupBackground,
   uploadLovedOnePhoto,
+  uploadPrayerFocusPhoto,
   updatePersonalPlan,
   updatePrayerFocus,
 } from "../../lib/api";
@@ -58,17 +68,27 @@ import {
 } from "../../lib/setupOnboarding";
 import { SetupOnboarding } from "../onboarding/SetupOnboarding";
 import { AddLovedOneModal } from "./AddLovedOneModal";
+import { AddSubjectSheet, type AddSubjectChoice } from "./AddSubjectSheet";
+import { PrayerFocusCircle } from "./PrayerFocusCircle";
+import { HomeNavFab, HOME_NAV_FAB_RESERVE } from "./HomeNavFab";
+import {
+  NeedPrayerDrawer,
+  type NeedPrayerMode,
+} from "./NeedPrayerDrawer";
 import { CreateGroupModal } from "./CreateGroupModal";
 import { LovedOnePhotosModal } from "./LovedOnePhotosModal";
 import { PrayerDetailModal } from "./PrayerDetailModal";
-import { PrayerFocusModal } from "./PrayerFocusModal";
+import {
+  PrayerFocusModal,
+  type PrayerFocusIntent,
+} from "./PrayerFocusModal";
 import { PersonalPlanDrawer } from "./PersonalPlanDrawer";
-import { PrayerFocusTypeIcon } from "./PrayerFocusTypeIcon";
 import { ProfileDrawer } from "./ProfileDrawer";
 import type {
   HomeData,
   HomeLovedOne,
   HomePrayerCard,
+  LovedOneGender,
   MobileHomeResponse,
   PendingGroupInvite,
   PrayerFocus,
@@ -84,6 +104,7 @@ async function prefetchHomeImages(result: MobileHomeResponse, token: string) {
     ...selectedDashboardBackgrounds(
       result.community?.backgroundImage,
       result.home.profile.dashboardBackgrounds,
+      cachedBackgroundUrls(),
     ),
     ...result.home.cards.slice(0, 2).map((card) => card.image),
     ...result.home.lovedOnes
@@ -133,6 +154,37 @@ async function prefetchHomeImages(result: MobileHomeResponse, token: string) {
       resolve();
     });
   });
+}
+
+function focusPhotoPath(focus: PrayerFocus): string | undefined {
+  const photos = focus.photos || [];
+  return (photos.find((photo) => photo.isPrimary) || photos[0])?.contentPath;
+}
+
+type PraySubject =
+  | { kind: "person"; label: string; person: HomeLovedOne }
+  | { kind: "focus"; label: string; focus: PrayerFocus };
+
+/** People and things share one rail, ordered by name regardless of type. */
+function praySubjects(
+  lovedOnes: HomeLovedOne[],
+  focuses: PrayerFocus[],
+): PraySubject[] {
+  const subjects: PraySubject[] = [
+    ...lovedOnes.map((person) => ({
+      kind: "person" as const,
+      label: person.name,
+      person,
+    })),
+    ...focuses.map((focus) => ({
+      kind: "focus" as const,
+      label: focus.title,
+      focus,
+    })),
+  ];
+  return subjects.sort((a, b) =>
+    a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
+  );
 }
 
 async function hydrateLovedOnePhotos(
@@ -204,7 +256,10 @@ export function HomeScreen() {
   const { getToken } = useAuth();
   const styles = useThemedStyles(createStyles);
   const { colors, setAppearance } = useTheme();
+  const { urls: libraryUrls } = useBackgroundLibrary();
   const getTokenRef = useRef(getToken);
+  const prayRailRef = useRef<ScrollView>(null);
+  const prayRailHint = useRef(0);
   const { user } = useUser();
   const firstName = user?.firstName || "friend";
   const [response, setResponse] = useState<MobileHomeResponse | null>(null);
@@ -218,6 +273,10 @@ export function HomeScreen() {
   >(1);
   const [prayerLoading, setPrayerLoading] = useState(false);
   const [addLovedOneOpen, setAddLovedOneOpen] = useState(false);
+  const [addSubjectOpen, setAddSubjectOpen] = useState(false);
+  const [focusIntent, setFocusIntent] = useState<PrayerFocusIntent>("thing");
+  const [needPrayerOpen, setNeedPrayerOpen] = useState(false);
+  const [needPrayerMode, setNeedPrayerMode] = useState<NeedPrayerMode>("prayer");
   const [photoLovedOne, setPhotoLovedOne] = useState<{
     id: string;
     firstName: string;
@@ -226,6 +285,8 @@ export function HomeScreen() {
     id: string;
     firstName: string;
   } | null>(null);
+  const pendingSubjectRef = useRef<AddSubjectChoice | null>(null);
+  const pendingLovedOnePrayerRef = useRef<HomeLovedOne | null>(null);
   const photoModalFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -287,6 +348,35 @@ export function HomeScreen() {
     setPhotoLovedOne(lovedOne);
   }, []);
 
+  const openQueuedSubjectModal = useCallback(() => {
+    const choice = pendingSubjectRef.current;
+    if (!choice) return;
+    pendingSubjectRef.current = null;
+    setMutationError(null);
+    if (choice === "person") {
+      setAddLovedOneOpen(true);
+      return;
+    }
+    if (choice === "situation") {
+      setNeedPrayerMode("situation");
+      setNeedPrayerOpen(true);
+      return;
+    }
+    setSelectedFocus(null);
+    setFocusIntent("thing");
+    setPrayerFocusOpen(true);
+  }, []);
+
+  const handleAddSubject = useCallback(
+    (choice: AddSubjectChoice) => {
+      // The next drawer can only present once this sheet is fully dismissed.
+      pendingSubjectRef.current = choice;
+      setAddSubjectOpen(false);
+      if (Platform.OS !== "ios") openQueuedSubjectModal();
+    },
+    [openQueuedSubjectModal],
+  );
+
   const queuePhotoModal = useCallback(
     (lovedOne: { id: string; firstName: string }) => {
       pendingPhotoLovedOneRef.current = lovedOne;
@@ -341,6 +431,25 @@ export function HomeScreen() {
           });
         }
         setResponse(result);
+        if (refresh) {
+          const count = praySubjects(
+            result.home.lovedOnes || [],
+            result.home.prayerFocuses || [],
+          ).length;
+          if (count > 5) {
+            const hint = ++prayRailHint.current;
+            requestAnimationFrame(() => {
+              setTimeout(() => {
+                if (hint !== prayRailHint.current) return;
+                prayRailRef.current?.scrollTo({ x: 52, animated: true });
+                setTimeout(() => {
+                  if (hint !== prayRailHint.current) return;
+                  prayRailRef.current?.scrollTo({ x: 0, animated: true });
+                }, 700);
+              }, 160);
+            });
+          }
+        }
         if (!refresh) await prefetchHomeImages(result, token);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unable to load your home");
@@ -434,9 +543,12 @@ export function HomeScreen() {
             : card === selectedCard,
         )
       : -1;
+  // Anyone who has not picked their own rotates the live library, so admin
+  // edits reach them without an app release.
   const dashboardBackgrounds = selectedDashboardBackgrounds(
     response?.community?.backgroundImage,
     home?.profile.dashboardBackgrounds,
+    libraryUrls,
   );
 
   const showAdjacentRecentPrayer = (direction: -1 | 1) => {
@@ -483,7 +595,7 @@ export function HomeScreen() {
     if (generatingLovedOneRef.current) return;
     generatingLovedOneRef.current = true;
     const images = lovedOneImagePaths(person);
-    const backgroundImage = images[0] || "/cover1.jpg";
+    const backgroundImage = images[0] || FALLBACK_PRAYER_IMAGE;
     const timeOfDayLabel =
       new Date().getHours() < 12 ? "Morning Prayer" : "Evening Prayer";
     setSelectedCard({
@@ -561,16 +673,118 @@ export function HomeScreen() {
     }
   };
 
+  const handleAddLovedOneDismiss = () => {
+    const person = pendingLovedOnePrayerRef.current;
+    if (person) {
+      pendingLovedOnePrayerRef.current = null;
+      void handleLovedOnePress(person);
+      return;
+    }
+    openQueuedPhotoModal();
+  };
+
+  // Tapping a familiar face in the add flow means "I already did this" — close
+  // the wizard and pray for them instead of adding a duplicate.
+  const handleSelectExistingLovedOne = (person: HomeLovedOne) => {
+    pendingLovedOnePrayerRef.current = person;
+    setAddLovedOneOpen(false);
+    if (Platform.OS !== "ios") handleAddLovedOneDismiss();
+  };
+
+  const handlePrayerFocusPress = async (focus: PrayerFocus) => {
+    if (generatingLovedOneRef.current) return;
+    generatingLovedOneRef.current = true;
+    const photoPath = focusPhotoPath(focus);
+    const images = photoPath ? [photoPath] : [];
+    const backgroundImage = photoPath || FALLBACK_PRAYER_IMAGE;
+    const timeOfDayLabel =
+      new Date().getHours() < 12 ? "Morning Prayer" : "Evening Prayer";
+    setSelectedCard({
+      title: focus.title,
+      verse: timeOfDayLabel,
+      text: `Preparing a prayer for ${focus.title}...`,
+      image: backgroundImage,
+      images,
+    });
+    setPrayerLoading(true);
+    try {
+      const token = await requireCurrentToken();
+      const prayer = await generatePrayerFocusPrayer(
+        focus.focusuuid,
+        backgroundImage,
+        token,
+        true,
+      );
+      const pendingPrayer = {
+        ...prayer,
+        image: images[0] || prayer.image,
+        images,
+        audioStatus: "pending" as const,
+      };
+      setSelectedCard(pendingPrayer);
+      setResponse((current) =>
+        current
+          ? {
+              ...current,
+              home: {
+                ...current.home,
+                cards: [
+                  pendingPrayer,
+                  ...current.home.cards.filter(
+                    (card) => card.prayeruuid !== prayer.prayeruuid,
+                  ),
+                ].slice(0, 5),
+              },
+            }
+          : current,
+      );
+      setPrayerLoading(false);
+
+      void generatePrayerCardAudio(prayer.prayeruuid!, token)
+        .then((audio) => {
+          updatePrayerCard(prayer.prayeruuid!, {
+            narrationUrl: audio.narrationUrl,
+            backgroundMusicUrl:
+              audio.backgroundMusicUrl || prayer.backgroundMusicUrl,
+            backgroundMusicVolume: audio.backgroundMusicVolume,
+            audioAvailable: audio.audioStatus === "ready",
+            audioStatus: audio.audioStatus,
+          });
+        })
+        .catch(() => {
+          updatePrayerCard(prayer.prayeruuid!, {
+            audioAvailable: false,
+            audioStatus: "failed",
+          });
+        });
+    } catch (err) {
+      setPrayerLoading(false);
+      setSelectedCard({
+        title: focus.title,
+        verse: timeOfDayLabel,
+        text:
+          err instanceof Error
+            ? err.message
+            : "Unable to generate a prayer. Please try again.",
+        image: backgroundImage,
+        images,
+      });
+    } finally {
+      generatingLovedOneRef.current = false;
+    }
+  };
+
   const handleAddLovedOne = async (
     name: string,
     configurations: LovedOnePrayerConfiguration[],
     photoDataUris: string[] = [],
+    gender: LovedOneGender,
   ) => {
     setSavingLovedOne(true);
     setMutationError(null);
     try {
       const token = await requireCurrentToken();
-      const lovedOne = await addLovedOne(name, token);
+      const lovedOne = await addLovedOne(name, token, gender);
       if (configurations.length) {
         await saveLovedOneConfig(lovedOne.id, configurations, token);
       }
@@ -650,7 +864,39 @@ export function HomeScreen() {
     }
   };
 
-  const handleSavePrayerFocus = async (input: PrayerFocusInput) => {
+  const handleSaveSituation = async (situation: {
+    title: string;
+    burdenId: string;
+    optionId: string;
+  }) => {
+    const token = await requireCurrentToken();
+    await createPrayerFocus(
+      {
+        title: situation.title,
+        type: "situation",
+        species: null,
+        gender: null,
+        note: null,
+        categories: [situation.burdenId],
+        virtues: ["peace", "grace"],
+        period: "both",
+        active: true,
+        order:
+          Math.max(
+            -1,
+            ...(home?.prayerFocuses.map((focus) => focus.order) || []),
+          ) + 1,
+      },
+      token,
+    );
+    await loadHome(true);
+    setNeedPrayerOpen(false);
+  };
+
+  const handleSavePrayerFocus = async (
+    input: PrayerFocusInput,
+    newPhotos: string[] = [],
+  ) => {
     setSavingLovedOne(true);
     setMutationError(null);
     try {
@@ -658,7 +904,10 @@ export function HomeScreen() {
       if (selectedFocus) {
         await updatePrayerFocus(selectedFocus.focusuuid, input, token);
       } else {
-        await createPrayerFocus(input, token);
+        const created = await createPrayerFocus(input, token);
+        for (const imageData of newPhotos) {
+          await uploadPrayerFocusPhoto(created.focusuuid, imageData, token);
+        }
       }
       await loadHome(true);
       setPrayerFocusOpen(false);
@@ -713,7 +962,7 @@ export function HomeScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingTop: insets.top + 24, paddingBottom: 32 + insets.bottom },
+          { paddingTop: insets.top + 24, paddingBottom: HOME_NAV_FAB_RESERVE + insets.bottom },
         ]}
         refreshControl={
           <RefreshControl
@@ -852,94 +1101,38 @@ export function HomeScreen() {
               </Text>
             )}
 
-            <View style={styles.sectionRow}>
-              <Text style={styles.section}>Pray for Loved Ones</Text>
-              <Pressable
-                accessibilityLabel="Add a loved one"
-                accessibilityRole="button"
-                onPress={() => setAddLovedOneOpen(true)}
-                style={({ pressed }) => [styles.plus, pressed && styles.pressed]}
-              >
-                <Text style={styles.plusText}>+</Text>
-              </Pressable>
-            </View>
-            {home?.lovedOnes.length ? (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.lovedRail}
-              >
-                {home.lovedOnes.map((person) => (
-                  <LovedOne
-                    key={person.id}
-                    person={person}
-                    compact
-                    showIntention={false}
-                    onPress={() => handleLovedOnePress(person)}
-                  />
-                ))}
-              </ScrollView>
-            ) : (
-              <Text style={styles.empty}>
-                Add someone you would like to pray for.
-              </Text>
-            )}
-
-            <View style={styles.sectionRow}>
-              <Text style={styles.section}>Prayer Focuses</Text>
-              <Pressable
-                accessibilityLabel="Add a prayer focus"
-                accessibilityRole="button"
-                onPress={() => {
-                  setMutationError(null);
-                  setSelectedFocus(null);
-                  setPrayerFocusOpen(true);
-                }}
-                style={({ pressed }) => [styles.plus, pressed && styles.pressed]}
-              >
-                <Text style={styles.plusText}>+</Text>
-              </Pressable>
-            </View>
-            {home.prayerFocuses.length ? (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.focusRail}
-              >
-                {home.prayerFocuses.map((focus) => (
-                  <Pressable
-                    key={focus.focusuuid}
-                    accessibilityLabel={`Edit prayer focus ${focus.title}`}
-                    accessibilityRole="button"
-                    onPress={() => {
-                      setMutationError(null);
-                      setSelectedFocus(focus);
-                      setPrayerFocusOpen(true);
-                    }}
-                    style={({ pressed }) => [
-                      styles.focusCard,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <View style={styles.focusIcon}>
-                      <PrayerFocusTypeIcon
-                        type={focus.type}
-                        color={colors.accent}
-                        size={18}
-                      />
-                    </View>
-                    <Text numberOfLines={1} style={styles.focusTitle}>
-                      {focus.title}
-                    </Text>
-                    <Text style={styles.focusPeriod}>{focus.period}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            ) : (
-              <Text style={styles.empty}>
-                Add a focus to include in your daily prayer deck.
-              </Text>
-            )}
+            <Text style={styles.section}>Pray For</Text>
+            <ScrollView
+              ref={prayRailRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.lovedRail}
+            >
+              {praySubjects(home?.lovedOnes || [], home.prayerFocuses).map(
+                (subject) =>
+                  subject.kind === "person" ? (
+                    <LovedOne
+                      key={subject.person.id}
+                      person={subject.person}
+                      compact
+                      showIntention={false}
+                      onPress={() => handleLovedOnePress(subject.person)}
+                    />
+                  ) : (
+                    <PrayerFocusCircle
+                      key={subject.focus.focusuuid}
+                      focus={subject.focus}
+                      photoPath={focusPhotoPath(subject.focus)}
+                      onLongPress={() => {
+                        setMutationError(null);
+                        setSelectedFocus(subject.focus);
+                        setPrayerFocusOpen(true);
+                      }}
+                      onPress={() => handlePrayerFocusPress(subject.focus)}
+                    />
+                  ),
+              )}
+            </ScrollView>
               </>
             ) : null}
 
@@ -1085,6 +1278,30 @@ export function HomeScreen() {
         ) : null}
       </ScrollView>
 
+      <HomeNavFab
+        bottom={insets.bottom + 4}
+        onPress={() => setAddSubjectOpen(true)}
+      />
+
+      <NeedPrayerDrawer
+        visible={needPrayerOpen}
+        mode={needPrayerMode}
+        onSaveSituation={handleSaveSituation}
+        traditionId={home?.profile.traditions.selected || "scripture"}
+        traditionLabel={
+          home?.profile.traditions.options.find(
+            (option) => option.id === home.profile.traditions.selected,
+          )?.label || "Just Scripture"
+        }
+        onClose={() => setNeedPrayerOpen(false)}
+        onGenerated={(card) => {
+          setNeedPrayerOpen(false);
+          setDetailNavigationDirection(1);
+          setSelectedCard(card);
+          void loadHome(true);
+        }}
+      />
+
       <PrayerDetailModal
         card={selectedCard}
         token={sessionToken}
@@ -1116,8 +1333,10 @@ export function HomeScreen() {
         visible={addLovedOneOpen}
         saving={savingLovedOne}
         error={mutationError}
+        existingLovedOnes={home?.lovedOnes || []}
+        onSelectExisting={handleSelectExistingLovedOne}
         onClose={() => setAddLovedOneOpen(false)}
-        onDismiss={openQueuedPhotoModal}
+        onDismiss={handleAddLovedOneDismiss}
         onSubmit={handleAddLovedOne}
       />
       <LovedOnePhotosModal
@@ -1150,6 +1369,7 @@ export function HomeScreen() {
         focus={selectedFocus}
         saving={savingLovedOne}
         error={mutationError}
+        intent={focusIntent}
         nextOrder={
           Math.max(-1, ...(home?.prayerFocuses.map((focus) => focus.order) || [])) +
           1
@@ -1159,6 +1379,12 @@ export function HomeScreen() {
           setSelectedFocus(null);
         }}
         onSubmit={handleSavePrayerFocus}
+      />
+      <AddSubjectSheet
+        visible={addSubjectOpen}
+        onClose={() => setAddSubjectOpen(false)}
+        onDismiss={openQueuedSubjectModal}
+        onSelect={handleAddSubject}
       />
       <ProfileDrawer
         visible={profileOpen}
@@ -1413,44 +1639,10 @@ function createStyles(colors: ColorTokens) {
     paddingBottom: 8,
   },
   lovedRail: {
-    flexGrow: 1,
-    justifyContent: "center",
-    gap: 8,
+    flexGrow: 0,
+    justifyContent: "flex-start",
+    gap: 4,
     paddingBottom: 8,
-  },
-  focusRail: {
-    gap: 8,
-    paddingBottom: 8,
-  },
-  focusCard: {
-    width: 112,
-    minHeight: 96,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    backgroundColor: colors.cardFill,
-    padding: 12,
-  },
-  focusIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.accentFillMid,
-    marginBottom: 9,
-  },
-  focusTitle: {
-    color: colors.title,
-    fontFamily: fonts.displayMedium,
-    fontSize: 12,
-  },
-  focusPeriod: {
-    color: colors.muted,
-    fontFamily: fonts.mono,
-    fontSize: 8,
-    marginTop: 3,
-    textTransform: "uppercase",
   },
   groupCard: {
     width: 120,
@@ -1528,7 +1720,7 @@ function createStyles(colors: ColorTokens) {
     height: 50,
     borderRadius: 25,
     borderWidth: 1,
-    borderColor: colors.title,
+    borderColor: colors.cardBorder,
     backgroundColor: colors.overlaySoft,
     alignItems: "center",
     justifyContent: "center",
@@ -1540,9 +1732,11 @@ function createStyles(colors: ColorTokens) {
     fontSize: 16,
   },
   profileTriggerAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   });
 }

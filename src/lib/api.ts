@@ -1,10 +1,12 @@
-import { API_BASE } from "./assets";
+import { API_BASE, FALLBACK_PRAYER_IMAGE } from "./assets";
 import type { LovedOnePrayerConfiguration } from "./prayerConfig";
+import { cleanPrayerDisplayText } from "./prayerText";
 import type {
   GroupDetail,
   HomeCommunity,
   HomePrayerCard,
   LovedOnePhoto,
+  MediaPhoto,
   MobileHomeResponse,
   PendingGroupInvite,
   PersonalPlan,
@@ -584,8 +586,8 @@ export async function retryPrayerDeckItem(
   return data.card;
 }
 
-export async function generateLovedOnePrayer(
-  lovedOneId: string,
+async function generateSubjectPrayer(
+  endpoint: string,
   backgroundImage: string,
   token: string,
   textOnly: boolean,
@@ -618,7 +620,7 @@ export async function generateLovedOnePrayer(
       backgroundMusicVolume?: number;
       backgroundImage?: string;
     };
-  }>(`/api/user/prayers/loved-one/${lovedOneId}/generate`, token, {
+  }>(endpoint, token, {
     method: "POST",
     body: JSON.stringify({
       textOnly,
@@ -649,6 +651,89 @@ export async function generateLovedOnePrayer(
     backgroundMusicVolume: data.prayer.backgroundMusicVolume,
     audioAvailable: Boolean(data.prayer.audioUrl),
     audioStatus: data.prayer.audioStatus,
+  };
+}
+
+export async function generateLovedOnePrayer(
+  lovedOneId: string,
+  backgroundImage: string,
+  token: string,
+  textOnly: boolean,
+): Promise<HomePrayerCard> {
+  return generateSubjectPrayer(
+    `/api/user/prayers/loved-one/${encodeURIComponent(lovedOneId)}/generate`,
+    backgroundImage,
+    token,
+    textOnly,
+  );
+}
+
+export async function generatePrayerFocusPrayer(
+  focusuuid: string,
+  backgroundImage: string,
+  token: string,
+  textOnly: boolean,
+): Promise<HomePrayerCard> {
+  return generateSubjectPrayer(
+    `/api/user/prayers/prayer-focus/${encodeURIComponent(focusuuid)}/generate`,
+    backgroundImage,
+    token,
+    textOnly,
+  );
+}
+
+export async function generateNeedPrayer(
+  flow: {
+    path: "myself" | "someone-else";
+    burden: string;
+    burdenId: string;
+    burdenOption: string;
+    burdenOptionId: string;
+    tradition: string;
+    traditionId: string;
+  },
+  token: string,
+): Promise<HomePrayerCard> {
+  const data = await authenticatedRequest<{
+    prayeruuid?: string;
+    prayerText?: {
+      title?: string;
+      text?: string;
+      textClean?: string;
+      verse?: string;
+    };
+    audioUrl?: string | null;
+    backgroundImage?: string;
+    audio?: {
+      enabled?: boolean;
+      generationStatus?: "pending" | "ready" | "failed";
+      settings?: {
+        backgroundMusicUrl?: string | null;
+        backgroundMusicVolume?: number;
+      };
+      files?: { narration?: string | null };
+    };
+  }>("/api/prayers/generate", token, {
+    method: "POST",
+    body: JSON.stringify(flow),
+  });
+  const text = cleanPrayerDisplayText(
+    data.prayerText?.textClean || data.prayerText?.text || "",
+  );
+  const narrationUrl =
+    data.audioUrl || data.audio?.files?.narration || null;
+  return {
+    prayeruuid: data.prayeruuid,
+    title: data.prayerText?.title || "Prayer",
+    verse: data.prayerText?.verse || flow.tradition,
+    text,
+    fullPrayer: text,
+    image: data.backgroundImage || FALLBACK_PRAYER_IMAGE,
+    narrationUrl,
+    backgroundMusicUrl: data.audio?.settings?.backgroundMusicUrl || null,
+    backgroundMusicVolume: data.audio?.settings?.backgroundMusicVolume,
+    audioAvailable: Boolean(narrationUrl),
+    audioStatus: data.audio?.generationStatus || (narrationUrl ? "ready" : undefined),
   };
 }
 
@@ -710,14 +795,33 @@ export async function generatePrayerCardAudio(
 export async function addLovedOne(
   firstName: string,
   token: string,
-): Promise<{ id: string; firstName: string }> {
+  gender?: "male" | "female",
+): Promise<{ id: string; firstName: string; gender?: "male" | "female" }> {
   const data = await authenticatedRequest<{
-    lovedOne: { id: string; firstName: string };
+    lovedOne: { id: string; firstName: string; gender?: "male" | "female" };
   }>("/api/user/profile/loved-ones", token, {
     method: "POST",
-    body: JSON.stringify({ firstName: firstName.trim() }),
+    body: JSON.stringify({
+      firstName: firstName.trim(),
+      ...(gender ? { gender } : {}),
+    }),
   });
   return data.lovedOne;
+}
+
+export async function updateLovedOne(
+  lovedOneId: string,
+  updates: { firstName?: string; gender?: "male" | "female" },
+  token: string,
+): Promise<void> {
+  await authenticatedRequest(
+    `/api/user/profile/loved-ones/${lovedOneId}`,
+    token,
+    {
+      method: "PATCH",
+      body: JSON.stringify(updates),
+    },
+  );
 }
 
 export async function generateDailyPrayers(
@@ -726,6 +830,7 @@ export async function generateDailyPrayers(
     name: string;
     categories: string[];
     virtues: string[];
+    gender?: "male" | "female";
   }>,
   token: string,
 ): Promise<
@@ -862,6 +967,71 @@ export async function deleteLovedOnePhoto(
   );
 }
 
+export async function getPrayerFocusPhotos(
+  focusuuid: string,
+  token: string,
+): Promise<MediaPhoto[]> {
+  const payload = await authenticatedRequest<unknown>(
+    `/api/user/prayer-focuses/${encodeURIComponent(focusuuid)}/photos`,
+    token,
+  );
+  const root = asRecord(payload);
+  const data = asRecord(root?.data);
+  const values = Array.isArray(payload)
+    ? payload
+    : Array.isArray(root?.photos)
+      ? root.photos
+      : Array.isArray(data?.photos)
+        ? data.photos
+        : [];
+  return values
+    .map(normalizeLovedOnePhoto)
+    .filter((photo): photo is MediaPhoto => Boolean(photo))
+    .slice(0, 3);
+}
+
+export async function uploadPrayerFocusPhoto(
+  focusuuid: string,
+  imageData: string,
+  token: string,
+): Promise<void> {
+  await authenticatedRequest(
+    `/api/user/prayer-focuses/${encodeURIComponent(focusuuid)}/photos`,
+    token,
+    {
+      method: "POST",
+      body: JSON.stringify({ imageData }),
+    },
+  );
+}
+
+export async function setPrayerFocusPrimaryPhoto(
+  focusuuid: string,
+  mediauuid: string,
+  token: string,
+): Promise<void> {
+  await authenticatedRequest(
+    `/api/user/prayer-focuses/${encodeURIComponent(focusuuid)}/photos/${encodeURIComponent(mediauuid)}`,
+    token,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ isPrimary: true }),
+    },
+  );
+}
+
+export async function deletePrayerFocusPhoto(
+  focusuuid: string,
+  mediauuid: string,
+  token: string,
+): Promise<void> {
+  await authenticatedRequest(
+    `/api/user/prayer-focuses/${encodeURIComponent(focusuuid)}/photos/${encodeURIComponent(mediauuid)}`,
+    token,
+    { method: "DELETE" },
+  );
+}
+
 export async function updateProfile(
   updates: Record<string, unknown>,
   token: string,
@@ -886,6 +1056,16 @@ export async function updateAccountName(
   });
 }
 
+export async function updateAccountGender(
+  gender: "male" | "female",
+  token: string,
+): Promise<void> {
+  await authenticatedRequest("/api/user/profile/account", token, {
+    method: "PATCH",
+    body: JSON.stringify({ gender }),
+  });
+}
+
 export async function uploadAvatar(
   imageData: string,
   token: string,
@@ -896,14 +1076,27 @@ export async function uploadAvatar(
   });
 }
 
+/**
+ * Library art is sent by uuid so the server copies it into the user's own
+ * storage; anything else (uploads, community art) is stored by URL.
+ */
 export async function selectDashboardBackground(
   imageUrl: string,
   current: string[],
   token: string,
+  options: { backgrounduuid?: string | null; replace?: boolean } = {},
 ): Promise<void> {
+  const body = options.backgrounduuid
+    ? {
+        action: "library",
+        backgrounduuid: options.backgrounduuid,
+        replace: options.replace,
+        current,
+      }
+    : { action: "select", imageUrl, current };
   await authenticatedRequest("/api/user/profile/dashboard-background", token, {
     method: "POST",
-    body: JSON.stringify({ action: "select", imageUrl, current }),
+    body: JSON.stringify(body),
   });
 }
 
@@ -1437,7 +1630,7 @@ export async function getGroupDetail(
         verse: prayer.prayerText?.verse || "",
         text,
         fullPrayer: text,
-        image: prayer.backgroundImage || `/cover${(index % 6) + 1}.jpg`,
+        image: prayer.backgroundImage || FALLBACK_PRAYER_IMAGE,
         date: prayer.createdAt,
         narrationUrl: prayer.audio?.files?.narration || null,
         backgroundMusicUrl: prayer.audio?.settings?.backgroundMusicUrl || null,
@@ -1518,14 +1711,16 @@ export async function getPrayer(
     };
   }>(`/api/prayers/${prayeruuid}`, token);
   const prayer = data.prayer;
-  const text = prayer.prayerText?.textClean || prayer.prayerText?.text || "";
+  const text = cleanPrayerDisplayText(
+    prayer.prayerText?.textClean || prayer.prayerText?.text || "",
+  );
   return {
     prayeruuid: prayer.prayeruuid,
     title: prayer.prayerText?.title || "Prayer",
     verse: prayer.prayerText?.verse || "",
     text,
     fullPrayer: text,
-    image: prayer.backgroundImage || "/cover1.jpg",
+    image: prayer.backgroundImage || FALLBACK_PRAYER_IMAGE,
     date: prayer.createdAt,
     narrationUrl: prayer.audio?.files?.narration || null,
     backgroundMusicUrl: prayer.audio?.settings?.backgroundMusicUrl || null,
@@ -1630,6 +1825,24 @@ export async function registerPushToken(
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
     throw new Error(data.error || "Failed to register push token");
+  }
+}
+
+export async function syncAppBadgeCount(
+  count: number,
+  token: string,
+): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/mobile/app-badge`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ count: Math.max(0, Math.floor(count)) }),
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error || "Failed to sync app badge");
   }
 }
 

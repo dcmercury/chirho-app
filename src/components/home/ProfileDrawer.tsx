@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Modal, ScrollView, View } from "react-native";
+import { useBackgroundLibrary } from "../../lib/backgroundLibrary";
 import {
   dashboardBackgroundGallery,
   selectedDashboardBackgrounds,
@@ -86,6 +87,7 @@ export function ProfileDrawer({
   const styles = useProfileStyles();
   const { appearance } = useTheme();
   const controller = useProfileDrawerController(visible, onChanged);
+  const { urls: libraryUrls } = useBackgroundLibrary();
   const [prayerCardsOpen, setPrayerCardsOpen] = useState(false);
   const [dailyPrayerOpen, setDailyPrayerOpen] = useState(false);
 
@@ -130,10 +132,13 @@ export function ProfileDrawer({
             avatar={profile.avatar}
             visible={visible}
             pending={Boolean(controller.pending.account)}
+            genderPending={Boolean(controller.pending["account-gender"])}
             avatarPending={Boolean(controller.pending.avatar)}
             error={controller.errors.account}
+            genderError={controller.errors["account-gender"]}
             avatarError={controller.errors.avatar}
             onSave={controller.saveAccount}
+            onSaveGender={controller.saveAccountGender}
             onChangeAvatar={() => {
               void controller.pickAvatar();
             }}
@@ -167,6 +172,7 @@ export function ProfileDrawer({
             onManage={(id, firstName) =>
               onManageLovedOnePhotos({ id, firstName })
             }
+            onGenderChange={controller.setLovedOneGender}
             onRemove={controller.confirmRemoveLovedOne}
           />
           <PrayerFocusesSection
@@ -239,6 +245,7 @@ export function ProfileDrawer({
             images={dashboardBackgroundGallery(
               community?.backgroundImage,
               profile.dashboardBackgrounds,
+              libraryUrls,
             )}
             onSelect={(url) => {
               void controller.selectHomeBackground(
