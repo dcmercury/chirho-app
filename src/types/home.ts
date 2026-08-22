@@ -43,9 +43,11 @@ export interface PrayerFocus {
   active: boolean;
   order: number;
   photos?: MediaPhoto[];
+  /** Catalog still when there is no uploaded photo. */
+  image?: string | null;
 }
 
-export type PrayerFocusInput = Omit<PrayerFocus, "focusuuid" | "photos">;
+export type PrayerFocusInput = Omit<PrayerFocus, "focusuuid" | "photos" | "image">;
 
 export interface DailyDeckSummary {
   deckuuid: string;
@@ -86,6 +88,7 @@ export interface MediaPhoto {
 export type LovedOnePhoto = MediaPhoto;
 
 export type LovedOneGender = "male" | "female";
+export type LovedOneKind = "person" | "family";
 
 export interface HomeLovedOne {
   id: string;
@@ -93,9 +96,11 @@ export interface HomeLovedOne {
   avatar: string;
   intention: string;
   gender?: LovedOneGender;
+  kind?: LovedOneKind;
   backgroundImage?: string;
   primaryPhoto?: LovedOnePhoto | null;
   photos?: LovedOnePhoto[];
+  configurations?: Array<{ category: string; virtues: string[] }>;
 }
 
 export interface HomeGroup {
@@ -159,14 +164,17 @@ export interface HomeProfile {
     id: string;
     firstName: string;
     gender?: LovedOneGender;
+    kind?: LovedOneKind;
     hasConfig: boolean;
     categories: string[];
+    configurations?: Array<{ category: string; virtues: string[] }>;
   }[];
   appSettings: {
     theme: string;
     fontSize: string;
   };
   backgroundMusicEnabled?: boolean;
+  backgroundMusicId?: string | null;
   dashboardBackground?: string | null;
   dashboardBackgrounds?: string[];
 }

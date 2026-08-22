@@ -1,16 +1,12 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { PrayerFocus, PrayerFocusInput } from "../../../types/home";
+import { focusPhotoPath } from "../../../lib/prayerFocusImage";
 import { AuthenticatedImage } from "../../ui/AuthenticatedImage";
 import { PrayerFocusModal } from "../PrayerFocusModal";
 import { PrayerFocusTypeIcon } from "../PrayerFocusTypeIcon";
 import { useTheme } from "../../../theme/ThemeProvider";
 import { InlineError, Section, useProfileStyles } from "./ProfileControls";
-
-function focusPhotoPath(focus: PrayerFocus): string | undefined {
-  const photos = focus.photos || [];
-  return (photos.find((photo) => photo.isPrimary) || photos[0])?.contentPath;
-}
 
 export function PrayerFocusesSection({
   focuses,

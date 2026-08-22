@@ -26,7 +26,7 @@ import {
 } from "../../../lib/api";
 import { backgroundIdForUrl } from "../../../lib/backgroundLibrary";
 import { registerForPushNotifications } from "../../../lib/push";
-import { setBackgroundMusicEnabled } from "../../../lib/backgroundMusicPreference";
+import { setBackgroundMusicEnabled, setBackgroundMusicUrl } from "../../../lib/backgroundMusicPreference";
 import { prepareLovedOnePhoto } from "../../../lib/lovedOnePhoto";
 import { useTheme } from "../../../theme/ThemeProvider";
 import type { Appearance } from "../../../theme/tokens";
@@ -220,11 +220,62 @@ export function useProfileDrawerController(
     }
   };
 
+  const musicIntentRef = useRef<{
+    enabled: boolean;
+    musicuuid?: string;
+    url?: string;
+  } | null>(null);
+
+  const flushBackgroundMusic = async () => {
+    if (!begin("background-music")) return;
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Your session expired. Please sign in again.");
+      while (musicIntentRef.current) {
+        const next = musicIntentRef.current;
+        musicIntentRef.current = null;
+        setBackgroundMusicEnabled(next.enabled);
+        if (next.url) setBackgroundMusicUrl(next.url);
+        await updateProfile(
+          {
+            preferences: {
+              backgroundMusicEnabled: next.enabled,
+              ...(next.musicuuid !== undefined
+                ? { backgroundMusicId: next.musicuuid }
+                : {}),
+            },
+          },
+          token,
+        );
+      }
+      await refreshProfile();
+    } catch (error) {
+      setOperationError("background-music", error, "Unable to save changes");
+    } finally {
+      finish("background-music");
+      if (musicIntentRef.current) void flushBackgroundMusic();
+    }
+  };
+
   const setBackgroundMusic = (enabled: boolean) => {
     setBackgroundMusicEnabled(enabled);
-    return mutate("background-music", (token) =>
-      updateProfile({ preferences: { backgroundMusicEnabled: enabled } }, token),
-    );
+    musicIntentRef.current = {
+      enabled,
+      musicuuid: musicIntentRef.current?.musicuuid,
+      url: musicIntentRef.current?.url,
+    };
+    void flushBackgroundMusic();
+  };
+
+  const selectBackgroundMusic = (musicuuid: string, musicUrl: string) => {
+    setBackgroundMusicEnabled(true);
+    setBackgroundMusicUrl(musicUrl);
+    musicIntentRef.current = {
+      enabled: true,
+      musicuuid,
+      url: musicUrl,
+    };
+    void flushBackgroundMusic();
   };
 
   const setTheme = (appearance: Appearance) => {
@@ -442,6 +493,7 @@ export function useProfileDrawerController(
     selectTradition,
     selectVoice,
     setBackgroundMusic,
+    selectBackgroundMusic,
     setTheme,
     selectHomeBackground,
     uploadHomeBackground,

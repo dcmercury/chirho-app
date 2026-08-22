@@ -30,7 +30,8 @@ import {
   prayerVirtueLabel,
   type LovedOnePrayerConfiguration,
 } from "../../lib/prayerConfig";
-import type { HomeLovedOne, LovedOneGender } from "../../types/home";
+import { findDuplicateLovedOne } from "../../lib/subjectIdentity";
+import type { HomeLovedOne, LovedOneGender, LovedOneKind } from "../../types/home";
 import { LovedOne } from "../ui/LovedOne";
 
 interface PendingPhoto {
@@ -49,6 +50,13 @@ interface AddLovedOneModalProps {
   error: string | null;
   dismissLabel?: string;
   existingLovedOnes?: HomeLovedOne[];
+  editing?: {
+    id: string;
+    name: string;
+    configurations: LovedOnePrayerConfiguration[];
+    kind?: LovedOneKind;
+  } | null;
+  intent?: LovedOneKind;
   onSelectExisting?: (person: HomeLovedOne) => void;
   onClose: () => void;
   onDismiss?: () => void;
@@ -56,7 +64,12 @@ interface AddLovedOneModalProps {
     name: string,
     configurations: LovedOnePrayerConfiguration[],
     photoDataUris: string[],
-    gender: LovedOneGender,
+    gender: LovedOneGender | null,
+    kind: LovedOneKind,
+  ) => Promise<void>;
+  onUpdate?: (
+    id: string,
+    configurations: LovedOnePrayerConfiguration[],
   ) => Promise<void>;
 }
 
@@ -66,10 +79,13 @@ export function AddLovedOneModal({
   error,
   dismissLabel = "Cancel",
   existingLovedOnes = [],
+  editing = null,
+  intent = "person",
   onSelectExisting,
   onClose,
   onDismiss,
   onSubmit,
+  onUpdate,
 }: AddLovedOneModalProps) {
   const styles = useThemedStyles(createStyles);
   const { colors } = useTheme();
@@ -88,7 +104,16 @@ export function AddLovedOneModal({
 
   const currentCategory = selectedCategories[categoryIndex];
   const currentVirtues = categoryVirtues[currentCategory] || [];
-  const firstName = name.trim();
+  const firstName = (editing?.name || name).trim();
+  const isEditing = Boolean(editing);
+  const isFamily = (editing?.kind || intent) === "family";
+  const kind: LovedOneKind = isFamily ? "family" : "person";
+  const duplicateLovedOne = isEditing
+    ? undefined
+    : findDuplicateLovedOne(existingLovedOnes, firstName, gender, kind);
+  const stepDots = isEditing
+    ? STEP_DOTS.filter((item) => item !== "name")
+    : STEP_DOTS;
 
   useEffect(() => {
     if (!visible) {
@@ -101,8 +126,27 @@ export function AddLovedOneModal({
       setPhotos([]);
       setPhotoError(null);
       setStepError(null);
+      return;
     }
-  }, [visible]);
+    if (editing) {
+      const configs = editing.configurations.map((item) => ({
+        category: item.category.toLowerCase(),
+        virtues: item.virtues.map((virtue) => virtue.toLowerCase()),
+      }));
+      setName(editing.name);
+      setSelectedCategories(configs.map((item) => item.category));
+      setCategoryVirtues(
+        Object.fromEntries(
+          configs.map((item) => [item.category, item.virtues]),
+        ),
+      );
+      setCategoryIndex(0);
+      setPhotos([]);
+      setPhotoError(null);
+      setStepError(null);
+      setStep("categories");
+    }
+  }, [editing, visible]);
 
   const pickPhotos = async () => {
     if (saving || picking) return;
@@ -180,8 +224,14 @@ export function AddLovedOneModal({
       firstName,
       configurations,
       photos.map((photo) => photo.imageData),
-      gender!,
+      isFamily ? null : gender,
+      kind,
     );
+  };
+
+  const saveEdit = () => {
+    if (!editing || !onUpdate) return;
+    void onUpdate(editing.id, configurations);
   };
 
   const jumpTo = (target: LovedOneStep) => {
@@ -200,6 +250,10 @@ export function AddLovedOneModal({
       return;
     }
     if (step === "categories") {
+      if (isEditing) {
+        onClose();
+        return;
+      }
       setStep("name");
       return;
     }
@@ -218,7 +272,13 @@ export function AddLovedOneModal({
   };
 
   const continueFromName = () => {
-    if (!firstName || !gender) return;
+    if (!firstName || (!isFamily && !gender)) return;
+    if (duplicateLovedOne) {
+      setStepError(
+        `${duplicateLovedOne.name} is already in your prayer deck. Tap the photo above to pray.`,
+      );
+      return;
+    }
     setStepError(null);
     setStep("categories");
   };
@@ -255,7 +315,8 @@ export function AddLovedOneModal({
       ? {
           label: "Continue",
           onPress: continueFromName,
-          disabled: !firstName || !gender || busy,
+          disabled:
+            !firstName || (!isFamily && !gender) || Boolean(duplicateLovedOne) || busy,
         }
       : step === "categories"
         ? {
@@ -273,25 +334,37 @@ export function AddLovedOneModal({
               disabled: saving || !currentVirtues.length,
             }
           : {
-              label: saving ? "Adding…" : "Add",
-              onPress: submit,
-              disabled: !firstName || busy,
+              label: saving
+                ? isEditing
+                  ? "Saving…"
+                  : "Adding…"
+                : isEditing
+                  ? "Save"
+                  : "Add",
+              onPress: isEditing ? saveEdit : submit,
+              disabled: !firstName || busy || (isEditing && !configurations.length),
             };
 
   const title =
     step === "name"
-      ? "Add a loved one"
+      ? isFamily
+        ? "Add a family"
+        : "Add a loved one"
       : step === "categories"
         ? `Which areas of life for ${firstName}?`
         : step === "virtues"
-          ? `Which virtues for ${firstName}'s ${prayerCategoryLabel(currentCategory)}?`
+          ? isFamily
+            ? `Which virtues for ${firstName} in ${prayerCategoryLabel(currentCategory)}?`
+            : `Which virtues for ${firstName}'s ${prayerCategoryLabel(currentCategory)}?`
           : firstName
             ? `Your prayer for ${firstName} will include`
             : "Your prayer will include";
 
   const subtitle =
     step === "name"
-      ? "A first name and M or F is enough. Photos stay private."
+      ? isFamily
+        ? "A family name is enough. Photos stay private."
+        : "A first name and M or F is enough. Photos stay private."
       : step === "categories"
         ? "Tap the parts of life you’d like to pray for."
         : step === "virtues"
@@ -318,11 +391,15 @@ export function AddLovedOneModal({
         >
           <View style={styles.handle} />
           <Text style={styles.eyebrow}>
-            {firstName ? `PRAY FOR ${firstName.toUpperCase()}` : "PRAY FOR SOMEONE"}
+            {firstName
+              ? `PRAY FOR ${firstName.toUpperCase()}`
+              : isFamily
+                ? "PRAY FOR A FAMILY"
+                : "PRAY FOR SOMEONE"}
           </Text>
           <View style={styles.dots}>
-            {STEP_DOTS.map((item, index) => {
-              const currentIndex = STEP_DOTS.indexOf(step);
+            {stepDots.map((item, index) => {
+              const currentIndex = stepDots.indexOf(step);
               const reached = index <= currentIndex;
               return (
                 <Pressable
@@ -348,8 +425,10 @@ export function AddLovedOneModal({
               {firstName ? (
                 <Pressable
                   accessibilityRole="button"
-                  disabled={saving || picking}
-                  onPress={() => jumpTo("name")}
+                  disabled={saving || picking || isEditing}
+                  onPress={() => {
+                    if (!isEditing) jumpTo("name");
+                  }}
                   style={[styles.crumbTouch, styles.crumbItemEarly]}
                 >
                   <Text style={styles.crumb} numberOfLines={1}>
@@ -408,7 +487,7 @@ export function AddLovedOneModal({
           {step === "name" ? (
             <>
               {/* Seeing familiar faces first stops people re-adding someone. */}
-              {existingLovedOnes.length && onSelectExisting ? (
+              {existingLovedOnes.length && onSelectExisting && !isEditing ? (
                 <>
                   <Text style={styles.label}>ALREADY ADDED</Text>
                   <ScrollView
@@ -433,11 +512,11 @@ export function AddLovedOneModal({
                 autoFocus
                 editable={!saving}
                 onChangeText={setName}
-                placeholder="First name"
+                placeholder={isFamily ? "Family name" : "First name"}
                 style={styles.input}
                 value={name}
               />
-              {firstName ? (
+              {firstName && !isFamily ? (
                 <>
                   <Text style={styles.label}>GENDER</Text>
                   <View style={styles.genderRow}>
@@ -561,11 +640,16 @@ export function AddLovedOneModal({
 
             </Stagger>
             <Stagger delay={400}>
-          {photoError || error || stepError ? (
-            <Text style={styles.error}>{photoError || error || stepError}</Text>
+          {photoError || error || stepError || duplicateLovedOne ? (
+            <Text style={styles.error}>
+              {photoError ||
+                error ||
+                stepError ||
+                `${duplicateLovedOne?.name} is already in your prayer deck. Tap the photo above to pray.`}
+            </Text>
           ) : null}
 
-          {step === "categories" ? (
+          {step === "categories" && !isEditing ? (
             <Pressable
               disabled={saving || picking}
               onPress={submit}
@@ -581,7 +665,7 @@ export function AddLovedOneModal({
 
           <View style={styles.actions}>
             <View style={styles.actionCircles}>
-              {step !== "name" ? (
+              {(isEditing ? step !== "categories" : step !== "name") ? (
                 <Pressable
                   accessibilityLabel="Back"
                   accessibilityRole="button"

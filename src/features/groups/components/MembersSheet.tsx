@@ -157,16 +157,13 @@ export function MembersSheet({
           />
           {controller.canInvite ? (
             <InviteSection
-              copied={controller.copied}
-              error={controller.errors.invite}
               groupName={displayName}
-              onClearError={() => controller.clearError("invite")}
-              onCopy={() => {
-                void controller.copyInvite();
+              groupuuid={group.groupuuid}
+              onChanged={async () => {
+                await onChanged();
+                await controller.refresh();
               }}
-              onSubmit={controller.submitInvite}
-              pending={Boolean(controller.pending.invite)}
-              result={controller.inviteResult}
+              tokenProvider={tokenProvider}
               visible={visible}
             />
           ) : null}

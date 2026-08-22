@@ -1,5 +1,11 @@
 import type { ImageSource } from "expo-image";
 
+export const API_BASE =
+  process.env.EXPO_PUBLIC_API_URL ?? "https://www.chirho.ai";
+
+export const DEFAULT_BACKGROUND_MUSIC =
+  "/audio/prayercards/Pater_Noster_1min-30.mp3";
+
 // Stock art now comes from the admin-managed library over the network, so only
 // the default backdrop stays bundled for offline first paint.
 export const images = {
@@ -86,9 +92,3 @@ export function resolveAudioUrl(path: string | undefined | null): string | null 
   }
   return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
 }
-
-export const DEFAULT_BACKGROUND_MUSIC =
-  "/audio/prayercards/Pater_Noster_1min-30.mp3";
-
-export const API_BASE =
-  process.env.EXPO_PUBLIC_API_URL ?? "https://www.chirho.ai";

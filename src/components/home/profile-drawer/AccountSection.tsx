@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { HomeProfile, LovedOneGender } from "../../../types/home";
+import { CameraIcon } from "../../../features/groups/components/Icons";
+import { useTheme } from "../../../theme/ThemeProvider";
 import { GenderCircles } from "../../ui/GenderCircles";
 import { GlassInput } from "../../ui/GlassInput";
 import { InlineError, ManageAvatar, useProfileStyles } from "./ProfileControls";
@@ -33,6 +35,7 @@ export function AccountSection({
   onChangeAvatar: () => void;
 }) {
   const styles = useProfileStyles();
+  const { colors } = useTheme();
   const [firstName, setFirstName] = useState(account.firstName || "");
   const [lastName, setLastName] = useState(account.lastName || "");
   const [expanded, setExpanded] = useState(false);
@@ -85,7 +88,9 @@ export function AccountSection({
           ]}
         >
           <ManageAvatar label={fullName} source={avatar} />
-          <View style={styles.accountAvatarEditDot} />
+          <View pointerEvents="none" style={styles.accountAvatarCamera}>
+            <CameraIcon color={colors.cream} size={12} />
+          </View>
         </Pressable>
         <Pressable
           accessibilityLabel={`${expanded ? "Collapse" : "Expand"} account details`}

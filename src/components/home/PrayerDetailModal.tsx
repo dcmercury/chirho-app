@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import {
   getBackgroundMusicEnabled,
+  getBackgroundMusicUrl,
   subscribeBackgroundMusicEnabled,
+  subscribeBackgroundMusicUrl,
 } from "../../lib/backgroundMusicPreference";
 import {
   ActivityIndicator,
@@ -143,6 +145,9 @@ export function PrayerDetailModal({
   const [backgroundMusicEnabled, setBackgroundMusicEnabled] = useState(
     getBackgroundMusicEnabled,
   );
+  const [backgroundMusicTrack, setBackgroundMusicTrack] = useState(
+    getBackgroundMusicUrl,
+  );
   const narrationUrl =
     card?.audioAvailable === false
       ? null
@@ -152,16 +157,17 @@ export function PrayerDetailModal({
               ? `/api/prayer-audio/${card.prayeruuid}`
               : null),
         );
-  const musicUrl = backgroundMusicEnabled
-    ? resolveAudioUrl(DEFAULT_BACKGROUND_MUSIC)
-    : null;
+  const musicUrl =
+    visible && backgroundMusicEnabled
+      ? resolveAudioUrl(backgroundMusicTrack || DEFAULT_BACKGROUND_MUSIC)
+      : null;
   const narrationPlayer = useAudioPlayer(narrationUrl, {
     downloadFirst: true,
     keepAudioSessionActive: true,
   });
   const musicPlayer = useAudioPlayer(musicUrl, {
-    downloadFirst: true,
     keepAudioSessionActive: true,
+    preferredForwardBufferDuration: 15,
   });
   const narrationStatus = useAudioPlayerStatus(narrationPlayer);
   const musicStatus = useAudioPlayerStatus(musicPlayer);
@@ -200,6 +206,11 @@ export function PrayerDetailModal({
 
   useEffect(
     () => subscribeBackgroundMusicEnabled(setBackgroundMusicEnabled),
+    [],
+  );
+
+  useEffect(
+    () => subscribeBackgroundMusicUrl(setBackgroundMusicTrack),
     [],
   );
 
@@ -336,10 +347,10 @@ export function PrayerDetailModal({
   }, [narrationStatus.error, narrationUrl]);
 
   useEffect(() => {
-    if (!musicStatus.error) return;
+    if (!visible || !musicUrl || !musicStatus.error) return;
     if (__DEV__) console.warn("[Audio] Background music failed");
     setAudioMessage("Background music could not be loaded.");
-  }, [musicStatus.error, musicUrl]);
+  }, [musicStatus.error, musicUrl, visible]);
 
   const toggleAudio = () => {
     if (!narrationUrl) return;

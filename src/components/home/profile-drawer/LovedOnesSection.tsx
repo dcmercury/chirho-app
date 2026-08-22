@@ -1,6 +1,5 @@
 import { Pressable, Text, View } from "react-native";
-import type { HomeProfile, LovedOneGender } from "../../../types/home";
-import { GenderCircles } from "../../ui/GenderCircles";
+import type { HomeProfile } from "../../../types/home";
 import {
   InlineError,
   ManageAvatar,
@@ -13,17 +12,15 @@ export function LovedOnesSection({
   avatarById,
   isPending,
   error,
-  onManage,
+  onEdit,
   onRemove,
-  onGenderChange,
 }: {
   lovedOnes: HomeProfile["managedLovedOnes"];
   avatarById: Record<string, string | undefined>;
   isPending: (id: string) => boolean;
   error?: string;
-  onManage: (id: string, firstName: string) => void;
+  onEdit: (person: HomeProfile["managedLovedOnes"][number]) => void;
   onRemove: (id: string, firstName: string) => void;
-  onGenderChange: (id: string, gender: LovedOneGender) => void;
 }) {
   const styles = useProfileStyles();
   return (
@@ -33,32 +30,33 @@ export function LovedOnesSection({
           const pending = isPending(person.id);
           return (
             <View key={person.id} style={styles.manageRow}>
-              <ManageAvatar
-                label={person.firstName}
-                source={avatarById[person.id]}
-              />
+              <Pressable
+                accessibilityLabel={`Edit ${person.firstName}`}
+                accessibilityRole="button"
+                disabled={pending}
+                onPress={() => onEdit(person)}
+              >
+                <ManageAvatar
+                  label={person.firstName}
+                  source={avatarById[person.id]}
+                />
+              </Pressable>
               <View style={styles.manageCopy}>
                 <Text style={styles.manageName}>{person.firstName}</Text>
                 <Text style={styles.manageMeta}>
                   {person.categories.join(", ") || "No categories"}
                 </Text>
               </View>
-              <GenderCircles
-                disabled={pending}
-                onChange={(gender) => onGenderChange(person.id, gender)}
-                size="sm"
-                value={person.gender}
-              />
               <View style={styles.manageActions}>
                 <Pressable
-                  accessibilityLabel={`Manage photos of ${person.firstName}`}
+                  accessibilityLabel={`Edit ${person.firstName}`}
                   accessibilityRole="button"
                   accessibilityState={{ disabled: pending }}
                   disabled={pending}
-                  onPress={() => onManage(person.id, person.firstName)}
+                  onPress={() => onEdit(person)}
                   style={[styles.manageActionTouch, pending && styles.disabled]}
                 >
-                  <Text style={styles.join}>Photos</Text>
+                  <Text style={styles.join}>Edit</Text>
                 </Pressable>
                 <Pressable
                   accessibilityLabel={`Remove ${person.firstName}`}

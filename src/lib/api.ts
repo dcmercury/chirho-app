@@ -14,6 +14,7 @@ import type {
   PrayerDeckDetail,
   PrayerFocus,
   PrayerFocusInput,
+  LovedOneKind,
 } from "../types/home";
 import type {
   GroupAdminRecord,
@@ -21,6 +22,7 @@ import type {
   GroupCreationMetadata,
   GroupInviteResult,
   GroupMember,
+  InvitePhoneLookup,
   GroupMessage,
   GroupCreatePayload,
   GroupPreviewPayload,
@@ -796,14 +798,26 @@ export async function addLovedOne(
   firstName: string,
   token: string,
   gender?: "male" | "female",
-): Promise<{ id: string; firstName: string; gender?: "male" | "female" }> {
+  kind: LovedOneKind = "person",
+): Promise<{
+  id: string;
+  firstName: string;
+  gender?: "male" | "female";
+  kind?: LovedOneKind;
+}> {
   const data = await authenticatedRequest<{
-    lovedOne: { id: string; firstName: string; gender?: "male" | "female" };
+    lovedOne: {
+      id: string;
+      firstName: string;
+      gender?: "male" | "female";
+      kind?: LovedOneKind;
+    };
   }>("/api/user/profile/loved-ones", token, {
     method: "POST",
     body: JSON.stringify({
       firstName: firstName.trim(),
       ...(gender ? { gender } : {}),
+      kind,
     }),
   });
   return data.lovedOne;
@@ -831,6 +845,7 @@ export async function generateDailyPrayers(
     categories: string[];
     virtues: string[];
     gender?: "male" | "female";
+    kind?: LovedOneKind;
   }>,
   token: string,
 ): Promise<
@@ -1546,6 +1561,25 @@ export async function generateGroupPrayer(
   );
   if (!data.prayerText) throw new Error("No prayer text was generated.");
   return data.prayerText;
+}
+
+export async function lookupInvitePhone(
+  groupuuid: string,
+  phone: string,
+  token: string,
+): Promise<InvitePhoneLookup> {
+  const data = await authenticatedRequest<InvitePhoneLookup>(
+    `/api/groups/${groupuuid}/members/lookup`,
+    token,
+    { method: "POST", body: JSON.stringify({ phone }) },
+  );
+  if (data.status === "app_user" || data.status === "already_member") {
+    return {
+      status: data.status,
+      firstName: data.firstName ?? null,
+    };
+  }
+  return { status: "new" };
 }
 
 export async function inviteGroupMember(

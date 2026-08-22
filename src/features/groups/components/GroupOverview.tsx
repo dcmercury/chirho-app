@@ -39,7 +39,7 @@ interface GroupOverviewProps {
   onRequestTextChange: (value: string) => void;
   onGenerateRequest: (intensities: PrayerIntensity[]) => Promise<void>;
   onSubmitRequest: (intensities: PrayerIntensity[]) => Promise<void>;
-  onOpenMembers: () => void;
+  onOpenInvite: () => void;
 }
 
 export function GroupOverview({
@@ -59,7 +59,7 @@ export function GroupOverview({
   onRequestTextChange,
   onGenerateRequest,
   onSubmitRequest,
-  onOpenMembers,
+  onOpenInvite,
 }: GroupOverviewProps) {
   const insets = useSafeAreaInsets();
   const styles = useThemedStyles(createStyles);
@@ -206,9 +206,9 @@ export function GroupOverview({
               })}
               {group.canInvite ? (
                 <Pressable
-                  accessibilityLabel="Open group members and invite someone"
+                  accessibilityLabel="Invite someone to this group"
                   accessibilityRole="button"
-                  onPress={onOpenMembers}
+                  onPress={onOpenInvite}
                   style={[
                     styles.circle,
                     styles.inviteCircle,

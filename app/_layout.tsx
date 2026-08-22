@@ -105,6 +105,9 @@ function RootNavigator() {
 
     let cancelled = false;
     let remove = () => {};
+    let badgeSync = Promise.resolve();
+    let badgePersistence = Promise.resolve();
+    const handledNotificationIds = new Set<string>();
 
     const persistBadge = async (count: number) => {
       const sessionToken = await getTokenRef.current();
@@ -116,10 +119,23 @@ function RootNavigator() {
       }
     };
 
-    const syncBadge = async (dismissIdentifier?: string) => {
-      const count = await syncAppIconBadge({ dismissIdentifier });
-      if (cancelled) return;
-      await persistBadge(count);
+    const syncBadge = (dismissIdentifier?: string) => {
+      badgeSync = badgeSync
+        .then(async () => {
+          const count = await syncAppIconBadge({ dismissIdentifier });
+          if (cancelled) return;
+          badgePersistence = badgePersistence
+            .then(() => persistBadge(count))
+            .catch((error) => {
+              if (__DEV__) {
+                console.warn("App badge server sync failed", error);
+              }
+            });
+        })
+        .catch((error) => {
+          if (__DEV__) console.warn("App icon badge sync failed", error);
+        });
+      return badgeSync;
     };
 
     import("expo-notifications").then((Notifications) => {
@@ -128,25 +144,36 @@ function RootNavigator() {
         response: Awaited<
           ReturnType<typeof Notifications.getLastNotificationResponseAsync>
         >,
-        dismiss: boolean,
       ) => {
         if (!response) return;
+        const identifier = response.notification.request.identifier;
+        if (handledNotificationIds.has(identifier)) return;
+        handledNotificationIds.add(identifier);
         const href = hrefFromNotificationData(
           response.notification.request.content.data as
             | Record<string, unknown>
             | undefined,
         );
-        if (dismiss) {
-          void syncBadge(response.notification.request.identifier);
-        }
+        void syncBadge(identifier);
+        void Notifications.clearLastNotificationResponseAsync().catch(
+          (error) => {
+            if (__DEV__) {
+              console.warn("Notification response cleanup failed", error);
+            }
+          },
+        );
         if (href) router.push(href);
       };
 
-      Notifications.getLastNotificationResponseAsync().then((response) =>
-        openNotification(response, false),
-      );
+      void Notifications.getLastNotificationResponseAsync()
+        .then(openNotification)
+        .catch((error) => {
+          if (__DEV__) {
+            console.warn("Last notification response lookup failed", error);
+          }
+        });
       const tapped = Notifications.addNotificationResponseReceivedListener(
-        (response) => openNotification(response, true),
+        openNotification,
       );
       remove = () => tapped.remove();
     });

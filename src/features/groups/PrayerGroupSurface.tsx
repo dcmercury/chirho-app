@@ -39,6 +39,7 @@ import type {
 import { GroupBackground } from "./components/GroupBackground";
 import { CogIcon } from "./components/Icons";
 import { GroupOverview } from "./components/GroupOverview";
+import { InviteSheet } from "./components/InviteSheet";
 import { MembersSheet } from "./components/MembersSheet";
 import type { ReportReasonId } from "./components/ContentSafetyButton";
 import { PrayerRequestView } from "./components/PrayerRequestView";
@@ -123,6 +124,7 @@ export function PrayerGroupSurface({
   const [sendingPrayer, setSendingPrayer] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
   const appliedInitialRoute = useRef(false);
   const blockedIdsRef = useRef<Set<string>>(new Set());
 
@@ -695,7 +697,7 @@ export function PrayerGroupSurface({
               onRequestTextChange={setRequestText}
               onGenerateRequest={handleGenerateRequest}
               onSubmitRequest={handleSubmitRequest}
-              onOpenMembers={() => setMembersOpen(true)}
+              onOpenInvite={() => setInviteOpen(true)}
             />
           ) : (
             <PrayerRequestView
@@ -732,9 +734,13 @@ export function PrayerGroupSurface({
               onBlockMember={handleBlockMember}
             />
           )}
-          {data.group.isAdmin ? (
+          {data.group.isAdmin || data.group.canLeave ? (
             <Pressable
-              accessibilityLabel={`Open ${data.group.name} settings`}
+              accessibilityLabel={
+                data.group.isAdmin
+                  ? `Open ${data.group.name} settings`
+                  : `Open ${data.group.name} members`
+              }
               accessibilityRole="button"
               onPress={() => setMembersOpen(true)}
               style={({ pressed }) => [
@@ -746,6 +752,13 @@ export function PrayerGroupSurface({
               <CogIcon color={colors.mutedStrong} size={18} />
             </Pressable>
           ) : null}
+          <InviteSheet
+            visible={inviteOpen}
+            group={data.group}
+            tokenProvider={tokenProvider}
+            onClose={() => setInviteOpen(false)}
+            onChanged={() => load(true)}
+          />
           <MembersSheet
             visible={membersOpen}
             group={data.group}

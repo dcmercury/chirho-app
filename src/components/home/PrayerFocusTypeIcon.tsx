@@ -76,12 +76,18 @@ export function PrayerFocusTypeIcon({
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
         <Path
-          d="M4 6h16v12H4zM8 6V4h8v2M4 11h16M10 11v2h4v-2"
+          d="M12 4.2 21 19.5H3L12 4.2Z"
+          stroke={color}
+          strokeWidth={1.7}
+          strokeLinejoin="round"
+        />
+        <Path
+          d="M12 10.2v4.2"
           stroke={color}
           strokeWidth={1.7}
           strokeLinecap="round"
-          strokeLinejoin="round"
         />
+        <Circle cx={12} cy={16.8} r={1} fill={color} />
       </Svg>
     );
   }

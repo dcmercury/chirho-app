@@ -22,6 +22,8 @@ import {
   MAX_LOVED_ONE_PHOTOS,
   prepareLovedOnePhoto,
 } from "../../lib/lovedOnePhoto";
+import { findDuplicatePrayerFocus } from "../../lib/subjectIdentity";
+import { focusPhotoPath } from "../../lib/prayerFocusImage";
 import { fonts, type ColorTokens } from "../../theme/tokens";
 import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
 import { CloseIcon } from "../../features/groups/components/Icons";
@@ -36,6 +38,7 @@ import type {
 } from "../../types/home";
 import { AuthenticatedImage } from "../ui/AuthenticatedImage";
 import { GenderCircles } from "../ui/GenderCircles";
+import { PrayerFocusCircle } from "./PrayerFocusCircle";
 import { PrayerFocusTypeIcon } from "./PrayerFocusTypeIcon";
 import { WizardBackdrop } from "../ui/WizardBackdrop";
 
@@ -70,12 +73,6 @@ const species: { value: PrayerFocusSpecies; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
-/** "Other" has no useful word to seed the name field with. */
-function seedTitleForType(type: PrayerFocusType): string {
-  if (type === "other") return "";
-  return focusTypes.find((option) => option.value === type)?.label || "";
-}
-
 function nameLabelForType(type: PrayerFocusType): string {
   if (type === "pet") return "Your pet's name";
   if (type === "church") return "Name of the church";
@@ -93,7 +90,10 @@ export function PrayerFocusModal({
   error,
   nextOrder = 0,
   intent = "thing",
+  existingFocuses = [],
   onClose,
+  onDismiss,
+  onSelectExisting,
   onSubmit,
 }: {
   visible: boolean;
@@ -102,7 +102,10 @@ export function PrayerFocusModal({
   error?: string | null;
   nextOrder?: number;
   intent?: PrayerFocusIntent;
+  existingFocuses?: PrayerFocus[];
   onClose: () => void;
+  onDismiss?: () => void;
+  onSelectExisting?: (focus: PrayerFocus) => void;
   onSubmit: (input: PrayerFocusInput, newPhotos: string[]) => Promise<void>;
 }) {
   const styles = useThemedStyles(createStyles);
@@ -126,18 +129,27 @@ export function PrayerFocusModal({
   const nameLabel = isSituation
     ? "What are you carrying?"
     : nameLabelForType(type);
-  const submitDisabled = !title.trim() || saving;
+  const duplicateFocus = focus
+    ? undefined
+    : findDuplicatePrayerFocus(existingFocuses, {
+        title,
+        type,
+        species: type === "pet" ? petSpecies : null,
+        gender: type === "pet" ? petGender : null,
+      });
+  const hasRequiredContext =
+    Boolean(title.trim()) &&
+    (type === "pet" || selectedCategories.length > 0) &&
+    (type !== "pet" || Boolean(petSpecies && petGender));
+  const submitDisabled = !hasRequiredContext || Boolean(duplicateFocus) || saving;
   const submitLabel = saving ? "Saving…" : focus ? "Save changes" : "Add focus";
 
   const chooseType = useCallback((next: PrayerFocusType) => {
     setType(next);
-    // Seed the name with the topic so "Pray for my Church" reads as a sentence,
-    // but never overwrite a name the user has personalized.
     setTitle((current) => {
       const trimmed = current.trim();
-      const untouched =
-        !trimmed || focusTypes.some((option) => option.label === trimmed);
-      return untouched ? seedTitleForType(next) : current;
+      const legacySeed = focusTypes.some((option) => option.label === trimmed);
+      return legacySeed ? "" : current;
     });
   }, []);
 
@@ -250,6 +262,7 @@ export function PrayerFocusModal({
       animationType="slide"
       presentationStyle="pageSheet"
       visible={visible}
+      onDismiss={onDismiss}
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
@@ -266,6 +279,27 @@ export function PrayerFocusModal({
           <Text style={styles.title}>
             {isSituation ? "Pray about" : "Pray for my"}
           </Text>
+
+          {!focus && existingFocuses.length && onSelectExisting ? (
+            <>
+              <Text style={styles.label}>ALREADY ADDED</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.existingRail}
+                keyboardShouldPersistTaps="handled"
+              >
+                {existingFocuses.map((existingFocus) => (
+                  <PrayerFocusCircle
+                    key={existingFocus.focusuuid}
+                    focus={existingFocus}
+                    photoPath={focusPhotoPath(existingFocus)}
+                    onPress={() => onSelectExisting(existingFocus)}
+                  />
+                ))}
+              </ScrollView>
+            </>
+          ) : null}
 
           {isSituation ? null : (
             <View style={styles.typeRow}>
@@ -296,9 +330,26 @@ export function PrayerFocusModal({
             </View>
           )}
 
+          <Text style={styles.label}>
+            {type === "pet"
+              ? "PET NAME · REQUIRED"
+              : type === "church"
+                ? "CHURCH NAME · REQUIRED"
+                : "PRAYER FOCUS · REQUIRED"}
+          </Text>
+          <GlassInput
+            accessibilityLabel={nameLabel}
+            autoFocus
+            editable={!saving}
+            onChangeText={setTitle}
+            placeholder={nameLabel}
+            style={styles.input}
+            value={title}
+          />
+
           {type === "pet" ? (
             <>
-              <Text style={styles.label}>WHAT KIND OF PET</Text>
+              <Text style={styles.label}>PET TYPE AND GENDER · REQUIRED</Text>
               <View style={styles.petRow}>
                 {species.map((option) => {
                   const active = option.value === petSpecies;
@@ -327,16 +378,6 @@ export function PrayerFocusModal({
               </View>
             </>
           ) : null}
-
-          <GlassInput
-            accessibilityLabel={nameLabel}
-            autoFocus
-            editable={!saving}
-            onChangeText={setTitle}
-            placeholder={nameLabel}
-            style={styles.input}
-            value={title}
-          />
 
           <Text style={styles.label}>PHOTOS</Text>
           <Text style={styles.privacy}>
@@ -418,30 +459,49 @@ export function PrayerFocusModal({
             value={note}
           />
 
-          <Text style={styles.label}>CATEGORIES</Text>
-          <View style={styles.tags}>
-            {categories.map((category) => {
-              const active = selectedCategories.includes(category.value);
-              return (
-                <Pressable
-                  key={category.value}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active, disabled: saving }}
-                  disabled={saving}
-                  onPress={() => toggleCategory(category.value)}
-                  style={[styles.tag, active && styles.optionActive]}
-                >
-                  <Text style={[styles.tagText, active && styles.optionTextActive]}>
-                    {category.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          {type === "pet" ? null : (
+            <>
+              <Text style={styles.label}>CATEGORIES · REQUIRED</Text>
+              <View style={styles.tags}>
+                {categories.map((category) => {
+                  const active = selectedCategories.includes(category.value);
+                  return (
+                    <Pressable
+                      key={category.value}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active, disabled: saving }}
+                      disabled={saving}
+                      onPress={() => toggleCategory(category.value)}
+                      style={[styles.tag, active && styles.optionActive]}
+                    >
+                      <Text
+                        style={[
+                          styles.tagText,
+                          active && styles.optionTextActive,
+                        ]}
+                      >
+                        {category.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </>
+          )}
 
-          {photoError || error ? (
+          {!saving && !hasRequiredContext ? (
+            <Text style={styles.requirement}>
+              {type === "pet"
+                ? "Add your pet’s name, type, and gender to continue."
+                : "Add a name and choose at least one category to continue."}
+            </Text>
+          ) : null}
+
+          {photoError || error || duplicateFocus ? (
             <Text accessibilityRole="alert" style={styles.error}>
-              {photoError || error}
+              {photoError ||
+                error ||
+                `${duplicateFocus?.title} is already in your prayer deck. Tap it above to pray.`}
             </Text>
           ) : null}
 
@@ -469,7 +529,12 @@ export function PrayerFocusModal({
                     species: type === "pet" ? petSpecies : null,
                     gender: type === "pet" ? petGender : null,
                     note: note.trim() || null,
-                    categories: selectedCategories,
+                    categories:
+                      type === "pet"
+                        ? focus?.type === "pet" && focus.categories.length
+                          ? focus.categories
+                          : ["general"]
+                        : selectedCategories,
                     virtues: focus?.virtues || [],
                     // Focuses belong to both decks; the period picker was noise.
                     period: focus?.period || "both",
@@ -531,6 +596,11 @@ function createStyles(colors: ColorTokens) {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
+    marginBottom: 24,
+  },
+  existingRail: {
+    flexGrow: 0,
+    gap: 4,
     marginBottom: 24,
   },
   typeOption: {
@@ -629,6 +699,12 @@ function createStyles(colors: ColorTokens) {
     color: colors.error,
     fontFamily: fonts.body,
     fontSize: 12,
+    marginTop: 16,
+  },
+  requirement: {
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: 10,
     marginTop: 16,
   },
   actions: {

@@ -20,10 +20,13 @@ import {
   PRAYER_NEED_OPTIONS,
   prayerNeedBurdenLabel,
 } from "../../lib/prayerNeedFlow";
-import type { HomePrayerCard } from "../../types/home";
+import { findDuplicatePrayerFocus } from "../../lib/subjectIdentity";
+import { focusPhotoPath } from "../../lib/prayerFocusImage";
+import type { HomePrayerCard, PrayerFocus } from "../../types/home";
 import { Stagger } from "../../features/groups/components/Stagger";
 import { WizardBackdrop } from "../ui/WizardBackdrop";
 import { LoadingChiRhoOverlay } from "../ui/LoadingChiRhoOverlay";
+import { PrayerFocusCircle } from "./PrayerFocusCircle";
 
 type NeedStep = "burden" | "option" | "confirm";
 
@@ -44,15 +47,21 @@ export function NeedPrayerDrawer({
   traditionId,
   traditionLabel,
   onClose,
+  onDismiss,
   onGenerated,
   onSaveSituation,
+  existingSituations = [],
+  onSelectExisting,
 }: {
   visible: boolean;
   mode?: NeedPrayerMode;
   traditionId: string;
   traditionLabel: string;
   onClose: () => void;
+  onDismiss?: () => void;
   onGenerated: (card: HomePrayerCard) => void;
+  existingSituations?: PrayerFocus[];
+  onSelectExisting?: (focus: PrayerFocus) => void;
   onSaveSituation?: (situation: {
     title: string;
     burdenId: string;
@@ -72,6 +81,16 @@ export function NeedPrayerDrawer({
   const optionLabel =
     optionSet?.buttons.find((item) => item.id === optionId)?.label || "";
   const burdenLabel = burdenId ? prayerNeedBurdenLabel(burdenId) : "";
+  const situationTitle =
+    burdenLabel && optionLabel ? `${burdenLabel} — ${optionLabel}` : "";
+  const duplicateSituation = situationTitle
+    ? findDuplicatePrayerFocus(existingSituations, {
+        title: situationTitle,
+        type: "situation",
+        species: null,
+        gender: null,
+      })
+    : undefined;
 
   useEffect(() => {
     if (!visible) {
@@ -191,6 +210,7 @@ export function NeedPrayerDrawer({
       animationType="slide"
       presentationStyle="pageSheet"
       visible={visible}
+      onDismiss={onDismiss}
       onRequestClose={onClose}
     >
       <GestureHandlerRootView style={styles.root}>
@@ -272,6 +292,29 @@ export function NeedPrayerDrawer({
                 <Text style={styles.subtitle}>{subtitle}</Text>
               </Stagger>
               <Stagger delay={280}>
+                {isSituation &&
+                step === "burden" &&
+                existingSituations.length &&
+                onSelectExisting ? (
+                  <>
+                    <Text style={styles.label}>ALREADY ADDED</Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.existingRail}
+                    >
+                      {existingSituations.map((situation) => (
+                        <PrayerFocusCircle
+                          key={situation.focusuuid}
+                          focus={situation}
+                          photoPath={focusPhotoPath(situation)}
+                          onPress={() => onSelectExisting(situation)}
+                        />
+                      ))}
+                    </ScrollView>
+                  </>
+                ) : null}
+
                 {step === "burden" ? (
                   <View style={styles.tags}>
                     {PRAYER_NEED_BURDENS.map((item) => (
@@ -328,6 +371,11 @@ export function NeedPrayerDrawer({
                       We will be praying for your {burdenLabel.toLowerCase()} of{" "}
                       {optionLabel.toLowerCase()}.
                     </Text>
+                    {duplicateSituation ? (
+                      <Text style={styles.duplicate}>
+                        This situation is already in your prayer deck.
+                      </Text>
+                    ) : null}
                   </View>
                 ) : null}
 
@@ -366,11 +414,19 @@ export function NeedPrayerDrawer({
               </View>
               {step === "confirm" ? (
                 <Pressable
-                  accessibilityLabel={isSituation ? "Add to my prayers" : "Pray"}
+                  accessibilityLabel={
+                    duplicateSituation
+                      ? "Pray for this situation"
+                      : isSituation
+                        ? "Add to my prayers"
+                        : "Pray"
+                  }
                   accessibilityRole="button"
                   disabled={busy}
                   onPress={() =>
-                    void (isSituation ? saveSituation() : generate())
+                    duplicateSituation && onSelectExisting
+                      ? onSelectExisting(duplicateSituation)
+                      : void (isSituation ? saveSituation() : generate())
                   }
                   style={[styles.submit, busy && styles.disabled]}
                 >
@@ -380,7 +436,9 @@ export function NeedPrayerDrawer({
                         ? "Saving…"
                         : "Writing…"
                       : isSituation
-                        ? "Add to my prayers"
+                        ? duplicateSituation
+                          ? "Pray for this"
+                          : "Add to my prayers"
                         : "Pray"}
                   </Text>
                 </Pressable>
@@ -413,6 +471,16 @@ function createStyles(colors: ColorTokens) {
       ...typography.labelSm,
       color: colors.muted,
       marginBottom: 10,
+    },
+    label: {
+      ...typography.labelSm,
+      color: colors.muted,
+      marginBottom: 12,
+    },
+    existingRail: {
+      flexGrow: 0,
+      gap: 4,
+      marginBottom: 24,
     },
     dots: {
       flexDirection: "row",
@@ -505,6 +573,12 @@ function createStyles(colors: ColorTokens) {
       fontFamily: fonts.body,
       fontSize: 15,
       lineHeight: 22,
+    },
+    duplicate: {
+      color: colors.accent,
+      fontFamily: fonts.body,
+      fontSize: 11,
+      marginTop: 10,
     },
     error: {
       color: colors.error,

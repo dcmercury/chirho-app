@@ -169,4 +169,11 @@ export interface GroupInviteResult {
   firstName?: string;
 }
 
+export type InviteeStatus = "new" | "app_user" | "already_member";
+
+export interface InvitePhoneLookup {
+  status: InviteeStatus;
+  firstName?: string | null;
+}
+
 export type TokenProvider = () => Promise<string | null>;

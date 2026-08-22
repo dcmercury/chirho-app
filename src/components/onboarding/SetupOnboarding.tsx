@@ -43,6 +43,7 @@ import {
   type HomeData,
   type HomeProfile,
   type LovedOneGender,
+  type LovedOneKind,
   type PersonalPlan,
 } from "../../types/home";
 import type { LovedOnePrayerConfiguration } from "../../lib/prayerConfig";
@@ -295,13 +296,19 @@ export function SetupOnboarding({
     name: string,
     configurations: LovedOnePrayerConfiguration[],
     photoDataUris: string[] = [],
-    gender: LovedOneGender,
+    gender: LovedOneGender | null,
+    kind: LovedOneKind = "person",
   ) => {
     setSavingLovedOne(true);
     setError(null);
     try {
       const token = await requireToken();
-      const lovedOne = await addLovedOne(name, token, gender);
+      const lovedOne = await addLovedOne(
+        name,
+        token,
+        gender ?? undefined,
+        kind,
+      );
       if (configurations.length) {
         await saveLovedOneConfig(lovedOne.id, configurations, token);
       }
@@ -312,6 +319,7 @@ export function SetupOnboarding({
         id: lovedOne.id,
         firstName: lovedOne.firstName,
         gender: lovedOne.gender,
+        kind: lovedOne.kind || kind,
         hasConfig: configurations.length > 0,
         categories: configurations.map((item) => item.category),
       };

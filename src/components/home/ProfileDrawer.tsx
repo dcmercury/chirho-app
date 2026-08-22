@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Modal, ScrollView, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { useBackgroundLibrary } from "../../lib/backgroundLibrary";
+import { useMusicLibrary } from "../../lib/musicLibrary";
 import {
   dashboardBackgroundGallery,
   selectedDashboardBackgrounds,
@@ -26,6 +27,7 @@ import { DangerZoneSection } from "./profile-drawer/DangerZoneSection";
 import { GroupsSection } from "./profile-drawer/GroupsSection";
 import { HomeBackgroundSection } from "./profile-drawer/HomeBackgroundSection";
 import { LovedOnesSection } from "./profile-drawer/LovedOnesSection";
+import { LovedOneEditSheet } from "./profile-drawer/LovedOneEditSheet";
 import { NotificationsSection } from "./profile-drawer/NotificationsSection";
 import { PersonalPlanSection } from "./profile-drawer/PersonalPlanSection";
 import { PrayerCardsDrawer } from "./profile-drawer/PrayerCardsDrawer";
@@ -50,10 +52,7 @@ interface ProfileDrawerProps {
   onChanged: () => Promise<void>;
   onOpenPlan: () => void;
   onBecameIndependent: () => void;
-  onManageLovedOnePhotos: (lovedOne: {
-    id: string;
-    firstName: string;
-  }) => void;
+  onCreateGroup?: () => void;
 }
 
 function firstErrorFor(
@@ -82,19 +81,24 @@ export function ProfileDrawer({
   onChanged,
   onOpenPlan,
   onBecameIndependent,
-  onManageLovedOnePhotos,
+  onCreateGroup,
 }: ProfileDrawerProps) {
   const styles = useProfileStyles();
   const { appearance } = useTheme();
   const controller = useProfileDrawerController(visible, onChanged);
   const { urls: libraryUrls } = useBackgroundLibrary();
+  const { tracks: musicTracks } = useMusicLibrary();
   const [prayerCardsOpen, setPrayerCardsOpen] = useState(false);
   const [dailyPrayerOpen, setDailyPrayerOpen] = useState(false);
+  const [editingLovedOneId, setEditingLovedOneId] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     if (!visible) {
       setPrayerCardsOpen(false);
       setDailyPrayerOpen(false);
+      setEditingLovedOneId(null);
     }
   }, [visible]);
 
@@ -109,6 +113,13 @@ export function ProfileDrawer({
       person.primaryPhoto?.contentPath || person.avatar,
     ]),
   );
+  const editingLovedOne =
+    profile.managedLovedOnes.find((person) => person.id === editingLovedOneId) ||
+    null;
+  const showCreateGroup =
+    Boolean(onCreateGroup) &&
+    (!community || community.createBlockedReason !== "members");
+  const createGroupDisabled = community?.canCreateGroups === false;
 
   return (
     <Modal
@@ -169,10 +180,7 @@ export function ProfileDrawer({
             avatarById={lovedOneAvatarById}
             error={firstErrorFor(controller.errors, "loved-one")}
             isPending={(id) => Boolean(controller.pending[`loved-one:${id}`])}
-            onManage={(id, firstName) =>
-              onManageLovedOnePhotos({ id, firstName })
-            }
-            onGenderChange={controller.setLovedOneGender}
+            onEdit={(person) => setEditingLovedOneId(person.id)}
             onRemove={controller.confirmRemoveLovedOne}
           />
           <PrayerFocusesSection
@@ -188,7 +196,37 @@ export function ProfileDrawer({
           />
             </>
           ) : null}
-          <Section title="Community and groups">
+          <Section
+            title="Community and groups"
+            action={
+              showCreateGroup ? (
+                <Pressable
+                  accessibilityLabel="Start a prayer group"
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: createGroupDisabled }}
+                  onPress={() => {
+                    if (createGroupDisabled) {
+                      Alert.alert(
+                        "Group limit reached",
+                        community?.createBlockedReason === "user_limit"
+                          ? "You have reached the group limit for this church."
+                          : "This church’s plan does not include more groups.",
+                      );
+                      return;
+                    }
+                    onCreateGroup?.();
+                  }}
+                  style={({ pressed }) => [
+                    styles.sectionPlus,
+                    pressed && styles.sectionPlusPressed,
+                    createGroupDisabled && styles.disabled,
+                  ]}
+                >
+                  <Text style={styles.sectionPlusText}>+</Text>
+                </Pressable>
+              ) : undefined
+            }
+          >
             <CommunitySection
               visible={visible}
               community={community}
@@ -220,7 +258,9 @@ export function ProfileDrawer({
             visible={visible}
             traditions={profile.traditions}
             voices={profile.voices}
+            musicTracks={musicTracks}
             backgroundMusicEnabled={profile.backgroundMusicEnabled !== false}
+            backgroundMusicId={profile.backgroundMusicId}
             traditionPending={Boolean(controller.pending.tradition)}
             voicePending={Boolean(controller.pending.voice)}
             backgroundMusicPending={Boolean(
@@ -237,6 +277,9 @@ export function ProfileDrawer({
             }}
             onChangeBackgroundMusic={(enabled) => {
               void controller.setBackgroundMusic(enabled);
+            }}
+            onSelectBackgroundMusic={(track) => {
+              void controller.selectBackgroundMusic(track.musicuuid, track.url);
             }}
           />
           ) : null}
@@ -333,6 +376,22 @@ export function ProfileDrawer({
             onDeleteAccount={controller.confirmDeleteAccount}
           />
         </ScrollView>
+        <LovedOneEditSheet
+          visible={editingLovedOne !== null}
+          person={editingLovedOne}
+          pending={
+            editingLovedOne
+              ? Boolean(controller.pending[`loved-one:${editingLovedOne.id}`])
+              : false
+          }
+          onClose={() => setEditingLovedOneId(null)}
+          onChanged={onChanged}
+          onGenderChange={controller.setLovedOneGender}
+          onRemove={(id, firstName) => {
+            setEditingLovedOneId(null);
+            controller.confirmRemoveLovedOne(id, firstName);
+          }}
+        />
         <PrayerCardsDrawer
           visible={prayerCardsOpen}
           count={prayerCount}

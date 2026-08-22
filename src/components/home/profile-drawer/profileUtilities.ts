@@ -14,6 +14,8 @@ export interface DailyPrayerPayload {
   evening: SerializedDailyPrayer;
 }
 
+// Mirrors the backend voice catalog. The API also normalizes display keys, but
+// resolving here keeps a shipped build correct against an older backend.
 const voiceIds: Record<string, string> = {
   "american-priest": "MCkmNHsdG826UovZqqSA",
   "british-priest": "RsgZlqabeFOyHtTfpERU",

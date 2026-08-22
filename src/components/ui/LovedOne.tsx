@@ -48,6 +48,7 @@ export function LovedOne({
   showIntention = true,
   compact = false,
   onPress,
+  onLongPress,
 }: {
   person: {
     id?: string;
@@ -61,14 +62,17 @@ export function LovedOne({
   showIntention?: boolean;
   compact?: boolean;
   onPress?: () => void;
+  onLongPress?: () => void;
 }) {
   const styles = useThemedStyles(createStyles);
   const imagePaths = lovedOneImagePaths(person);
   return (
     <Pressable
-      accessibilityRole={onPress ? "button" : undefined}
+      accessibilityRole={onPress || onLongPress ? "button" : undefined}
+      accessibilityHint={onLongPress ? "Long press to edit prayer reasons" : undefined}
       accessibilityLabel={onPress ? `Pray for ${person.name}` : undefined}
-      disabled={!onPress}
+      disabled={!onPress && !onLongPress}
+      onLongPress={onLongPress}
       onPress={onPress}
       style={({ pressed }) => [
         styles.item,
