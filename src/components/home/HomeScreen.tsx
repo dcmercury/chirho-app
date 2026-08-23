@@ -71,7 +71,10 @@ import {
   markSetupOnboardingComplete,
   remainingSetupChapters,
 } from "../../lib/setupOnboarding";
-import { focusPhotoPath } from "../../lib/prayerFocusImage";
+import {
+  focusImagePaths,
+  focusPhotoPath,
+} from "../../lib/prayerFocusImage";
 import { SetupOnboarding } from "../onboarding/SetupOnboarding";
 import { AddLovedOneModal } from "./AddLovedOneModal";
 import { AddSubjectSheet, type AddSubjectChoice } from "./AddSubjectSheet";
@@ -727,9 +730,8 @@ export function HomeScreen() {
   const handlePrayerFocusPress = async (focus: PrayerFocus) => {
     if (generatingLovedOneRef.current) return;
     generatingLovedOneRef.current = true;
-    const photoPath = focusPhotoPath(focus);
-    const images = photoPath ? [photoPath] : [];
-    const backgroundImage = photoPath || FALLBACK_PRAYER_IMAGE;
+    const images = focusImagePaths(focus);
+    const backgroundImage = images[0] || FALLBACK_PRAYER_IMAGE;
     const timeOfDayLabel =
       new Date().getHours() < 12 ? "Morning Prayer" : "Evening Prayer";
     setSelectedCard({
