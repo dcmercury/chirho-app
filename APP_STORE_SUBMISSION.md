@@ -153,7 +153,7 @@ The public policy was replaced and deployed on August 20, 2026. Recheck its disc
 ### Name — limit 30
 
 ```txt
-ChiRho
+Chirho Prayer
 ```
 
 ### Subtitle — 29/30
@@ -214,10 +214,8 @@ christian,devotional,liturgy,church,scripture,intercession,worship,anglican,cath
 
 ### Copyright
 
-Replace the legal owner if needed:
-
 ```txt
-2026 The Pines
+2026 Pines Intelligence, Inc.
 ```
 
 ### What's New
