@@ -525,6 +525,12 @@ export function SetupOnboarding({
       <DailyPrayerDrawer
         visible={prayerOpen}
         lovedOnes={lovedOnes}
+        avatarById={Object.fromEntries(
+          (home.lovedOnes || []).map((person) => [
+            person.id,
+            person.primaryPhoto?.contentPath || person.avatar,
+          ]),
+        )}
         dismissLabel="Skip"
         preselectLovedOnes
         onClose={() => {

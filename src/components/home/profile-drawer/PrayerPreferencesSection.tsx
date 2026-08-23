@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { View, Text } from "react-native";
+import { View, Text, Pressable } from "react-native";
 import {
   setAudioModeAsync,
   useAudioPlayer,
@@ -82,37 +82,100 @@ function MusicSamplePlayer({
   return null;
 }
 
+export function TraditionSection({
+  traditions,
+  pending,
+  error,
+  onSelect,
+}: {
+  traditions: HomeProfile["traditions"];
+  pending: boolean;
+  error?: string;
+  onSelect: (id: string) => void;
+}) {
+  const styles = useProfileStyles();
+  return (
+    <Section title="Tradition">
+      {traditions.locked ? (
+        <Text style={styles.settingMeta}>
+          {traditions.options.find((option) => option.id === traditions.selected)
+            ?.label || traditions.selected}{" "}
+          · set by your community
+        </Text>
+      ) : (
+        <View style={styles.pills}>
+          {traditions.options.map((option) => (
+            <Pill
+              key={option.id}
+              active={option.id === traditions.selected}
+              disabled={pending}
+              label={option.label}
+              onPress={() => onSelect(option.id)}
+            />
+          ))}
+        </View>
+      )}
+      <InlineError message={error} />
+    </Section>
+  );
+}
+
+export function PrayerLengthSection({
+  value,
+  pending,
+  error,
+  onSelect,
+}: {
+  value: HomeProfile["prayerLength"];
+  pending: boolean;
+  error?: string;
+  onSelect: (length: HomeProfile["prayerLength"]) => void;
+}) {
+  const styles = useProfileStyles();
+  return (
+    <Section title="Prayer card length">
+      <View style={styles.pills}>
+        {(["short", "medium", "long"] as const).map((length) => (
+          <Pill
+            key={length}
+            active={length === value}
+            disabled={pending}
+            label={length[0].toUpperCase() + length.slice(1)}
+            onPress={() => onSelect(length)}
+          />
+        ))}
+      </View>
+      <Text style={styles.settingMeta}>
+        Applies to newly generated personal prayer cards.
+      </Text>
+      <InlineError message={error} />
+    </Section>
+  );
+}
+
 export function PrayerPreferencesSection({
   visible,
-  traditions,
   voices,
   musicTracks,
   backgroundMusicEnabled,
   backgroundMusicId,
-  traditionPending,
   voicePending,
   backgroundMusicPending,
-  traditionError,
   voiceError,
   backgroundMusicError,
-  onSelectTradition,
   onSelectVoice,
   onChangeBackgroundMusic,
   onSelectBackgroundMusic,
 }: {
   visible: boolean;
-  traditions: HomeProfile["traditions"];
   voices: HomeProfile["voices"];
   musicTracks: LibraryMusicTrack[];
   backgroundMusicEnabled: boolean;
   backgroundMusicId?: string | null;
-  traditionPending: boolean;
   voicePending: boolean;
   backgroundMusicPending: boolean;
-  traditionError?: string;
   voiceError?: string;
   backgroundMusicError?: string;
-  onSelectTradition: (id: string) => void;
   onSelectVoice: (id: string) => void;
   onChangeBackgroundMusic: (enabled: boolean) => void;
   onSelectBackgroundMusic: (track: LibraryMusicTrack) => void;
@@ -133,6 +196,7 @@ export function PrayerPreferencesSection({
     : null;
   const { playingVoiceKey, toggle: toggleVoicePreview } =
     useVoicePreview(visible);
+  const [expanded, setExpanded] = useState(false);
   const stopMusicPreview = useCallback(() => {
     setPreviewingId(null);
     setSamplePlaybackState("idle");
@@ -152,7 +216,10 @@ export function PrayerPreferencesSection({
   }, [previewingId, samplePlaybackState, stopMusicPreview]);
 
   useEffect(() => {
-    if (!visible) stopMusicPreview();
+    if (!visible) {
+      setExpanded(false);
+      stopMusicPreview();
+    }
   }, [stopMusicPreview, visible]);
 
   const toggleMusicPreview = (musicuuid: string) => {
@@ -166,100 +233,111 @@ export function PrayerPreferencesSection({
     setPreviewingId(musicuuid);
   };
 
+  const selectedVoice =
+    voices.options.find((option) => option.id === voices.selected)?.label ||
+    "Voice";
+  const summary = previewOn
+    ? `${selectedVoice} · Music on`
+    : `${selectedVoice} · Music off`;
+
   return (
-    <>
-      <Section title="Tradition">
-        {traditions.locked ? (
-          <Text style={styles.settingMeta}>
-            {traditions.options.find((option) => option.id === traditions.selected)
-              ?.label || traditions.selected}{" "}
-            · set by your community
-          </Text>
-        ) : (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Audio</Text>
+      <Pressable
+        accessibilityLabel={`${expanded ? "Collapse" : "Expand"} audio`}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        onPress={() => {
+          setExpanded((current) => {
+            if (current) stopMusicPreview();
+            return !current;
+          });
+        }}
+        style={({ pressed }) => [
+          styles.accountSummaryToggle,
+          pressed && styles.accountSummaryPressed,
+        ]}
+      >
+        <Text style={styles.accountSummaryName}>{summary}</Text>
+        <View
+          style={[
+            styles.accountCaret,
+            expanded && styles.accountCaretExpanded,
+          ]}
+        />
+      </Pressable>
+      {expanded ? (
+        <>
+          <Text style={styles.sectionTitle}>Voice</Text>
           <View style={styles.pills}>
-            {traditions.options.map((option) => (
-              <Pill
+            {voices.options.map((option) => (
+              <VoicePill
                 key={option.id}
-                active={option.id === traditions.selected}
-                disabled={traditionPending}
+                active={option.id === voices.selected}
+                disabled={voicePending}
                 label={option.label}
-                onPress={() => onSelectTradition(option.id)}
+                onPress={() => onSelectVoice(option.id)}
+                onPreview={() => {
+                  stopMusicPreview();
+                  toggleVoicePreview(option.id);
+                }}
+                playing={playingVoiceKey === option.id}
               />
             ))}
           </View>
-        )}
-        <InlineError message={traditionError} />
-      </Section>
-      <Section title="Voice">
-        <View style={styles.pills}>
-          {voices.options.map((option) => (
-            <VoicePill
-              key={option.id}
-              active={option.id === voices.selected}
-              disabled={voicePending}
-              label={option.label}
-              onPress={() => onSelectVoice(option.id)}
-              onPreview={() => {
-                stopMusicPreview();
-                toggleVoicePreview(option.id);
-              }}
-              playing={playingVoiceKey === option.id}
-            />
-          ))}
-        </View>
-        <Text style={styles.settingMeta}>
-          Tap a name to choose it, or the play icon to hear the Lord&apos;s
-          Prayer in that voice.
-        </Text>
-        <InlineError message={voiceError} />
-      </Section>
-      <Section title="Sound">
-        <ToggleRow
-          label="Background music"
-          onValueChange={() => {
-            const enabled = !previewOnRef.current;
-            previewOnRef.current = enabled;
-            setPreviewOn(enabled);
-            if (!enabled) stopMusicPreview();
-            onChangeBackgroundMusic(enabled);
-          }}
-          value={previewOn}
-        />
-        {musicTracks.length > 0 ? (
-          <>
-            <View style={styles.pills}>
-              {musicTracks.map((track) => (
-                <VoicePill
-                  key={track.musicuuid}
-                  active={track.musicuuid === selectedId}
-                  label={track.title}
-                  onPress={() => {
-                    setLocalSelectedId(track.musicuuid);
-                    previewOnRef.current = true;
-                    setPreviewOn(true);
-                    stopMusicPreview();
-                    onSelectBackgroundMusic(track);
-                  }}
-                  onPreview={() => toggleMusicPreview(track.musicuuid)}
-                  loading={
-                    previewingId === track.musicuuid &&
-                    samplePlaybackState === "loading"
-                  }
-                  playing={
-                    previewingId === track.musicuuid &&
-                    samplePlaybackState === "playing"
-                  }
-                />
-              ))}
-            </View>
-            <Text style={styles.settingMeta}>
-              Tap a name to choose it, or the play icon to hear a sample.
-            </Text>
-          </>
-        ) : null}
-        <InlineError message={sampleError || backgroundMusicError} />
-      </Section>
-      {visible && sampleTrack ? (
+          <Text style={styles.settingMeta}>
+            Tap a name to choose it, or the play icon to hear the Lord&apos;s
+            Prayer in that voice.
+          </Text>
+          <InlineError message={voiceError} />
+          <Text style={styles.sectionTitle}>Sound</Text>
+          <ToggleRow
+            label="Background music"
+            onValueChange={() => {
+              const enabled = !previewOnRef.current;
+              previewOnRef.current = enabled;
+              setPreviewOn(enabled);
+              if (!enabled) stopMusicPreview();
+              onChangeBackgroundMusic(enabled);
+            }}
+            value={previewOn}
+          />
+          {musicTracks.length > 0 ? (
+            <>
+              <View style={styles.pills}>
+                {musicTracks.map((track) => (
+                  <VoicePill
+                    key={track.musicuuid}
+                    active={track.musicuuid === selectedId}
+                    label={track.title}
+                    onPress={() => {
+                      setLocalSelectedId(track.musicuuid);
+                      previewOnRef.current = true;
+                      setPreviewOn(true);
+                      stopMusicPreview();
+                      onSelectBackgroundMusic(track);
+                    }}
+                    onPreview={() => toggleMusicPreview(track.musicuuid)}
+                    loading={
+                      previewingId === track.musicuuid &&
+                      samplePlaybackState === "loading"
+                    }
+                    playing={
+                      previewingId === track.musicuuid &&
+                      samplePlaybackState === "playing"
+                    }
+                  />
+                ))}
+              </View>
+              <Text style={styles.settingMeta}>
+                Tap a name to choose it, or the play icon to hear a sample.
+              </Text>
+            </>
+          ) : null}
+          <InlineError message={sampleError || backgroundMusicError} />
+        </>
+      ) : null}
+      {visible && expanded && sampleTrack ? (
         <MusicSamplePlayer
           key={sampleTrack.musicuuid}
           track={sampleTrack}
@@ -268,6 +346,6 @@ export function PrayerPreferencesSection({
           onStateChange={setSamplePlaybackState}
         />
       ) : null}
-    </>
+    </View>
   );
 }

@@ -169,9 +169,9 @@ export async function syncAppIconBadge(options?: {
   if (options?.dismissIdentifier) {
     await Notifications.dismissNotificationAsync(options.dismissIdentifier);
   }
-  const presented = await Notifications.getPresentedNotificationsAsync();
-  const count = presented.length;
-  await Notifications.setBadgeCountAsync(count);
-  return count;
+  // Opening the app means the icon badge has been acknowledged. Keep untapped
+  // entries in Notification Center so users can still return to them.
+  await Notifications.setBadgeCountAsync(0);
+  return 0;
 }
 

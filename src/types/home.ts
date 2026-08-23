@@ -119,6 +119,8 @@ export interface ProfileOption {
   label: string;
 }
 
+export type PrayerLength = "short" | "medium" | "long";
+
 export interface DailyPrayerSettings {
   enabled: boolean;
   hour: string;
@@ -145,6 +147,7 @@ export interface HomeProfile {
     options: ProfileOption[];
     locked?: boolean;
   };
+  prayerLength: PrayerLength;
   voices: {
     selected: string;
     options: (ProfileOption & { description?: string; accent?: string })[];

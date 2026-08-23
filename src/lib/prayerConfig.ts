@@ -35,3 +35,29 @@ export function prayerCategoryLabel(id: string): string {
 export function prayerVirtueLabel(id: string): string {
   return PRAYER_VIRTUES.find((item) => item.id === id)?.label || id;
 }
+
+export function lovedOnePickerSummary(person: {
+  kind?: string | null;
+  gender?: string | null;
+  categories?: string[];
+  configurations?: Array<{ category: string; virtues: string[] }>;
+}): string {
+  const parts: string[] = [];
+  if (person.kind === "family") parts.push("Family");
+  else parts.push("Person");
+  if (person.kind !== "family") {
+    if (person.gender === "female") parts.push("Female");
+    else if (person.gender === "male") parts.push("Male");
+  }
+  const categories = (person.categories || [])
+    .map(prayerCategoryLabel)
+    .filter(Boolean);
+  if (categories.length) parts.push(categories.join(", "));
+  const virtues = [
+    ...new Set(
+      (person.configurations || []).flatMap((item) => item.virtues || []),
+    ),
+  ].map(prayerVirtueLabel);
+  if (virtues.length) parts.push(virtues.join(", "));
+  return parts.join(" · ");
+}

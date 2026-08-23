@@ -171,6 +171,11 @@ export function useProfileDrawerController(
       updateProfile({ preferences: { defaultTradition: tradition } }, token),
     );
 
+  const setPrayerLength = (prayerLength: HomeProfile["prayerLength"]) =>
+    mutate("prayer-length", (token) =>
+      updateProfile({ preferences: { prayerLength } }, token),
+    );
+
   const selectVoice = (voice: string) =>
     mutate("voice", (token) =>
       updateProfile(
@@ -184,20 +189,16 @@ export function useProfileDrawerController(
     period: DailyPrayerPeriod,
     next: DailyPrayerSettings,
   ) =>
-    mutate(`daily-${period}`, async (token) => {
-      await updateProfile(
+    mutate(`daily-${period}`, (token) =>
+      updateProfile(
         {
           preferences: {
             dailyPrayers: serializeDailyPrayerPayload(dailyPrayers, period, next),
           },
         },
         token,
-      );
-      if (next.enabled) {
-        await updateNotificationPreference("dailyPrayerReminders", true, token);
-        await enablePushIfNeeded(token);
-      }
-    });
+      ),
+    );
 
   const setNotification = (key: string, enabled: boolean) =>
     mutate(`notification:${key}`, async (token) => {
@@ -491,6 +492,7 @@ export function useProfileDrawerController(
     saveAccount,
     saveAccountGender,
     selectTradition,
+    setPrayerLength,
     selectVoice,
     setBackgroundMusic,
     selectBackgroundMusic,

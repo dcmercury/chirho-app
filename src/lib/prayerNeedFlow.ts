@@ -61,7 +61,6 @@ export const PRAYER_NEED_OPTIONS: Record<
       { id: "body", label: "Body" },
       { id: "mind", label: "Mind" },
       { id: "chronic", label: "Chronic condition" },
-      { id: "terminal", label: "Terminal illness" },
     ],
   },
   weakness: {

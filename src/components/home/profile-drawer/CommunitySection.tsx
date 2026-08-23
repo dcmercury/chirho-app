@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { Pressable, Text, View, Linking } from "react-native";
+import {
+  ActivityIndicator,
+  Linking,
+  Pressable,
+  Text,
+  View,
+} from "react-native";
+import Svg, { Circle, Path } from "react-native-svg";
 import type { HomeCommunity } from "../../../types/home";
+import { useTheme } from "../../../theme/ThemeProvider";
 import { GlassInput } from "../../ui/GlassInput";
 import { InlineError, ManageAvatar, useProfileStyles } from "./ProfileControls";
 import type { CommunitySearchResult } from "./types";
@@ -27,6 +35,7 @@ export function CommunitySection({
   onLeave: (name: string) => void;
 }) {
   const styles = useProfileStyles();
+  const { colors } = useTheme();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<CommunitySearchResult[]>([]);
   const searchGeneration = useRef(0);
@@ -79,7 +88,7 @@ export function CommunitySection({
           </Pressable>
         </View>
       ) : (
-        <Text style={styles.empty}>No active community.</Text>
+        <Text style={styles.empty}>No active community</Text>
       )}
       {community?.donationLink ? (
         <Pressable
@@ -101,6 +110,7 @@ export function CommunitySection({
             void search();
           }}
           placeholder="Find a church or community"
+          returnKeyType="search"
           style={[styles.input, styles.communityInput]}
           value={query}
         />
@@ -108,15 +118,35 @@ export function CommunitySection({
           accessibilityLabel="Search communities"
           accessibilityRole="button"
           accessibilityState={{
+            busy: searchPending,
             disabled: searchPending || !query.trim(),
           }}
           disabled={searchPending || !query.trim()}
+          hitSlop={6}
           onPress={() => {
             void search();
           }}
-          style={[styles.searchButton, searchPending && styles.disabled]}
+          style={styles.communitySearchIcon}
         >
-          <Text style={styles.searchText}>Search</Text>
+          {searchPending ? (
+            <ActivityIndicator color={colors.mutedGhost} size="small" />
+          ) : (
+            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+              <Circle
+                cx={11}
+                cy={11}
+                r={7}
+                stroke={colors.mutedGhost}
+                strokeWidth={2}
+              />
+              <Path
+                d="m20 20-3.5-3.5"
+                stroke={colors.mutedGhost}
+                strokeWidth={2}
+                strokeLinecap="round"
+              />
+            </Svg>
+          )}
         </Pressable>
       </View>
       {results.map((result) => {

@@ -1,11 +1,23 @@
+import { useEffect } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
   StyleSheet,
-  View,
 } from "react-native";
+import {
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+} from "react-native-gesture-handler";
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ColorTokens } from "../../../theme/tokens";
 import { useThemedStyles } from "../../../theme/ThemeProvider";
@@ -27,6 +39,33 @@ export function InviteSheet({
 }) {
   const styles = useThemedStyles(createStyles);
   const insets = useSafeAreaInsets();
+  const translateY = useSharedValue(0);
+
+  useEffect(() => {
+    if (visible) translateY.value = 0;
+  }, [translateY, visible]);
+
+  const dismissGesture = Gesture.Pan()
+    .activeOffsetY(8)
+    .failOffsetX([-24, 24])
+    .onUpdate((event) => {
+      translateY.value = Math.max(0, event.translationY);
+    })
+    .onEnd((event) => {
+      if (event.translationY > 80 || event.velocityY > 850) {
+        translateY.value = withTiming(500, { duration: 180 }, (finished) => {
+          if (finished) runOnJS(onClose)();
+        });
+        return;
+      }
+      translateY.value = withSpring(0, {
+        damping: 22,
+        stiffness: 240,
+      });
+    });
+  const animatedSheetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }));
 
   return (
     <Modal
@@ -37,7 +76,7 @@ export function InviteSheet({
       visible={visible}
       onRequestClose={onClose}
     >
-      <View style={styles.root}>
+      <GestureHandlerRootView style={styles.root}>
         <Pressable
           accessibilityLabel="Close invite"
           accessibilityRole="button"
@@ -47,19 +86,24 @@ export function InviteSheet({
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          <View
+          <Animated.View
             style={[
               styles.sheet,
               { paddingBottom: Math.max(insets.bottom, 16) },
+              animatedSheetStyle,
             ]}
           >
-            <Pressable
-              accessibilityLabel="Close invite"
-              accessibilityRole="button"
-              hitSlop={20}
-              onPress={onClose}
-              style={styles.handle}
-            />
+            <GestureDetector gesture={dismissGesture}>
+              <Pressable
+                accessibilityHint="Swipe down or double tap to close"
+                accessibilityLabel="Close invite"
+                accessibilityRole="button"
+                onPress={onClose}
+                style={styles.handleTouch}
+              >
+                <Animated.View style={styles.handle} />
+              </Pressable>
+            </GestureDetector>
             <InviteSection
               compact
               groupName={group.name}
@@ -68,9 +112,9 @@ export function InviteSheet({
               tokenProvider={tokenProvider}
               visible={visible}
             />
-          </View>
+          </Animated.View>
         </KeyboardAvoidingView>
-      </View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
@@ -82,7 +126,11 @@ function createStyles(colors: ColorTokens) {
       justifyContent: "flex-end",
     },
     backdrop: {
-      ...StyleSheet.absoluteFillObject,
+      position: "absolute",
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
       backgroundColor: "rgba(0, 0, 0, 0.55)",
     },
     sheet: {
@@ -90,15 +138,19 @@ function createStyles(colors: ColorTokens) {
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
       paddingHorizontal: 20,
-      paddingTop: 10,
+      paddingTop: 4,
+    },
+    handleTouch: {
+      height: 30,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 4,
     },
     handle: {
-      alignSelf: "center",
-      width: 36,
-      height: 4,
-      borderRadius: 2,
-      backgroundColor: colors.glassBorderStrong,
-      marginBottom: 14,
+      width: 44,
+      height: 5,
+      borderRadius: 3,
+      backgroundColor: colors.mutedStrong,
     },
   });
 }

@@ -5,7 +5,12 @@ import { CameraIcon } from "../../../features/groups/components/Icons";
 import { useTheme } from "../../../theme/ThemeProvider";
 import { GenderCircles } from "../../ui/GenderCircles";
 import { GlassInput } from "../../ui/GlassInput";
-import { InlineError, ManageAvatar, useProfileStyles } from "./ProfileControls";
+import {
+  InlineError,
+  ManageAvatar,
+  ToggleRow,
+  useProfileStyles,
+} from "./ProfileControls";
 
 export function AccountSection({
   account,
@@ -14,12 +19,19 @@ export function AccountSection({
   pending,
   genderPending,
   avatarPending,
+  themePending,
   error,
   genderError,
   avatarError,
+  themeError,
+  privacy,
+  privacyError,
+  isPrivacyPending,
   onSave,
   onSaveGender,
   onChangeAvatar,
+  onThemeChange,
+  onChangePrivacy,
 }: {
   account: HomeProfile["account"];
   avatar: string;
@@ -27,15 +39,22 @@ export function AccountSection({
   pending: boolean;
   genderPending: boolean;
   avatarPending: boolean;
+  themePending: boolean;
   error?: string;
   genderError?: string;
   avatarError?: string;
+  themeError?: string;
+  privacy: HomeProfile["privacy"];
+  privacyError?: string;
+  isPrivacyPending: (key: string) => boolean;
   onSave: (firstName: string, lastName: string) => Promise<boolean>;
   onSaveGender: (gender: LovedOneGender) => Promise<boolean>;
   onChangeAvatar: () => void;
+  onThemeChange: (light: boolean) => void;
+  onChangePrivacy: (key: string, enabled: boolean) => void;
 }) {
   const styles = useProfileStyles();
-  const { colors } = useTheme();
+  const { appearance, colors } = useTheme();
   const [firstName, setFirstName] = useState(account.firstName || "");
   const [lastName, setLastName] = useState(account.lastName || "");
   const [expanded, setExpanded] = useState(false);
@@ -169,6 +188,25 @@ export function AccountSection({
               </Text>
             </Pressable>
           </View>
+          <ToggleRow
+            disabled={themePending}
+            label="Light theme"
+            onValueChange={onThemeChange}
+            value={appearance === "light"}
+          />
+          <InlineError message={themeError} />
+          {privacy
+            .filter((item) => !item.adminDisabled)
+            .map((item) => (
+              <ToggleRow
+                key={item.key}
+                disabled={isPrivacyPending(item.key) || item.adminDisabled}
+                label={item.label}
+                onValueChange={(enabled) => onChangePrivacy(item.key, enabled)}
+                value={item.enabled}
+              />
+            ))}
+          <InlineError message={privacyError} />
         </>
       ) : null}
       <InlineError message={error} />

@@ -1,4 +1,7 @@
 import { Pressable, Text, View } from "react-native";
+import {
+  lovedOnePickerSummary,
+} from "../../../lib/prayerConfig";
 import type { HomeProfile } from "../../../types/home";
 import {
   InlineError,
@@ -6,6 +9,12 @@ import {
   Section,
   useProfileStyles,
 } from "./ProfileControls";
+
+type Person = HomeProfile["managedLovedOnes"][number];
+
+function lovedOneSummary(person: Person) {
+  return lovedOnePickerSummary(person) || "No prayer focus yet";
+}
 
 export function LovedOnesSection({
   lovedOnes,
@@ -19,7 +28,7 @@ export function LovedOnesSection({
   avatarById: Record<string, string | undefined>;
   isPending: (id: string) => boolean;
   error?: string;
-  onEdit: (person: HomeProfile["managedLovedOnes"][number]) => void;
+  onEdit: (person: Person) => void;
   onRemove: (id: string, firstName: string) => void;
 }) {
   const styles = useProfileStyles();
@@ -43,8 +52,8 @@ export function LovedOnesSection({
               </Pressable>
               <View style={styles.manageCopy}>
                 <Text style={styles.manageName}>{person.firstName}</Text>
-                <Text style={styles.manageMeta}>
-                  {person.categories.join(", ") || "No categories"}
+                <Text numberOfLines={2} style={styles.manageMeta}>
+                  {lovedOneSummary(person)}
                 </Text>
               </View>
               <View style={styles.manageActions}>

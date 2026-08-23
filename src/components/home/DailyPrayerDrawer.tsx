@@ -16,9 +16,11 @@ import { useThemedStyles } from "../../theme/ThemeProvider";
 import { generateDailyPrayers, saveLovedOneConfig } from "../../lib/api";
 import { Stagger } from "../../features/groups/components/Stagger";
 import { WizardBackdrop } from "../ui/WizardBackdrop";
+import { AuthenticatedImage } from "../ui/AuthenticatedImage";
 import {
   PRAYER_CATEGORIES,
   PRAYER_VIRTUES,
+  lovedOnePickerSummary,
   prayerCategoryLabel,
 } from "../../lib/prayerConfig";
 import type { HomeProfile } from "../../types/home";
@@ -52,6 +54,7 @@ function emptyDraft(): PersonDraft {
 export function DailyPrayerDrawer({
   visible,
   lovedOnes,
+  avatarById = {},
   dismissLabel = "Cancel",
   preselectLovedOnes = false,
   onClose,
@@ -59,6 +62,7 @@ export function DailyPrayerDrawer({
 }: {
   visible: boolean;
   lovedOnes: HomeProfile["managedLovedOnes"];
+  avatarById?: Record<string, string | undefined>;
   dismissLabel?: string;
   preselectLovedOnes?: boolean;
   onClose: () => void;
@@ -321,7 +325,7 @@ export function DailyPrayerDrawer({
 
   const subtitle =
     step === "people"
-      ? "Choose up to five loved ones. AI will write from what you pick."
+      ? "Choose people and families, up to five. AI will write from what you pick."
       : step === "categories"
         ? "Tap the parts of life you’d like to pray for."
         : step === "virtues"
@@ -434,6 +438,7 @@ export function DailyPrayerDrawer({
                 <View style={styles.people}>
                   {lovedOnes.map((person) => {
                     const active = selectedIds.includes(person.id);
+                    const photo = avatarById[person.id];
                     return (
                       <Pressable
                         key={person.id}
@@ -446,12 +451,23 @@ export function DailyPrayerDrawer({
                         >
                           {active ? <View style={styles.radioDot} /> : null}
                         </View>
+                        <View style={styles.personAvatar}>
+                          {photo ? (
+                            <AuthenticatedImage
+                              contentFit="cover"
+                              path={photo}
+                              style={StyleSheet.absoluteFill}
+                            />
+                          ) : (
+                            <Text style={styles.personAvatarInitial}>
+                              {(person.firstName.trim().charAt(0) || "?").toUpperCase()}
+                            </Text>
+                          )}
+                        </View>
                         <View style={styles.personCopy}>
                           <Text style={styles.personName}>{person.firstName}</Text>
-                          <Text style={styles.personMeta}>
-                            {person.categories.length
-                              ? person.categories.map(prayerCategoryLabel).join(", ")
-                              : "No areas yet"}
+                          <Text numberOfLines={2} style={styles.personMeta}>
+                            {lovedOnePickerSummary(person) || "No prayer focus yet"}
                           </Text>
                         </View>
                       </Pressable>
@@ -735,12 +751,13 @@ function createStyles(colors: ColorTokens) {
     },
     people: { gap: 8 },
     personRow: {
-      minHeight: 56,
+      minHeight: 64,
       borderRadius: 10,
       borderWidth: 1,
       borderColor: colors.glassBorder,
       backgroundColor: colors.glassFill,
       paddingHorizontal: 12,
+      paddingVertical: 8,
       flexDirection: "row",
       alignItems: "center",
       gap: 12,
@@ -748,6 +765,22 @@ function createStyles(colors: ColorTokens) {
     personRowActive: {
       borderColor: colors.accentBorderPill,
       backgroundColor: colors.accentFillPill,
+    },
+    personAvatar: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      overflow: "hidden",
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.glassFillStrong,
+      borderWidth: 1,
+      borderColor: colors.glassBorder,
+    },
+    personAvatarInitial: {
+      color: colors.mutedStrong,
+      fontFamily: fonts.displayMedium,
+      fontSize: 13,
     },
     personCopy: { flex: 1, minWidth: 0 },
     personName: {

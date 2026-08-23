@@ -1,5 +1,6 @@
 import { API_BASE, FALLBACK_PRAYER_IMAGE } from "./assets";
 import type { LovedOnePrayerConfiguration } from "./prayerConfig";
+import type { PrayerNeedPath } from "./prayerNeedFlow";
 import { cleanPrayerDisplayText } from "./prayerText";
 import type {
   GroupDetail,
@@ -686,16 +687,19 @@ export async function generatePrayerFocusPrayer(
 
 export async function generateNeedPrayer(
   flow: {
-    path: "myself" | "someone-else";
+    path: PrayerNeedPath;
     burden: string;
     burdenId: string;
     burdenOption: string;
     burdenOptionId: string;
     tradition: string;
     traditionId: string;
+    context?: string;
   },
   token: string,
 ): Promise<HomePrayerCard> {
+  const { context: rawContext, ...baseFlow } = flow;
+  const context = rawContext?.trim().slice(0, 500);
   const data = await authenticatedRequest<{
     prayeruuid?: string;
     prayerText?: {
@@ -703,6 +707,13 @@ export async function generateNeedPrayer(
       text?: string;
       textClean?: string;
       verse?: string;
+      reference?:
+        | string
+        | {
+            type?: "bible" | "saint";
+            citation?: string;
+            saint?: string;
+          };
     };
     audioUrl?: string | null;
     backgroundImage?: string;
@@ -717,17 +728,25 @@ export async function generateNeedPrayer(
     };
   }>("/api/prayers/generate", token, {
     method: "POST",
-    body: JSON.stringify(flow),
+    body: JSON.stringify(context ? { ...baseFlow, context } : baseFlow),
   });
   const text = cleanPrayerDisplayText(
     data.prayerText?.textClean || data.prayerText?.text || "",
   );
   const narrationUrl =
     data.audioUrl || data.audio?.files?.narration || null;
+  const spiritualReference =
+    typeof data.prayerText?.reference === "string"
+      ? data.prayerText.reference.trim()
+      : data.prayerText?.reference?.citation?.trim() ||
+        data.prayerText?.reference?.saint?.trim();
   return {
     prayeruuid: data.prayeruuid,
     title: data.prayerText?.title || "Prayer",
-    verse: data.prayerText?.verse || flow.tradition,
+    verse:
+      spiritualReference ||
+      data.prayerText?.verse ||
+      flow.tradition,
     text,
     fullPrayer: text,
     image: data.backgroundImage || FALLBACK_PRAYER_IMAGE,

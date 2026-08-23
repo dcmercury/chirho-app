@@ -586,11 +586,19 @@ export function PrayerGroupSurface({
     setRequestOpen(true);
   };
 
-  const openPrayers = () => {
+  const openPrayers = (messageId?: string) => {
     setRequestOpen(false);
     setGeneratedPrayer(null);
     setMode("prayers");
-    if (data?.messages.length) setCurrentIndex(data.messages.length - 1);
+    if (!data?.messages.length) return;
+    if (messageId) {
+      const index = data.messages.findIndex(
+        (message) => message.messageId === messageId,
+      );
+      setCurrentIndex(index >= 0 ? index : data.messages.length - 1);
+      return;
+    }
+    setCurrentIndex(data.messages.length - 1);
   };
 
   const previous = async () => {
@@ -680,6 +688,7 @@ export function PrayerGroupSurface({
             <GroupOverview
               group={data.group}
               members={data.members}
+              messages={data.messages}
               prayerRequestCount={data.prayerRequestCount}
               refreshing={refreshing}
               requestOpen={requestOpen}
@@ -688,7 +697,8 @@ export function PrayerGroupSurface({
               sendingRequest={sendingRequest}
               actionError={actionError}
               onRefresh={() => load(true)}
-              onOpenPrayers={openPrayers}
+              onOpenPrayers={() => openPrayers()}
+              onOpenPrayer={(messageId) => openPrayers(messageId)}
               onOpenRequest={openRequest}
               onCloseRequest={() => {
                 setRequestOpen(false);

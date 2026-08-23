@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useAuth } from "@clerk/expo";
@@ -18,7 +19,9 @@ import { BackIcon, CloseIcon } from "../../features/groups/components/Icons";
 import {
   PRAYER_NEED_BURDENS,
   PRAYER_NEED_OPTIONS,
+  PRAYER_NEED_PATHS,
   prayerNeedBurdenLabel,
+  type PrayerNeedPath,
 } from "../../lib/prayerNeedFlow";
 import { findDuplicatePrayerFocus } from "../../lib/subjectIdentity";
 import { focusPhotoPath } from "../../lib/prayerFocusImage";
@@ -28,16 +31,10 @@ import { WizardBackdrop } from "../ui/WizardBackdrop";
 import { LoadingChiRhoOverlay } from "../ui/LoadingChiRhoOverlay";
 import { PrayerFocusCircle } from "./PrayerFocusCircle";
 
-type NeedStep = "burden" | "option" | "confirm";
+type NeedStep = "path" | "burden" | "option" | "confirm";
 
-const STEP_DOTS: NeedStep[] = ["burden", "option", "confirm"];
-
-/**
- * Praying for someone else is handled by the Person path on the home rail, so
- * this wizard is always first-person. The backend still requires the field and
- * uses it to pick the prayer's pronouns.
- */
-const NEED_PATH = "myself" as const;
+const PRAYER_STEP_DOTS: NeedStep[] = ["path", "burden", "option", "confirm"];
+const SITUATION_STEP_DOTS: NeedStep[] = ["burden", "option", "confirm"];
 
 export type NeedPrayerMode = "prayer" | "situation";
 
@@ -71,9 +68,13 @@ export function NeedPrayerDrawer({
   const styles = useThemedStyles(createStyles);
   const { colors } = useTheme();
   const { getToken } = useAuth();
-  const [step, setStep] = useState<NeedStep>("burden");
+  const isSituation = mode === "situation";
+  const stepDots = isSituation ? SITUATION_STEP_DOTS : PRAYER_STEP_DOTS;
+  const [step, setStep] = useState<NeedStep>("path");
+  const [path, setPath] = useState<PrayerNeedPath | null>(null);
   const [burdenId, setBurdenId] = useState<string | null>(null);
   const [optionId, setOptionId] = useState<string | null>(null);
+  const [context, setContext] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,14 +94,14 @@ export function NeedPrayerDrawer({
     : undefined;
 
   useEffect(() => {
-    if (!visible) {
-      setStep("burden");
-      setBurdenId(null);
-      setOptionId(null);
-      setBusy(false);
-      setError(null);
-    }
-  }, [visible]);
+    setStep(isSituation ? "burden" : "path");
+    setPath(null);
+    setBurdenId(null);
+    setOptionId(null);
+    setContext("");
+    setBusy(false);
+    setError(null);
+  }, [isSituation, visible]);
 
   const jumpTo = (target: NeedStep) => {
     if (busy || target === step) return;
@@ -111,8 +112,12 @@ export function NeedPrayerDrawer({
   const goBack = () => {
     if (busy) return;
     setError(null);
-    if (step === "burden") {
+    if (step === "path" || (isSituation && step === "burden")) {
       onClose();
+      return;
+    }
+    if (step === "burden") {
+      setStep("path");
       return;
     }
     if (step === "option") {
@@ -120,6 +125,14 @@ export function NeedPrayerDrawer({
       return;
     }
     setStep("option");
+  };
+
+  const choosePath = (next: PrayerNeedPath) => {
+    setPath(next);
+    setBurdenId(null);
+    setOptionId(null);
+    setError(null);
+    setStep("burden");
   };
 
   const chooseBurden = (next: string) => {
@@ -155,21 +168,23 @@ export function NeedPrayerDrawer({
   };
 
   const generate = async () => {
-    if (busy || !burdenId || !optionId) return;
+    if (busy || !path || !burdenId || !optionId) return;
     setBusy(true);
     setError(null);
     try {
       const token = await getToken();
       if (!token) throw new Error("Your session expired. Please sign in again.");
+      const trimmedContext = context.trim();
       const card = await generateNeedPrayer(
         {
-          path: NEED_PATH,
+          path,
           burden: burdenLabel,
           burdenId,
           burdenOption: optionLabel,
           burdenOptionId: optionId,
           tradition: traditionLabel,
           traditionId: traditionId || "scripture",
+          ...(trimmedContext ? { context: trimmedContext } : {}),
         },
         token,
       );
@@ -183,27 +198,33 @@ export function NeedPrayerDrawer({
     }
   };
 
-  const isSituation = mode === "situation";
-
   const title =
-    step === "burden"
-      ? "What burden are you carrying?"
-      : step === "option"
-        ? optionSet?.title || "What kind of prayer do you need?"
-        : isSituation
-          ? "Ready to add"
-          : "Ready to pray";
+    step === "path"
+      ? "Who needs prayer?"
+      : step === "burden"
+        ? path === "someone-else"
+          ? "What burden are they carrying?"
+          : "What burden are you carrying?"
+        : step === "option"
+          ? (path === "someone-else"
+              ? optionSet?.titleForFriend
+              : optionSet?.title) || "What kind of prayer do you need?"
+          : isSituation
+            ? "Ready to add"
+            : "Ready to pray";
 
   const subtitle =
-    step === "burden"
-      ? isSituation
-        ? "This becomes part of your daily prayers."
-        : "Tap the burden this prayer should hold."
-      : step === "option"
-        ? "Choose the shape of that need."
-        : isSituation
-          ? "We will hold this for you every day."
-          : `Shaped by your ${traditionLabel} tradition.`;
+    step === "path"
+      ? "Choose who this prayer should hold."
+      : step === "burden"
+        ? isSituation
+          ? "This becomes part of your daily prayers."
+          : "Tap the burden this prayer should hold."
+        : step === "option"
+          ? "Choose the shape of that need."
+          : isSituation
+            ? "We will hold this for you every day."
+            : `Shaped by your ${traditionLabel} tradition.`;
 
   return (
     <Modal
@@ -226,8 +247,8 @@ export function NeedPrayerDrawer({
             <View style={styles.handle} />
             <Text style={styles.eyebrow}>PRAYER</Text>
             <View style={styles.dots}>
-              {STEP_DOTS.map((item, index) => {
-                const currentIndex = STEP_DOTS.indexOf(step);
+              {stepDots.map((item, index) => {
+                const currentIndex = stepDots.indexOf(step);
                 const reached = index <= currentIndex;
                 return (
                   <Pressable
@@ -248,7 +269,7 @@ export function NeedPrayerDrawer({
                 );
               })}
             </View>
-            {step !== "burden" ? (
+            {step === "option" || step === "confirm" ? (
               <View style={styles.crumbs}>
                 {step === "option" || step === "confirm" ? (
                   <Pressable
@@ -315,6 +336,31 @@ export function NeedPrayerDrawer({
                   </>
                 ) : null}
 
+                {step === "path" ? (
+                  <View style={styles.tags}>
+                    {PRAYER_NEED_PATHS.map((item) => (
+                      <Pressable
+                        key={item.id}
+                        disabled={busy}
+                        onPress={() => choosePath(item.id)}
+                        style={[
+                          styles.tag,
+                          path === item.id && styles.tagActive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.tagText,
+                            path === item.id && styles.tagTextActive,
+                          ]}
+                        >
+                          {item.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
+
                 {step === "burden" ? (
                   <View style={styles.tags}>
                     {PRAYER_NEED_BURDENS.map((item) => (
@@ -368,9 +414,36 @@ export function NeedPrayerDrawer({
                 {step === "confirm" ? (
                   <View style={styles.review}>
                     <Text style={styles.reviewText}>
-                      We will be praying for your {burdenLabel.toLowerCase()} of{" "}
+                      We will be praying for{" "}
+                      {path === "someone-else" ? "their" : "your"}{" "}
+                      {burdenLabel.toLowerCase()} of{" "}
                       {optionLabel.toLowerCase()}.
                     </Text>
+                    {!isSituation ? (
+                      <View style={styles.contextSection}>
+                        <Text style={styles.contextLabel}>
+                          Add a short note (optional)
+                        </Text>
+                        <Text style={styles.contextHelp}>
+                          A little context helps make the prayer specific. Medical,
+                          legal, or highly identifying details are unnecessary.
+                        </Text>
+                        <TextInput
+                          accessibilityLabel="Optional prayer context"
+                          editable={!busy}
+                          maxLength={500}
+                          multiline
+                          onChangeText={setContext}
+                          placeholder="One sentence about what is happening"
+                          placeholderTextColor={colors.muted}
+                          style={styles.contextInput}
+                          value={context}
+                        />
+                        <Text style={styles.contextCount}>
+                          {context.length}/500
+                        </Text>
+                      </View>
+                    ) : null}
                     {duplicateSituation ? (
                       <Text style={styles.duplicate}>
                         This situation is already in your prayer deck.
@@ -385,7 +458,7 @@ export function NeedPrayerDrawer({
 
             <View style={styles.actions}>
               <View style={styles.actionCircles}>
-                {step !== "burden" ? (
+                {step !== stepDots[0] ? (
                   <Pressable
                     accessibilityLabel="Back"
                     accessibilityRole="button"
@@ -573,6 +646,42 @@ function createStyles(colors: ColorTokens) {
       fontFamily: fonts.body,
       fontSize: 15,
       lineHeight: 22,
+    },
+    contextSection: {
+      marginTop: 16,
+    },
+    contextLabel: {
+      color: colors.title,
+      fontFamily: fonts.bodyMedium,
+      fontSize: 12,
+      marginBottom: 4,
+    },
+    contextHelp: {
+      color: colors.muted,
+      fontFamily: fonts.body,
+      fontSize: 10.5,
+      lineHeight: 15,
+      marginBottom: 8,
+    },
+    contextInput: {
+      minHeight: 76,
+      borderWidth: 1,
+      borderColor: colors.glassBorder,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      color: colors.title,
+      fontFamily: fonts.body,
+      fontSize: 12,
+      lineHeight: 18,
+      textAlignVertical: "top",
+    },
+    contextCount: {
+      alignSelf: "flex-end",
+      color: colors.muted,
+      fontFamily: fonts.mono,
+      fontSize: 9,
+      marginTop: 4,
     },
     duplicate: {
       color: colors.accent,

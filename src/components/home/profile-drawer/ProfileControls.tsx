@@ -16,6 +16,15 @@ export function useProfileStyles() {
   return useThemedStyles(createProfileStyles);
 }
 
+export function CategoryLabel({ children }: { children: ReactNode }) {
+  const styles = useProfileStyles();
+  return (
+    <Text accessibilityRole="header" style={styles.categoryLabel}>
+      {children}
+    </Text>
+  );
+}
+
 export function Section({
   title,
   action,
@@ -317,7 +326,13 @@ function createProfileStyles(colors: ColorTokens) {
     marginTop: 3,
     textTransform: "uppercase",
   },
-  section: { marginTop: 28, gap: 10 },
+  categoryLabel: {
+    marginTop: 38,
+    color: colors.title,
+    fontFamily: fonts.displayMedium,
+    fontSize: 17,
+  },
+  section: { marginTop: 20, gap: 10 },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -423,18 +438,17 @@ function createProfileStyles(colors: ColorTokens) {
     fontSize: 12,
   },
   nameSaveTextDisabled: { color: colors.muted },
-  communitySearch: { flexDirection: "row", gap: 8 },
-  communityInput: { flex: 1 },
-  searchButton: {
-    minWidth: 68,
-    minHeight: 44,
-    borderRadius: 10,
-    backgroundColor: colors.buttonPrimary,
+  communitySearch: { position: "relative" },
+  communityInput: { paddingRight: 40 },
+  communitySearchIcon: {
+    position: "absolute",
+    right: 4,
+    top: 0,
+    bottom: 0,
+    width: 40,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 10,
   },
-  searchText: { color: colors.buttonOnPrimary, fontFamily: fonts.bodyMedium, fontSize: 14 },
   infoRow: {
     minHeight: 48,
     flexDirection: "row",
@@ -510,17 +524,19 @@ function createProfileStyles(colors: ColorTokens) {
   listFooter: { paddingVertical: 18 },
   drawerCount: { marginBottom: 12 },
   manageRow: {
-    minHeight: 50,
+    minHeight: 58,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     borderBottomWidth: 1,
     borderBottomColor: colors.glassBorderSoft,
+    paddingVertical: 8,
   },
   manageAvatar: {
     width: 34,
     height: 34,
     borderRadius: 17,
+    overflow: "hidden",
     marginRight: 10,
     borderWidth: 1,
     borderColor: colors.glassBorder,
@@ -535,9 +551,15 @@ function createProfileStyles(colors: ColorTokens) {
     fontFamily: fonts.displayMedium,
     fontSize: 13,
   },
-  manageCopy: { flex: 1 },
+  manageCopy: { flex: 1, minWidth: 0, paddingRight: 8 },
   manageName: { color: colors.title, fontFamily: fonts.bodyMedium, fontSize: 13 },
-  manageMeta: { color: colors.muted, fontFamily: fonts.body, fontSize: 10 },
+  manageMeta: {
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: 10,
+    lineHeight: 14,
+    marginTop: 2,
+  },
   manageActions: { flexDirection: "row", alignItems: "center" },
   manageActionTouch: {
     minWidth: 44,

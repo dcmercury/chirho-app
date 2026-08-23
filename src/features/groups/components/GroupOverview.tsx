@@ -1,19 +1,20 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import {
   Pressable,
   RefreshControl,
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from "react-native";
 import { ScrollView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Path } from "react-native-svg";
 import { SwipeChevron } from "../../../components/ui/SwipeChevron";
 import { fonts, type ColorTokens } from "../../../theme/tokens";
 import { useTheme, useThemedStyles } from "../../../theme/ThemeProvider";
 import type {
   GroupMember,
+  GroupMessage,
   PrayerGroup,
   PrayerIntensity,
 } from "../types";
@@ -22,9 +23,14 @@ import { GroupAvatar } from "./GroupAvatar";
 import { PrayerRequestForm } from "./PrayerRequestForm";
 import { Stagger } from "./Stagger";
 
+const COLLAPSED_ABOUT_LINES = 3;
+const COLLAPSED_PRAYER_LINES = 2;
+const RECENT_PRAYER_LIMIT = 5;
+
 interface GroupOverviewProps {
   group: PrayerGroup;
   members: GroupMember[];
+  messages: GroupMessage[];
   prayerRequestCount: number;
   refreshing: boolean;
   requestOpen: boolean;
@@ -34,6 +40,7 @@ interface GroupOverviewProps {
   actionError: string | null;
   onRefresh: () => void;
   onOpenPrayers: () => void;
+  onOpenPrayer: (messageId: string) => void;
   onOpenRequest: () => void;
   onCloseRequest: () => void;
   onRequestTextChange: (value: string) => void;
@@ -45,6 +52,7 @@ interface GroupOverviewProps {
 export function GroupOverview({
   group,
   members,
+  messages,
   prayerRequestCount,
   refreshing,
   requestOpen,
@@ -54,6 +62,7 @@ export function GroupOverview({
   actionError,
   onRefresh,
   onOpenPrayers,
+  onOpenPrayer,
   onOpenRequest,
   onCloseRequest,
   onRequestTextChange,
@@ -64,11 +73,13 @@ export function GroupOverview({
   const insets = useSafeAreaInsets();
   const styles = useThemedStyles(createStyles);
   const { colors } = useTheme();
-  const { height } = useWindowDimensions();
   const activeMembers = members
     .filter((member) => member.status === "active")
     .slice(0, 5);
   const displayContent = splitPurpose(group.purpose, group.scripture?.text);
+  const recentPrayers = [...messages]
+    .reverse()
+    .slice(0, RECENT_PRAYER_LIMIT);
   const canOpenPrayers = prayerRequestCount > 0 && !requestOpen;
   const scrollOffsetRef = useRef(0);
   const viewportHeightRef = useRef(0);
@@ -106,7 +117,7 @@ export function GroupOverview({
       contentContainerStyle={[
         styles.content,
         {
-          paddingTop: Math.max(insets.top + 24, height * 0.1),
+          paddingTop: insets.top + 56,
           paddingBottom: insets.bottom + 128,
         },
       ]}
@@ -143,28 +154,6 @@ export function GroupOverview({
         <Stagger delay={300}>
           <Text style={styles.title}>{group.name}</Text>
         </Stagger>
-        {!requestOpen && displayContent.intro ? (
-          <Stagger delay={400}>
-            <Text style={styles.scripture}>{displayContent.intro}</Text>
-          </Stagger>
-        ) : null}
-        {!requestOpen && group.scripture?.citation ? (
-          <Stagger delay={450}>
-            <Text style={styles.label}>— {group.scripture.citation}</Text>
-          </Stagger>
-        ) : null}
-        {!requestOpen && displayContent.main ? (
-          <Stagger delay={550}>
-            <Text style={styles.purpose}>{displayContent.main}</Text>
-          </Stagger>
-        ) : null}
-        {!requestOpen && !displayContent.intro && !displayContent.main ? (
-          <Stagger delay={400}>
-            <Text style={styles.scripture}>
-              This group&apos;s purpose is being developed.
-            </Text>
-          </Stagger>
-        ) : null}
         {requestOpen ? (
           <PrayerRequestForm
             value={requestText}
@@ -177,6 +166,67 @@ export function GroupOverview({
           />
         ) : null}
         {actionError ? <Text style={styles.error}>{actionError}</Text> : null}
+        {!requestOpen ? (
+          <Stagger delay={400}>
+            <View style={styles.prayersSection}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.label}>PRAYER REQUESTS</Text>
+                {prayerRequestCount > recentPrayers.length ? (
+                  <Pressable onPress={onOpenPrayers} hitSlop={10}>
+                    <Text style={styles.prayerLink}>SEE ALL</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+              {recentPrayers.length ? (
+                recentPrayers.map((message) => {
+                  const author = getMember(members, message.userId);
+                  const authorName = getMemberName(author, message.userId);
+                  return (
+                    <Pressable
+                      key={message.messageId}
+                      accessibilityLabel={`Open prayer request from ${authorName}`}
+                      accessibilityRole="button"
+                      onPress={() => onOpenPrayer(message.messageId)}
+                      style={styles.prayerCard}
+                    >
+                      <View style={styles.prayerAuthor}>
+                        <GroupAvatar
+                          uri={author?.profile?.avatar}
+                          name={authorName}
+                          size={28}
+                          borderColor={colors.glassBorderRow}
+                        />
+                        <Text style={styles.prayerName}>{authorName}</Text>
+                        <Text style={styles.prayerTime}>
+                          {formatRelativeTime(message.timestamp)}
+                        </Text>
+                      </View>
+                      <Text
+                        numberOfLines={COLLAPSED_PRAYER_LINES}
+                        style={styles.prayerPreview}
+                      >
+                        {message.content}
+                      </Text>
+                    </Pressable>
+                  );
+                })
+              ) : (
+                <Text style={styles.emptyPrayers}>
+                  No prayer requests yet. Be the first to share.
+                </Text>
+              )}
+            </View>
+          </Stagger>
+        ) : null}
+        {!requestOpen ? (
+          <Stagger delay={500}>
+            <CollapsibleGroupAbout
+              citation={group.scripture?.citation}
+              intro={displayContent.intro}
+              main={displayContent.main}
+            />
+          </Stagger>
+        ) : null}
         <Stagger delay={600}>
           <View style={styles.divider} />
         </Stagger>
@@ -263,6 +313,82 @@ export function GroupOverview({
   );
 }
 
+function CollapsibleGroupAbout({
+  intro,
+  citation,
+  main,
+}: {
+  intro: string;
+  citation?: string | null;
+  main: string;
+}) {
+  const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
+  const [expanded, setExpanded] = useState(false);
+  const [canExpand, setCanExpand] = useState(false);
+  const preview = [intro, citation ? `— ${citation}` : "", main]
+    .filter(Boolean)
+    .join(" ");
+
+  if (!intro && !main) {
+    return (
+      <Text style={styles.scripture}>
+        This group&apos;s purpose is being developed.
+      </Text>
+    );
+  }
+
+  return (
+    <View style={styles.about}>
+      {expanded ? (
+        <View style={styles.aboutExpanded}>
+          {intro ? <Text style={styles.scripture}>{intro}</Text> : null}
+          {citation ? (
+            <Text style={styles.label}>— {citation}</Text>
+          ) : null}
+          {main ? <Text style={styles.purpose}>{main}</Text> : null}
+        </View>
+      ) : (
+        <Text
+          numberOfLines={COLLAPSED_ABOUT_LINES}
+          onTextLayout={(event) => {
+            if (event.nativeEvent.lines.length >= COLLAPSED_ABOUT_LINES) {
+              setCanExpand(true);
+            }
+          }}
+          style={styles.scripture}
+        >
+          {preview}
+        </Text>
+      )}
+      {canExpand ? (
+        <Pressable
+          accessibilityLabel={
+            expanded ? "Show less group purpose" : "Read more group purpose"
+          }
+          accessibilityRole="button"
+          hitSlop={6}
+          onPress={() => setExpanded((open) => !open)}
+          style={styles.readMore}
+        >
+          <Text style={styles.readMoreText}>
+            {expanded ? "Show less" : "Read more"}
+          </Text>
+          <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
+            <Path
+              d={expanded ? "m6 15 6-6 6 6" : "m6 9 6 6 6-6"}
+              stroke={colors.mutedStrong}
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </Svg>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 function splitPurpose(purpose: string, scripture?: string | null) {
   const trimmed = purpose.trim();
   if (scripture) return { intro: scripture.trim(), main: trimmed };
@@ -275,12 +401,40 @@ function splitPurpose(purpose: string, scripture?: string | null) {
   return { intro: trimmed, main: "" };
 }
 
+function getMember(members: GroupMember[], userId: string) {
+  return members.find((member) => member.clerkuuid === userId) || null;
+}
+
+function getMemberName(member: GroupMember | null, fallback?: string) {
+  const name = [
+    member?.profile?.firstName || member?.firstName,
+    member?.profile?.lastName,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return name || fallback?.slice(0, 8) || "Member";
+}
+
+function formatRelativeTime(value: string) {
+  const milliseconds = Date.now() - new Date(value).getTime();
+  const minutes = Math.max(0, Math.floor(milliseconds / 60_000));
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(value).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
 function createStyles(colors: ColorTokens) {
   return StyleSheet.create({
   root: { flex: 1 },
   content: {
     flexGrow: 1,
-    justifyContent: "center",
     paddingHorizontal: 24,
   },
   body: { gap: 12 },
@@ -297,7 +451,52 @@ function createStyles(colors: ColorTokens) {
     fontSize: 32,
     lineHeight: 35,
     letterSpacing: -0.8,
+    paddingRight: 72,
   },
+  prayersSection: { gap: 10, marginTop: 4 },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  prayerCard: {
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderLeftWidth: 1,
+    borderLeftColor: colors.glassBorderSoft,
+    backgroundColor: colors.cardFill,
+  },
+  prayerAuthor: { flexDirection: "row", alignItems: "center", gap: 8 },
+  prayerName: {
+    flexShrink: 1,
+    color: colors.mutedSoft,
+    fontFamily: fonts.bodyMedium,
+    fontSize: 12,
+  },
+  prayerTime: {
+    marginLeft: "auto",
+    color: colors.mutedDeep,
+    fontFamily: fonts.body,
+    fontSize: 9.6,
+    fontStyle: "italic",
+  },
+  prayerPreview: {
+    color: colors.bodyOnPhoto,
+    fontFamily: fonts.body,
+    fontSize: 13.6,
+    lineHeight: 20.5,
+  },
+  emptyPrayers: {
+    color: colors.mutedMid,
+    fontFamily: fonts.body,
+    fontSize: 12.8,
+    lineHeight: 20,
+    fontStyle: "italic",
+  },
+  about: { gap: 4 },
+  aboutExpanded: { gap: 12 },
   scripture: {
     maxWidth: "90%",
     color: colors.mutedMid,
@@ -315,6 +514,21 @@ function createStyles(colors: ColorTokens) {
     fontFamily: fonts.body,
     fontSize: 15.2,
     lineHeight: 27.4,
+  },
+  readMore: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 4,
+    marginTop: 6,
+    paddingVertical: 2,
+  },
+  readMoreText: {
+    color: colors.mutedStrong,
+    fontFamily: fonts.mono,
+    fontSize: 9,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
   },
   divider: {
     width: 32,

@@ -26,7 +26,7 @@ export function PrayerFocusesSection({
   const [editing, setEditing] = useState<PrayerFocus | null>(null);
 
   return (
-    <Section title="Things">
+    <Section title="Prayer focuses">
       {focuses.length ? (
         focuses.map((focus) => {
           const pending = isPending(focus.focusuuid);

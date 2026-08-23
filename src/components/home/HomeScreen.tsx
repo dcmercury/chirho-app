@@ -365,6 +365,10 @@ export function HomeScreen() {
     setPhotoLovedOne(lovedOne);
   }, []);
 
+  const openQueuedProfileAction = useCallback(() => {
+    openQueuedPhotoModal();
+  }, [openQueuedPhotoModal]);
+
   const openQueuedSubjectModal = useCallback(() => {
     const choice = pendingSubjectRef.current;
     if (!choice) return;
@@ -1448,14 +1452,6 @@ export function HomeScreen() {
         onClose={() => setPhotoLovedOne(null)}
         onChanged={() => loadHome(true)}
       />
-      <CreateGroupModal
-        visible={createGroupOpen}
-        saving={savingGroup}
-        error={createGroupOpen ? mutationError : null}
-        onClose={() => setCreateGroupOpen(false)}
-        onGeneratePreview={handlePreviewGroup}
-        onSubmit={handleCreateGroup}
-      />
       <PersonalPlanDrawer
         visible={planOpen}
         plan={response?.plan || null}
@@ -1502,8 +1498,11 @@ export function HomeScreen() {
         groups={home?.groups || []}
         community={response?.community || null}
         plan={response?.plan || null}
-        onClose={() => setProfileOpen(false)}
-        onDismiss={openQueuedPhotoModal}
+        onClose={() => {
+          setCreateGroupOpen(false);
+          setProfileOpen(false);
+        }}
+        onDismiss={openQueuedProfileAction}
         onChanged={() => loadHome(true)}
         onOpenPlan={openPersonalPlan}
         onBecameIndependent={openPersonalPlan}
@@ -1511,7 +1510,16 @@ export function HomeScreen() {
           setMutationError(null);
           setCreateGroupOpen(true);
         }}
-      />
+      >
+        <CreateGroupModal
+          visible={createGroupOpen}
+          saving={savingGroup}
+          error={createGroupOpen ? mutationError : null}
+          onClose={() => setCreateGroupOpen(false)}
+          onGeneratePreview={handlePreviewGroup}
+          onSubmit={handleCreateGroup}
+        />
+      </ProfileDrawer>
     </View>
   );
 }
