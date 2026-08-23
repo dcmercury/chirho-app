@@ -956,7 +956,7 @@ export async function getLovedOnePhotos(
   return values
     .map(normalizeLovedOnePhoto)
     .filter((photo): photo is LovedOnePhoto => Boolean(photo))
-    .slice(0, 3);
+    .slice(0, 6);
 }
 
 export async function uploadLovedOnePhoto(

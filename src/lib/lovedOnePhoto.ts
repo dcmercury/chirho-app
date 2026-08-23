@@ -1,7 +1,7 @@
 import * as ImagePicker from "expo-image-picker";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 
-export const MAX_LOVED_ONE_PHOTOS = 3;
+export const MAX_LOVED_ONE_PHOTOS = 6;
 export const MAX_LOVED_ONE_PHOTO_DIMENSION = 1200;
 
 export async function prepareLovedOnePhoto(

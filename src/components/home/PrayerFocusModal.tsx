@@ -18,10 +18,7 @@ import {
   getPrayerFocusPhotos,
   uploadPrayerFocusPhoto,
 } from "../../lib/api";
-import {
-  MAX_LOVED_ONE_PHOTOS,
-  prepareLovedOnePhoto,
-} from "../../lib/lovedOnePhoto";
+import { prepareLovedOnePhoto } from "../../lib/lovedOnePhoto";
 import { findDuplicatePrayerFocus } from "../../lib/subjectIdentity";
 import { focusPhotoPath } from "../../lib/prayerFocusImage";
 import { fonts, type ColorTokens } from "../../theme/tokens";
@@ -47,6 +44,8 @@ interface PendingPhoto {
   uri: string;
   imageData: string;
 }
+
+const MAX_PRAYER_FOCUS_PHOTOS = 3;
 
 const categories = [
   { value: "general", label: "General" },
@@ -176,7 +175,7 @@ export function PrayerFocusModal({
 
   const pickPhotos = async () => {
     if (saving || picking) return;
-    const remaining = MAX_LOVED_ONE_PHOTOS - photoCount;
+    const remaining = MAX_PRAYER_FOCUS_PHOTOS - photoCount;
     if (remaining <= 0) return;
     setPhotoError(null);
     setPicking(true);
@@ -208,7 +207,7 @@ export function PrayerFocusModal({
         setSavedPhotos(await getPrayerFocusPhotos(focusuuid, sessionToken));
       } else {
         setPendingPhotos((current) =>
-          [...current, ...prepared].slice(0, MAX_LOVED_ONE_PHOTOS),
+          [...current, ...prepared].slice(0, MAX_PRAYER_FOCUS_PHOTOS),
         );
       }
     } catch (pickerError) {
@@ -425,9 +424,9 @@ export function PrayerFocusModal({
                 </Pressable>
               </View>
             ))}
-            {photoCount < MAX_LOVED_ONE_PHOTOS ? (
+            {photoCount < MAX_PRAYER_FOCUS_PHOTOS ? (
               <Pressable
-                accessibilityLabel={`Add up to ${MAX_LOVED_ONE_PHOTOS - photoCount} photos`}
+                accessibilityLabel={`Add up to ${MAX_PRAYER_FOCUS_PHOTOS - photoCount} photos`}
                 accessibilityRole="button"
                 accessibilityState={{ busy: picking, disabled: saving || picking }}
                 disabled={saving || picking}
@@ -439,7 +438,7 @@ export function PrayerFocusModal({
                   {picking ? "Preparing…" : "Choose photos"}
                 </Text>
                 <Text style={styles.addMeta}>
-                  {MAX_LOVED_ONE_PHOTOS - photoCount} remaining
+                  {MAX_PRAYER_FOCUS_PHOTOS - photoCount} remaining
                 </Text>
               </Pressable>
             ) : null}

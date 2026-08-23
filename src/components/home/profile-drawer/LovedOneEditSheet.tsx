@@ -487,7 +487,11 @@ function createStyles(colors: ColorTokens) {
       borderColor: colors.glassBorder,
       backgroundColor: colors.glassFill,
     },
-    addThumb: { alignItems: "center", justifyContent: "center" },
+    addThumb: {
+      alignItems: "center",
+      justifyContent: "center",
+      borderStyle: "dashed",
+    },
     addMark: { color: colors.title, fontFamily: fonts.bodyMedium, fontSize: 18 },
     primaryDot: {
       position: "absolute",
