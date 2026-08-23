@@ -82,7 +82,12 @@
       "expo-font",
       "expo-image",
       "expo-video",
-      "expo-secure-store",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": false
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -91,7 +96,12 @@
           "resizeMode": "contain"
         }
       ],
-      "@clerk/expo",
+      [
+        "@clerk/expo",
+        {
+          "appleSignIn": false
+        }
+      ],
       [
         "expo-audio",
         {
@@ -103,7 +113,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Choose photos for your profile, prayer groups, and private loved-one prayer cards.",
+          "photosPermission": "Choose photos for your profile, home screen, prayer groups, loved ones, and prayer focuses.",
           "cameraPermission": false,
           "microphonePermission": false
         }

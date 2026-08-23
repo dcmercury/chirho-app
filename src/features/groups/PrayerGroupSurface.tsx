@@ -230,7 +230,7 @@ export function PrayerGroupSurface({
     return () => {
       cancelled = true;
     };
-  }, [data, groupuuid, overviewParticipantKey, requireToken]);
+  }, [groupuuid, overviewParticipantKey, requireToken]);
 
   const pollActivity = useCallback(async () => {
     try {
@@ -323,30 +323,41 @@ export function PrayerGroupSurface({
   }, [connected, pollActivity]);
 
   const selectedMessage = data?.messages[currentIndex];
+  const selectedMessageId = selectedMessage?.messageId ?? null;
+  const loadedResponsesForRef = useRef<string | null>(null);
   const loadResponses = useCallback(
     async (message: GroupMessage) => {
-      setLoadingResponses(true);
+      const alreadyShown = loadedResponsesForRef.current === message.messageId;
+      if (!alreadyShown) setLoadingResponses(true);
       try {
         const token = await requireToken();
-        setResponses(
-          await getPrayerResponses(groupuuid, message.messageId, token),
+        const next = await getPrayerResponses(
+          groupuuid,
+          message.messageId,
+          token,
         );
+        loadedResponsesForRef.current = message.messageId;
+        setResponses(next);
       } catch {
-        setResponses([]);
+        if (!alreadyShown) setResponses([]);
       } finally {
-        setLoadingResponses(false);
+        if (!alreadyShown) setLoadingResponses(false);
       }
     },
     [groupuuid, requireToken],
   );
 
   useEffect(() => {
-    if (mode !== "prayers" || !selectedMessage) {
-      setResponses([]);
+    if (mode !== "prayers" || !selectedMessageId || !selectedMessage) {
+      if (mode !== "prayers") {
+        setResponses([]);
+        loadedResponsesForRef.current = null;
+      }
       return;
     }
-    loadResponses(selectedMessage);
-  }, [loadResponses, mode, selectedMessage]);
+    if (loadedResponsesForRef.current === selectedMessageId) return;
+    void loadResponses(selectedMessage);
+  }, [loadResponses, mode, selectedMessage, selectedMessageId]);
 
   const refreshPrayerState = async (message: GroupMessage) => {
     const token = await requireToken();

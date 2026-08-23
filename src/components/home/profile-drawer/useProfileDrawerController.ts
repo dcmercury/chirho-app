@@ -189,16 +189,17 @@ export function useProfileDrawerController(
     period: DailyPrayerPeriod,
     next: DailyPrayerSettings,
   ) =>
-    mutate(`daily-${period}`, (token) =>
-      updateProfile(
+    mutate(`daily-${period}`, async (token) => {
+      await updateProfile(
         {
           preferences: {
             dailyPrayers: serializeDailyPrayerPayload(dailyPrayers, period, next),
           },
         },
         token,
-      ),
-    );
+      );
+      if (next.enabled) await enablePushIfNeeded(token);
+    });
 
   const setNotification = (key: string, enabled: boolean) =>
     mutate(`notification:${key}`, async (token) => {

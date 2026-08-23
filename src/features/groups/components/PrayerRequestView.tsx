@@ -262,7 +262,7 @@ export function PrayerRequestView({
               )}
             </Stagger>
 
-            {loadingResponses ? (
+            {loadingResponses && !writtenResponses.length ? (
               <ActivityIndicator color={colors.muted} size="small" />
             ) : writtenResponses.length ? (
               <Stagger delay={600}>

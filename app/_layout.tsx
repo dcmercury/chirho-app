@@ -76,7 +76,7 @@ function RootNavigator() {
     let cancelled = false;
     (async () => {
       const pushToken = await registerForPushNotifications({
-        requestPermission: true,
+        requestPermission: false,
       });
       if (!pushToken || cancelled) return;
       const sessionToken = await getTokenRef.current();

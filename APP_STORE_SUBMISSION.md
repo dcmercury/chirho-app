@@ -69,7 +69,7 @@ Do not add `NSUserTrackingUsageDescription` and do not request ATT permission. F
 
 ### Native permissions
 
-- **Photo library:** Yes, user initiated. Update the purpose string to cover every actual use: loved-one photos, profile avatars, and group backgrounds.
+- **Photo library:** Yes, user initiated. Purpose: profile, home screen, prayer groups, loved ones, and prayer focuses.
 - **Notifications:** Yes, requested only after a user enables a reminder or notification feature.
 - **Camera:** No.
 - **Microphone / audio recording:** No.
@@ -81,7 +81,7 @@ Do not add `NSUserTrackingUsageDescription` and do not request ATT permission. F
 Suggested photo purpose string:
 
 ```txt
-Choose photos for your profile, prayer groups, and private loved-one prayer cards.
+Choose photos for your profile, home screen, prayer groups, loved ones, and prayer focuses.
 ```
 
 ## App Privacy — App Store Connect answers
@@ -102,7 +102,7 @@ Declare these data types as **Linked to the User = Yes**, **Used for Tracking = 
 - **Contact Info → Email Address:** App Functionality, but only if the production Clerk/account flow can collect email.
 - **Health & Fitness → Health:** App Functionality and Product Personalization because users can select health-related prayer needs. Reassess only if that input is removed.
 - **Sensitive Info:** App Functionality and Product Personalization because traditions, prayer focuses, and prayer content can reveal religious beliefs.
-- **User Content → Photos or Videos:** App Functionality for avatars, group backgrounds, and optional loved-one photos.
+- **User Content → Photos or Videos:** App Functionality for avatars, home backgrounds, group backgrounds, loved-one photos, and prayer-focus photos.
 - **User Content → Emails or Text Messages:** App Functionality for group messages and prayer requests.
 - **User Content → Other User Content:** App Functionality and Product Personalization for prayer focuses, loved-one entries, generated/saved prayers, group content, and settings not represented elsewhere.
 - **Identifiers → User ID:** App Functionality.

@@ -30,4 +30,4 @@ The in-app link is on sign-up and in Profile.
 - Group chat/prayer requests are user-generated. Members can report content and block users.
 - Background audio is in-app prayer narration, not music streaming.
 
-**Universal links:** Production must set `APPLE_TEAM_ID` on the dailyoffice host so `https://www.chirho.ai/.well-known/apple-app-site-association` returns the file for `com.thepines.chirho`. Until that env var is set, the endpoint returns 503 and invite/group links will not open the app automatically.
+**Universal links:** `https://www.chirho.ai/.well-known/apple-app-site-association` returns the association file for `MHH58HFTQG.com.thepines.chirho`. Invite and group links open the app when it is installed.
