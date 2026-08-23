@@ -18,6 +18,19 @@ export function ArrowIcon({ color = "currentColor", size = 16 }: IconProps) {
   );
 }
 
+export function HomeIcon({ color = "currentColor", size = 16 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M3 9.5 12 3l9 6.5V20a1.5 1.5 0 0 1-1.5 1.5h-5.5v-7h-5v7H4.5A1.5 1.5 0 0 1 3 20V9.5Z"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 export function PlusIcon({ color = "currentColor", size = 16 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">

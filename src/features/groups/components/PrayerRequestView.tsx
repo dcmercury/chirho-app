@@ -638,7 +638,7 @@ function createStyles(colors: ColorTokens) {
     borderRadius: 12,
     borderLeftWidth: 1,
     borderLeftColor: colors.glassBorderSoft,
-    backgroundColor: colors.cardFill,
+    backgroundColor: colors.cardFillMuted,
   },
   responseAuthor: { flexDirection: "row", alignItems: "center", gap: 6 },
   responseName: {

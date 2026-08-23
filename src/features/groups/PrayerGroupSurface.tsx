@@ -45,8 +45,6 @@ import type { ReportReasonId } from "./components/ContentSafetyButton";
 import { PrayerRequestView } from "./components/PrayerRequestView";
 import { LoadingChiRhoOverlay } from "../../components/ui/LoadingChiRhoOverlay";
 
-const chiRhoIcon = require("../../../assets/onboarding/chirho.svg");
-
 async function prefetchGroupImages(result: PrayerGroupSurfaceData) {
   const paths = [
     result.group.backgroundImage,
@@ -118,6 +116,9 @@ export function PrayerGroupSurface({
   const [generatingRequest, setGeneratingRequest] = useState(false);
   const [sendingRequest, setSendingRequest] = useState(false);
   const [responses, setResponses] = useState<PrayerResponse[]>([]);
+  const [overviewParticipants, setOverviewParticipants] = useState<
+    Record<string, string[]>
+  >({});
   const [loadingResponses, setLoadingResponses] = useState(false);
   const [generatedPrayer, setGeneratedPrayer] = useState<string | null>(null);
   const [generatingPrayer, setGeneratingPrayer] = useState(false);
@@ -181,6 +182,55 @@ export function PrayerGroupSurface({
       setMode("prayers");
     }
   }, [data, initialMessageId, initialRequestOpen]);
+
+  const overviewParticipantKey = data
+    ? data.messages
+        .slice(-3)
+        .map(
+          (message) =>
+            `${message.messageId}:${data.prayerCounts[message.messageId]?.count ?? 0}`,
+        )
+        .join("|")
+    : "";
+
+  useEffect(() => {
+    if (!data || !overviewParticipantKey) return;
+    const recent = data.messages.slice(-3);
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const token = await requireToken();
+        const entries = await Promise.all(
+          recent.map(async (message) => {
+            const count = data.prayerCounts[message.messageId]?.count ?? 0;
+            if (count <= 0) return [message.messageId, [] as string[]] as const;
+            const prayers = await getPrayerResponses(
+              groupuuid,
+              message.messageId,
+              token,
+            );
+            return [
+              message.messageId,
+              Array.from(new Set(prayers.map((prayer) => prayer.clerkId))),
+            ] as [string, string[]];
+          }),
+        );
+        if (cancelled) return;
+        setOverviewParticipants((prev) => {
+          const next = { ...prev };
+          for (const [id, ids] of entries) next[id] = ids;
+          return next;
+        });
+      } catch {
+        // Keep existing participant avatars if the background fetch fails.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [data, groupuuid, overviewParticipantKey, requireToken]);
 
   const pollActivity = useCallback(async () => {
     try {
@@ -308,6 +358,12 @@ export function PrayerGroupSurface({
       current ? { ...current, prayerCounts } : current,
     );
     setResponses(nextResponses);
+    setOverviewParticipants((prev) => ({
+      ...prev,
+      [message.messageId]: [
+        ...new Set(nextResponses.map((prayer) => prayer.clerkId)),
+      ],
+    }));
   };
 
   const handlePray = async (message: GroupMessage) => {
@@ -666,29 +722,12 @@ export function PrayerGroupSurface({
         </View>
       ) : data ? (
         <>
-          <Pressable
-            accessibilityHint="Returns to the home screen"
-            accessibilityLabel="Open home"
-            accessibilityRole="button"
-            onPress={onOpenHome}
-            style={({ pressed }) => [
-              styles.homeButton,
-              { top: insets.top + 10 },
-              pressed && styles.homeButtonPressed,
-            ]}
-          >
-            <Image
-              accessible={false}
-              contentFit="contain"
-              source={chiRhoIcon}
-              style={styles.homeIcon}
-            />
-          </Pressable>
           {mode === "group" ? (
             <GroupOverview
               group={data.group}
               members={data.members}
               messages={data.messages}
+              participantsByMessage={overviewParticipants}
               prayerRequestCount={data.prayerRequestCount}
               refreshing={refreshing}
               requestOpen={requestOpen}
@@ -708,6 +747,7 @@ export function PrayerGroupSurface({
               onGenerateRequest={handleGenerateRequest}
               onSubmitRequest={handleSubmitRequest}
               onOpenInvite={() => setInviteOpen(true)}
+              onOpenHome={onOpenHome}
             />
           ) : (
             <PrayerRequestView
@@ -755,7 +795,7 @@ export function PrayerGroupSurface({
               onPress={() => setMembersOpen(true)}
               style={({ pressed }) => [
                 styles.groupDrawerTrigger,
-                { top: insets.top + 60 },
+                { top: insets.top + 10 },
                 pressed && styles.groupDrawerTriggerPressed,
               ]}
             >
@@ -831,27 +871,6 @@ function createStyles(colors: ColorTokens) {
     backgroundColor: colors.buttonPrimary,
   },
   retryText: { color: colors.buttonOnPrimary, fontFamily: fonts.bodyMedium, fontSize: 11 },
-  homeButton: {
-    position: "absolute",
-    right: 20,
-    zIndex: 10,
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    borderWidth: 1,
-    borderColor: colors.creamBorder,
-    backgroundColor: colors.creamFill,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  homeIcon: {
-    width: 18,
-    height: 24,
-  },
-  homeButtonPressed: {
-    opacity: 0.72,
-    transform: [{ scale: 0.96 }],
-  },
   groupDrawerTrigger: {
     position: "absolute",
     right: 20,

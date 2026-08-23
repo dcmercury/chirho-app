@@ -18,19 +18,20 @@ import type {
   PrayerGroup,
   PrayerIntensity,
 } from "../types";
-import { PlusIcon } from "./Icons";
+import { PlusIcon, ArrowIcon, HomeIcon } from "./Icons";
 import { GroupAvatar } from "./GroupAvatar";
 import { PrayerRequestForm } from "./PrayerRequestForm";
 import { Stagger } from "./Stagger";
 
 const COLLAPSED_ABOUT_LINES = 3;
 const COLLAPSED_PRAYER_LINES = 2;
-const RECENT_PRAYER_LIMIT = 5;
+const RECENT_PRAYER_LIMIT = 3;
 
 interface GroupOverviewProps {
   group: PrayerGroup;
   members: GroupMember[];
   messages: GroupMessage[];
+  participantsByMessage: Record<string, string[]>;
   prayerRequestCount: number;
   refreshing: boolean;
   requestOpen: boolean;
@@ -47,12 +48,14 @@ interface GroupOverviewProps {
   onGenerateRequest: (intensities: PrayerIntensity[]) => Promise<void>;
   onSubmitRequest: (intensities: PrayerIntensity[]) => Promise<void>;
   onOpenInvite: () => void;
+  onOpenHome: () => void;
 }
 
 export function GroupOverview({
   group,
   members,
   messages,
+  participantsByMessage,
   prayerRequestCount,
   refreshing,
   requestOpen,
@@ -69,6 +72,7 @@ export function GroupOverview({
   onGenerateRequest,
   onSubmitRequest,
   onOpenInvite,
+  onOpenHome,
 }: GroupOverviewProps) {
   const insets = useSafeAreaInsets();
   const styles = useThemedStyles(createStyles);
@@ -148,6 +152,20 @@ export function GroupOverview({
       scrollEventThrottle={16}
     >
       <View style={styles.body}>
+        <Stagger delay={150}>
+          <Pressable
+            accessibilityHint="Returns to the home screen"
+            accessibilityLabel="Open home"
+            accessibilityRole="button"
+            onPress={onOpenHome}
+            style={({ pressed }) => [
+              styles.homeButton,
+              pressed && styles.homeButtonPressed,
+            ]}
+          >
+            <HomeIcon color={colors.buttonOnPrimary} size={18} />
+          </Pressable>
+        </Stagger>
         <Stagger delay={200}>
           <Text style={styles.label}>{group.tradition || "PRAYER GROUP"}</Text>
         </Stagger>
@@ -181,6 +199,9 @@ export function GroupOverview({
                 recentPrayers.map((message) => {
                   const author = getMember(members, message.userId);
                   const authorName = getMemberName(author, message.userId);
+                  const participantIds = (
+                    participantsByMessage[message.messageId] || []
+                  ).slice(0, 5);
                   return (
                     <Pressable
                       key={message.messageId}
@@ -189,24 +210,50 @@ export function GroupOverview({
                       onPress={() => onOpenPrayer(message.messageId)}
                       style={styles.prayerCard}
                     >
-                      <View style={styles.prayerAuthor}>
-                        <GroupAvatar
-                          uri={author?.profile?.avatar}
-                          name={authorName}
-                          size={28}
-                          borderColor={colors.glassBorderRow}
-                        />
-                        <Text style={styles.prayerName}>{authorName}</Text>
-                        <Text style={styles.prayerTime}>
-                          {formatRelativeTime(message.timestamp)}
+                      <View style={styles.prayerCardBody}>
+                        <View style={styles.prayerAuthor}>
+                          <GroupAvatar
+                            uri={author?.profile?.avatar}
+                            name={authorName}
+                            size={28}
+                            borderColor={colors.glassBorderRow}
+                          />
+                          <Text style={styles.prayerName}>{authorName}</Text>
+                          <Text style={styles.prayerTime}>
+                            {formatRelativeTime(message.timestamp)}
+                          </Text>
+                        </View>
+                        <Text
+                          numberOfLines={COLLAPSED_PRAYER_LINES}
+                          style={styles.prayerPreview}
+                        >
+                          {message.content}
                         </Text>
+                        {participantIds.length ? (
+                          <View style={styles.prayerParticipants}>
+                            {participantIds.map((clerkId, index) => {
+                              const participant = getMember(members, clerkId);
+                              const participantName = getMemberName(
+                                participant,
+                                clerkId,
+                              );
+                              return (
+                                <GroupAvatar
+                                  key={clerkId}
+                                  uri={participant?.profile?.avatar}
+                                  name={participantName}
+                                  size={18}
+                                  borderColor={colors.glassBorderRow}
+                                  style={
+                                    index ? styles.prayerParticipantOverlap : undefined
+                                  }
+                                />
+                              );
+                            })}
+                          </View>
+                        ) : null}
                       </View>
-                      <Text
-                        numberOfLines={COLLAPSED_PRAYER_LINES}
-                        style={styles.prayerPreview}
-                      >
-                        {message.content}
-                      </Text>
+                      <ArrowIcon color={colors.mutedFaint} size={12} />
                     </Pressable>
                   );
                 })
@@ -453,6 +500,20 @@ function createStyles(colors: ColorTokens) {
     letterSpacing: -0.8,
     paddingRight: 72,
   },
+  homeButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1,
+    borderColor: colors.creamBorder,
+    backgroundColor: colors.creamFill,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  homeButtonPressed: {
+    opacity: 0.72,
+    transform: [{ scale: 0.96 }],
+  },
   prayersSection: { gap: 10, marginTop: 4 },
   sectionHeader: {
     flexDirection: "row",
@@ -460,13 +521,20 @@ function createStyles(colors: ColorTokens) {
     justifyContent: "space-between",
   },
   prayerCard: {
-    gap: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     paddingVertical: 10,
     paddingHorizontal: 12,
+    paddingLeft: 14,
     borderRadius: 12,
-    borderLeftWidth: 1,
-    borderLeftColor: colors.glassBorderSoft,
-    backgroundColor: colors.cardFill,
+    borderLeftWidth: 2,
+    borderLeftColor: colors.accent,
+    backgroundColor: colors.cardFillMuted,
+  },
+  prayerCardBody: {
+    flex: 1,
+    gap: 6,
   },
   prayerAuthor: { flexDirection: "row", alignItems: "center", gap: 8 },
   prayerName: {
@@ -483,10 +551,18 @@ function createStyles(colors: ColorTokens) {
     fontStyle: "italic",
   },
   prayerPreview: {
-    color: colors.bodyOnPhoto,
+    color: colors.muted,
     fontFamily: fonts.body,
-    fontSize: 13.6,
-    lineHeight: 20.5,
+    fontSize: 11,
+    lineHeight: 15.5,
+  },
+  prayerParticipants: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 2,
+  },
+  prayerParticipantOverlap: {
+    marginLeft: -6,
   },
   emptyPrayers: {
     color: colors.mutedMid,
