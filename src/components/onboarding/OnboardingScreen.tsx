@@ -23,6 +23,7 @@ import type { Community } from "../../lib/api";
 import type { LovedOneGender } from "../../types/home";
 import { clerkErrorMessage, joinCommunity, searchCommunities, updateAccountGender } from "../../lib/api";
 import { resolveImage, video } from "../../lib/assets";
+import { buildSignupConsentMetadata } from "../../lib/legalConsent";
 import {
   formatPhoneDisplay,
   formatPhoneInput,
@@ -52,6 +53,7 @@ import { GhostBack } from "../ui/GhostBack";
 import { ErrorBanner } from "../ui/ErrorBanner";
 import { StepFooter } from "../ui/StepFooter";
 import { PrivacyPolicyLink } from "../ui/PrivacyPolicyLink";
+import { SignupConsentControls } from "../ui/SignupConsentControls";
 
 const steps = welcome.steps as WelcomeStep[];
 
@@ -104,6 +106,8 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
   const [signUpMode, setSignUpMode] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [gender, setGender] = useState<LovedOneGender | null>(null);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [aiProcessingAllowed, setAiProcessingAllowed] = useState(false);
   const [signUpStep, setSignUpStep] = useState<"community" | "phone">("community");
   const [joinOption, setJoinOption] = useState<"church-group" | "just-myself" | null>(
     null,
@@ -240,6 +244,8 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
     setSignUpMode(false);
     setFirstName("");
     setGender(null);
+    setTermsAccepted(false);
+    setAiProcessingAllowed(false);
     setSignUpStep("community");
     setJoinOption(null);
     setSelectedGroup(null);
@@ -331,12 +337,16 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
     try {
       if (!pendingVerification) {
         if (!phoneNumber.trim()) throw new Error("Please enter your phone number");
+        if (!termsAccepted) {
+          throw new Error("Please agree to the Terms of Use to continue");
+        }
         const normalized = normalizePhone(phoneNumber);
         if (!normalized) throw new Error("Invalid phone number format");
         try {
           await signUp.create({
             phoneNumber: normalized,
             firstName: firstName.trim() || undefined,
+            unsafeMetadata: buildSignupConsentMetadata(aiProcessingAllowed),
           });
           await signUp.preparePhoneNumberVerification({ strategy: "phone_code" });
           setPendingVerification(true);
@@ -563,17 +573,24 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
             maxLength={14}
           />
           {authError ? <ErrorBanner message={authError} /> : null}
+          <SignupConsentControls
+            termsAccepted={termsAccepted}
+            onTermsAcceptedChange={setTermsAccepted}
+            aiProcessingAllowed={aiProcessingAllowed}
+            onAiProcessingAllowedChange={setAiProcessingAllowed}
+            disabled={authenticating}
+          />
           <PrimaryButton
             label={authenticating ? "Sending code..." : "Sign Up"}
             onPress={handleSignUp}
             disabled={
               authenticating ||
+              !termsAccepted ||
               !isValidPhone(phoneNumber) ||
               (Boolean(firstName.trim()) && !gender)
             }
             loading={authenticating}
           />
-          <PrivacyPolicyLink style={styles.legal} />
           <GhostBack
             onPress={() => {
               setSignUpStep("community");

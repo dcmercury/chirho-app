@@ -31,6 +31,7 @@ import { ErrorBanner } from "../../components/ui/ErrorBanner";
 import { GlassInput } from "../../components/ui/GlassInput";
 import { OtpInput } from "../../components/ui/OtpInput";
 import { PrivacyPolicyLink } from "../../components/ui/PrivacyPolicyLink";
+import { SignupConsentControls } from "../../components/ui/SignupConsentControls";
 import {
   GroupInviteApiError,
   acceptGroupInvitation,
@@ -40,6 +41,7 @@ import {
   type GroupInvitation,
   type GroupInviteScripture,
 } from "../../lib/groupInviteApi";
+import { buildSignupConsentMetadata } from "../../lib/legalConsent";
 import { formatPhoneDisplay, formatPhoneInput, isValidPhone, lastFourDigits, normalizePhone } from "../../lib/phone";
 import { fonts, type ColorTokens } from "../../theme/tokens";
 import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
@@ -148,6 +150,8 @@ export function GroupInviteScreen({ token }: { token: string }) {
   const [activeStep, setActiveStep] = useState(0);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [legalAccepted, setLegalAccepted] = useState(false);
+  const [aiProcessingAllowed, setAiProcessingAllowed] = useState(false);
   const [pendingVerification, setPendingVerification] = useState(false);
   const [otpCode, setOtpCode] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -289,6 +293,10 @@ export function GroupInviteScreen({ token }: { token: string }) {
       setAuthError("Please agree to the Group Policy to continue.");
       return;
     }
+    if (!isSignedIn && !legalAccepted) {
+      setAuthError("Please agree to the Terms of Use to continue.");
+      return;
+    }
     if (
       !isSignedIn &&
       requiresExistingAccountSignIn
@@ -334,6 +342,7 @@ export function GroupInviteScreen({ token }: { token: string }) {
         await signUp.create({
           phoneNumber: normalizedPhone,
           firstName: invitation.firstName || undefined,
+          unsafeMetadata: buildSignupConsentMetadata(aiProcessingAllowed),
         });
       } catch (error) {
         if (clerkErrorCode(error) === "form_identifier_exists") {
@@ -360,12 +369,14 @@ export function GroupInviteScreen({ token }: { token: string }) {
     getToken,
     invitation,
     isSignedIn,
+    legalAccepted,
     openSecureSignIn,
     phoneNumber,
     requiresExistingAccountSignIn,
     signUp,
     signUpLoaded,
     termsAccepted,
+    aiProcessingAllowed,
   ]);
 
   const handleVerifyOtp = useCallback(async () => {
@@ -529,6 +540,7 @@ export function GroupInviteScreen({ token }: { token: string }) {
       (pendingVerification
         ? otpCode.length !== 6
         : !termsAccepted ||
+          (!isSignedIn && !legalAccepted) ||
           (!isSignedIn &&
             !requiresExistingAccountSignIn &&
             !isValidPhone(phoneNumber))));
@@ -753,7 +765,19 @@ export function GroupInviteScreen({ token }: { token: string }) {
                   thumbColor={colors.white}
                 />
               </Pressable>
-              <PrivacyPolicyLink style={styles.legal} />
+              {isSignedIn ? (
+                <PrivacyPolicyLink style={styles.legal} />
+              ) : (
+                <View style={styles.signupConsent}>
+                  <SignupConsentControls
+                    termsAccepted={legalAccepted}
+                    onTermsAcceptedChange={setLegalAccepted}
+                    aiProcessingAllowed={aiProcessingAllowed}
+                    onAiProcessingAllowedChange={setAiProcessingAllowed}
+                    disabled={busy}
+                  />
+                </View>
+              )}
               {isSignedIn ? (
                 <Pressable
                   disabled={busy}
@@ -1043,6 +1067,9 @@ function createStyles(colors: ColorTokens) {
     fontFamily: fonts.body,
     fontSize: 11,
     lineHeight: 16,
+    marginTop: 10,
+  },
+  signupConsent: {
     marginTop: 10,
   },
   denyAction: {

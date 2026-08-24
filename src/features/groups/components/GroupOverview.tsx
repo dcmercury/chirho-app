@@ -33,6 +33,9 @@ interface GroupOverviewProps {
   messages: GroupMessage[];
   participantsByMessage: Record<string, string[]>;
   prayerRequestCount: number;
+  activeRequestCount: number;
+  historyRequestCount: number;
+  requestView: "active" | "history";
   refreshing: boolean;
   requestOpen: boolean;
   requestText: string;
@@ -49,6 +52,7 @@ interface GroupOverviewProps {
   onSubmitRequest: (intensities: PrayerIntensity[]) => Promise<void>;
   onOpenInvite: () => void;
   onOpenHome: () => void;
+  onChangeRequestView: (view: "active" | "history") => void;
 }
 
 export function GroupOverview({
@@ -57,6 +61,9 @@ export function GroupOverview({
   messages,
   participantsByMessage,
   prayerRequestCount,
+  activeRequestCount,
+  historyRequestCount,
+  requestView,
   refreshing,
   requestOpen,
   requestText,
@@ -73,6 +80,7 @@ export function GroupOverview({
   onSubmitRequest,
   onOpenInvite,
   onOpenHome,
+  onChangeRequestView,
 }: GroupOverviewProps) {
   const insets = useSafeAreaInsets();
   const styles = useThemedStyles(createStyles);
@@ -187,8 +195,44 @@ export function GroupOverview({
         {!requestOpen ? (
           <Stagger delay={400}>
             <View style={styles.prayersSection}>
+              <View style={styles.prayerTabs}>
+                <Pressable
+                  onPress={() => onChangeRequestView("active")}
+                  style={[
+                    styles.prayerTab,
+                    requestView === "active" && styles.prayerTabActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.prayerTabText,
+                      requestView === "active" && styles.prayerTabTextActive,
+                    ]}
+                  >
+                    Active · {activeRequestCount}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => onChangeRequestView("history")}
+                  style={[
+                    styles.prayerTab,
+                    requestView === "history" && styles.prayerTabActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.prayerTabText,
+                      requestView === "history" && styles.prayerTabTextActive,
+                    ]}
+                  >
+                    Prayer History · {historyRequestCount}
+                  </Text>
+                </Pressable>
+              </View>
               <View style={styles.sectionHeader}>
-                <Text style={styles.label}>PRAYER REQUESTS</Text>
+                <Text style={styles.label}>
+                  {requestView === "active" ? "PRAYER REQUESTS" : "PRAYER HISTORY"}
+                </Text>
                 {prayerRequestCount > recentPrayers.length ? (
                   <Pressable onPress={onOpenPrayers} hitSlop={10}>
                     <Text style={styles.prayerLink}>SEE ALL</Text>
@@ -223,6 +267,29 @@ export function GroupOverview({
                             {formatRelativeTime(message.timestamp)}
                           </Text>
                         </View>
+                        {message.status === "archived" ? (
+                          <Text style={styles.historyLabel}>
+                            {message.archiveDisposition === "resolved"
+                              ? `Resolved by ${getMemberName(
+                                  getMember(
+                                    members,
+                                    message.archivedBy || message.userId,
+                                  ),
+                                  message.archivedBy || message.userId,
+                                )}`
+                              : `Archived by ${getMemberName(
+                                  getMember(members, message.archivedBy || ""),
+                                  message.archivedBy || "",
+                                )}`}
+                            {message.archiveReason
+                              ? ` · ${formatLifecycleReason(message.archiveReason)}`
+                              : ""}
+                          </Text>
+                        ) : message.isStale ? (
+                          <Text style={styles.historyLabel}>
+                            Needs an update · 60 days
+                          </Text>
+                        ) : null}
                         <Text
                           numberOfLines={COLLAPSED_PRAYER_LINES}
                           style={styles.prayerPreview}
@@ -259,7 +326,9 @@ export function GroupOverview({
                 })
               ) : (
                 <Text style={styles.emptyPrayers}>
-                  No prayer requests yet. Be the first to share.
+                  {requestView === "active"
+                    ? "No prayer requests yet. Be the first to share."
+                    : "No prayers in history yet."}
                 </Text>
               )}
             </View>
@@ -318,7 +387,7 @@ export function GroupOverview({
             </View>
             {!requestOpen ? (
               <View style={styles.rightActions}>
-                {group.canCreatePrayerRequests ? (
+                {group.canCreatePrayerRequests && requestView === "active" ? (
                   <Pressable
                     accessibilityLabel="New prayer request"
                     onPress={onOpenRequest}
@@ -462,6 +531,17 @@ function getMemberName(member: GroupMember | null, fallback?: string) {
   return name || fallback?.slice(0, 8) || "Member";
 }
 
+function formatLifecycleReason(reason: string) {
+  return reason
+    .split("_")
+    .map((part, index) =>
+      index === 0
+        ? `${part.charAt(0).toUpperCase()}${part.slice(1)}`
+        : part,
+    )
+    .join(" ");
+}
+
 function formatRelativeTime(value: string) {
   const milliseconds = Date.now() - new Date(value).getTime();
   const minutes = Math.max(0, Math.floor(milliseconds / 60_000));
@@ -515,6 +595,31 @@ function createStyles(colors: ColorTokens) {
     transform: [{ scale: 0.96 }],
   },
   prayersSection: { gap: 10, marginTop: 4 },
+  prayerTabs: {
+    flexDirection: "row",
+    gap: 6,
+    padding: 3,
+    borderRadius: 16,
+    backgroundColor: colors.cardFillMuted,
+  },
+  prayerTab: {
+    flex: 1,
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    borderRadius: 13,
+  },
+  prayerTabActive: {
+    backgroundColor: colors.glassFillHover,
+  },
+  prayerTabText: {
+    color: colors.muted,
+    fontFamily: fonts.bodyMedium,
+    fontSize: 10,
+  },
+  prayerTabTextActive: {
+    color: colors.subtitle,
+  },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -549,6 +654,11 @@ function createStyles(colors: ColorTokens) {
     fontFamily: fonts.body,
     fontSize: 9.6,
     fontStyle: "italic",
+  },
+  historyLabel: {
+    color: colors.mutedStrong,
+    fontFamily: fonts.bodyMedium,
+    fontSize: 9.8,
   },
   prayerPreview: {
     color: colors.muted,

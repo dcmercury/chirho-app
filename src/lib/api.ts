@@ -34,6 +34,10 @@ import type {
   PrayerCount,
   PrayerGroup,
   PrayerGroupSurfaceData,
+  PrayerRequestArchiveReason,
+  PrayerRequestEvent,
+  PrayerRequestResolveReason,
+  PrayerRequestStatus,
   PrayerResponse,
 } from "../features/groups/types";
 
@@ -328,6 +332,36 @@ function normalizeGroupSurface(
           typeof message.sequenceNumber === "number"
             ? message.sequenceNumber
             : 0,
+        status: (message.status === "archived"
+          ? "archived"
+          : "active") as PrayerRequestStatus,
+        lastUpdateAt: String(
+          message.lastUpdateAt ||
+            message.updatedAt ||
+            message.timestamp ||
+            message.createdAt ||
+            new Date().toISOString(),
+        ),
+        archivedAt:
+          typeof message.archivedAt === "string" ? message.archivedAt : null,
+        archivedBy:
+          typeof message.archivedBy === "string" ? message.archivedBy : null,
+        archiveDisposition:
+          message.archiveDisposition === "resolved" ||
+          message.archiveDisposition === "archived"
+            ? (message.archiveDisposition as GroupMessage["archiveDisposition"])
+            : null,
+        archiveReason:
+          typeof message.archiveReason === "string"
+            ? (message.archiveReason as GroupMessage["archiveReason"])
+            : null,
+        archiveNote:
+          typeof message.archiveNote === "string" ? message.archiveNote : null,
+        staleSnoozedUntil:
+          typeof message.staleSnoozedUntil === "string"
+            ? message.staleSnoozedUntil
+            : null,
+        isStale: message.isStale === true,
       };
     })
     .filter((message) => message.messageId && message.userId);
@@ -414,6 +448,14 @@ function normalizeGroupSurface(
         : typeof source.prayerRequestCount === "number"
           ? source.prayerRequestCount
           : messages.length,
+    activeRequestCount:
+      typeof messagePage?.activeCount === "number"
+        ? messagePage.activeCount
+        : messages.filter((message) => message.status === "active").length,
+    historyRequestCount:
+      typeof messagePage?.historyCount === "number"
+        ? messagePage.historyCount
+        : messages.filter((message) => message.status === "archived").length,
   };
 }
 
@@ -1352,10 +1394,11 @@ export async function leaveGroup(
 export async function getPrayerGroupSurface(
   groupuuid: string,
   token: string,
+  status: PrayerRequestStatus = "active",
 ): Promise<PrayerGroupSurfaceData> {
   try {
     const aggregate = await authenticatedRequest<unknown>(
-      `/api/mobile/groups/${groupuuid}`,
+      `/api/mobile/groups/${groupuuid}?status=${status}`,
       token,
     );
     const normalized = normalizeGroupSurface(aggregate, groupuuid);
@@ -1376,7 +1419,7 @@ export async function getPrayerGroupSurface(
         token,
       ),
       authenticatedRequest<{ messages?: unknown[] }>(
-        `/api/groups/${groupuuid}/chat/messages?limit=10`,
+        `/api/groups/${groupuuid}/chat/messages?limit=10&status=${status}`,
         token,
       ),
       authenticatedRequest<{ prayerCounts?: Record<string, PrayerCount> }>(
@@ -1409,12 +1452,17 @@ export async function getPrayerGroupSurface(
 export async function getGroupMessages(
   groupuuid: string,
   token: string,
-  options: { limit?: number; before?: string } = {},
+  options: {
+    limit?: number;
+    before?: string;
+    status?: PrayerRequestStatus;
+  } = {},
 ): Promise<GroupMessage[]> {
   const query = new URLSearchParams({
     limit: String(options.limit || 10),
   });
   if (options.before) query.set("before", options.before);
+  if (options.status) query.set("status", options.status);
   const data = await authenticatedRequest<{ messages?: GroupMessage[] }>(
     `/api/groups/${groupuuid}/chat/messages?${query.toString()}`,
     token,
@@ -1494,6 +1542,94 @@ export async function deleteGroupMessage(
     token,
     { method: "DELETE" },
   );
+}
+
+export async function getPrayerRequestEvents(
+  groupuuid: string,
+  messageId: string,
+  token: string,
+): Promise<PrayerRequestEvent[]> {
+  const data = await authenticatedRequest<{ events?: PrayerRequestEvent[] }>(
+    `/api/groups/${groupuuid}/prayer-requests/${messageId}`,
+    token,
+  );
+  return data.events || [];
+}
+
+export async function transitionPrayerRequest(
+  groupuuid: string,
+  messageId: string,
+  action: "resolve" | "archive" | "restore" | "keep_active",
+  token: string,
+  options: {
+    reason?: PrayerRequestResolveReason | PrayerRequestArchiveReason;
+    note?: string;
+  } = {},
+): Promise<GroupMessage> {
+  const data = await authenticatedRequest<{ message: GroupMessage }>(
+    `/api/groups/${groupuuid}/prayer-requests/${messageId}`,
+    token,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ action, ...options }),
+    },
+  );
+  return data.message;
+}
+
+export async function postPrayerRequestUpdate(
+  groupuuid: string,
+  messageId: string,
+  content: string,
+  token: string,
+): Promise<PrayerRequestEvent> {
+  const data = await authenticatedRequest<{ event: PrayerRequestEvent }>(
+    `/api/groups/${groupuuid}/prayer-requests/${messageId}`,
+    token,
+    {
+      method: "POST",
+      body: JSON.stringify({ action: "update", content: content.trim() }),
+    },
+  );
+  return data.event;
+}
+
+export async function suggestPrayerRequestArchive(
+  groupuuid: string,
+  messageId: string,
+  reason: PrayerRequestArchiveReason,
+  token: string,
+  note?: string,
+): Promise<PrayerRequestEvent> {
+  const data = await authenticatedRequest<{ event: PrayerRequestEvent }>(
+    `/api/groups/${groupuuid}/prayer-requests/${messageId}`,
+    token,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        action: "suggest_archive",
+        reason,
+        note: note?.trim() || undefined,
+      }),
+    },
+  );
+  return data.event;
+}
+
+export async function requestPrayerRequestUpdate(
+  groupuuid: string,
+  messageId: string,
+  token: string,
+): Promise<PrayerRequestEvent> {
+  const data = await authenticatedRequest<{ event: PrayerRequestEvent }>(
+    `/api/groups/${groupuuid}/prayer-requests/${messageId}`,
+    token,
+    {
+      method: "POST",
+      body: JSON.stringify({ action: "request_update" }),
+    },
+  );
+  return data.event;
 }
 
 export async function deleteOfferedPrayer(

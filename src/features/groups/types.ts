@@ -107,6 +107,22 @@ export interface GroupMember {
   removedBy?: string | null;
 }
 
+export type PrayerRequestStatus = "active" | "archived";
+export type PrayerRequestDisposition = "resolved" | "archived";
+export type PrayerRequestResolveReason =
+  | "answered"
+  | "situation_changed"
+  | "no_longer_needed"
+  | "other";
+export type PrayerRequestArchiveReason =
+  | "inactive"
+  | "no_recent_updates"
+  | "duplicate"
+  | "other";
+export type PrayerRequestLifecycleReason =
+  | PrayerRequestResolveReason
+  | PrayerRequestArchiveReason;
+
 export interface GroupMessage {
   messageId: string;
   groupUuid: string;
@@ -114,6 +130,34 @@ export interface GroupMessage {
   content: string;
   timestamp: string;
   sequenceNumber: number;
+  status: PrayerRequestStatus;
+  lastUpdateAt: string;
+  archivedAt: string | null;
+  archivedBy: string | null;
+  archiveDisposition: PrayerRequestDisposition | null;
+  archiveReason: PrayerRequestLifecycleReason | null;
+  archiveNote: string | null;
+  staleSnoozedUntil: string | null;
+  isStale: boolean;
+}
+
+export interface PrayerRequestEvent {
+  eventId: string;
+  groupUuid: string;
+  messageId: string;
+  actorUserId: string;
+  type:
+    | "updated"
+    | "resolved"
+    | "archived"
+    | "restored"
+    | "archive_suggested"
+    | "update_requested"
+    | "kept_active";
+  reason?: PrayerRequestLifecycleReason | null;
+  note?: string | null;
+  content?: string | null;
+  createdAt: string;
 }
 
 export interface PrayerCount {
@@ -155,6 +199,8 @@ export interface PrayerGroupSurfaceData {
   prayerCounts: Record<string, PrayerCount>;
   hasMoreMessages: boolean;
   prayerRequestCount: number;
+  activeRequestCount: number;
+  historyRequestCount: number;
 }
 
 export interface PrayerIntensity {
