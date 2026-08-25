@@ -1,12 +1,12 @@
 # ChiRho App Store Connect — submission and paste sheet
 
-**Audit date:** August 20, 2026  
+**Audit date:** August 24, 2026
 **Target:** iOS 1.1.0 · `com.thepines.chirho` · iPhone only  
-**Status:** Backend hardening and production Clerk credentials are deployed, and the mobile release source passes health checks. **Do not submit build 45.** Build 46 is uploaded to App Store Connect and still requires Apple processing plus physical-device TestFlight acceptance testing.
+**Status:** Backend hardening, production Clerk credentials, updated legal policies, and explicit signup consent controls are deployed or committed. **Build 63 is the current App Store candidate** and still requires Apple processing, archive inspection, and physical-device TestFlight acceptance testing.
 
 This sheet is modeled on the successful process documented in `bls-app`, but every answer below is based on ChiRho's code and production site.
 
-The current EAS project is `@thepines/chirho`. **Do not select or submit build 45** because it includes the Personal Plan placeholder payment flow. Fresh production **build 46** was created August 20, 2026 from the hardened working tree with production Clerk credentials.
+The current EAS project is `@thepines/chirho`. **Do not select or submit build 45** because it includes the Personal Plan placeholder payment flow. Production **build 63** was started August 24, 2026 from mobile commit `b051728a` with the new Terms, Privacy, and AI-assisted prayer consent controls.
 
 ## Recommended launch strategy
 
@@ -32,6 +32,7 @@ The release source now fails closed with billing disabled, grants complimentary 
 - [x] Publish `https://www.chirho.ai/support`.
 - [x] Publish `https://www.chirho.ai/delete-account`.
 - [x] Publish `https://www.chirho.ai/terms` with an explicit minimum age.
+- [x] Require a Terms and Privacy switch for new accounts, request AI-assisted prayer permission separately, and record policy versions and timestamps in Clerk signup metadata.
 - [ ] Monitor the support and privacy email addresses during review.
 - [x] Configure Apple Team ID `MHH58HFTQG`; both apex and `www` AASA URLs return direct `200 application/json` responses for `com.thepines.chirho`.
 - [x] Add deterministic server-side filtering for free-form group content while preserving report, block, admin review, and deletion tools.
@@ -42,7 +43,7 @@ The release source now fails closed with billing disabled, grants complimentary 
 - [x] Make `npx expo-doctor@latest` pass all 21 checks.
 - [x] Make `npx tsc --noEmit` pass.
 - [x] Review production dependency advisories without forcing an Expo downgrade. Sixteen remaining advisories are transitive Metro/config-plugin build-tool paths; recheck when Expo ships compatible updates.
-- [x] Confirm build 46 uses the iOS 26 SDK or later (`DTSDKName: iphoneos26.5`).
+- [ ] Confirm build 63 uses the iOS 26 SDK or later after the archive finishes processing.
 - [ ] Inspect the archived build's Xcode Privacy Report and verify required-reason API declarations and SDK privacy manifests, especially Hermes and image-picker dependencies.
 - [ ] Create and test a stable production Clerk reviewer phone number and fixed OTP.
 - [ ] Test account deletion end-to-end with a disposable production account and verify that no raw Clerk ID or private photo remains.
@@ -137,8 +138,9 @@ The revised public policy should plainly disclose:
 - Optional photos, their private access controls, storage, removal, and account-deletion behavior.
 - Push tokens and notification preferences.
 - First-party prayer view/share counters and service logs.
-- Google Gemini and OpenAI processing of prompts/prayer context.
-- ElevenLabs processing of generated prayer text for narration.
+- Separate signup permission for Google Gemini and OpenAI processing of prayer text, first names, tradition, prayer categories, health or life concerns, notes, group context, and recent prayer text.
+- Separate signup permission for ElevenLabs processing of generated prayer text and the selected voice identifier for narration.
+- Confirmation that phone numbers and uploaded photos are not sent in prayer-generation or narration requests.
 - Clerk, MongoDB Atlas, Vercel hosting/Blob, Railway, AWS S3, Expo/APNs, and SimpleTexting as applicable processors.
 - That data is not sold, used for targeted advertising, or used for cross-company tracking.
 - Retention periods or criteria for every major data class.
@@ -146,7 +148,7 @@ The revised public policy should plainly disclose:
 - Public deletion instructions and privacy/support contact addresses.
 - A fixed effective date and how material changes are communicated.
 
-The public policy was replaced and deployed on August 20, 2026. Recheck its disclosures whenever processors, authentication, billing, analytics, or user-content behavior changes.
+The public Terms and Privacy Policy were updated on August 24, 2026 with provider-specific AI disclosures, separate-consent language, withdrawal instructions, and the confirmed ElevenLabs model-improvement opt-out. Recheck these disclosures whenever processors, authentication, billing, analytics, or user-content behavior changes.
 
 ## Product page copy
 
@@ -252,7 +254,7 @@ Sexual Content / Nudity: None
 Violence / Weapons: None
 ```
 
-Do not force an 18+ override unless ChiRho's Terms impose that minimum. Let App Store Connect calculate the rating from truthful answers.
+ChiRho's Terms and signup require users to be at least 13. Answer the questionnaire truthfully and override the result to **13+** if Apple calculates a lower rating. Do not use an 18+ override unless the Terms and product policy are changed to require adults only.
 
 ## Export compliance
 

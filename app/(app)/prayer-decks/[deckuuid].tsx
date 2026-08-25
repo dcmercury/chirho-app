@@ -9,6 +9,7 @@ export default function PrayerDeckRoute() {
     <PrayerDeckScreen
       deckuuid={deckuuid || ""}
       onClose={() => router.back()}
+      onFinished={() => router.replace("/(app)")}
     />
   );
 }

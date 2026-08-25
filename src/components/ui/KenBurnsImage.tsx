@@ -20,6 +20,20 @@ const CROSSFADE_MS = 2_800;
 const LOAD_WAIT_MS = 2_500;
 const LOAD_POLL_MS = 100;
 
+function logKenBurnsImage(
+  debugLabel: string | undefined,
+  phase: string,
+  details: Record<string, unknown>,
+) {
+  if (!__DEV__ || !debugLabel) return;
+  console.log("[PrayerDeck][Background]", {
+    phase,
+    debugLabel,
+    ...details,
+    timestamp: new Date().toISOString(),
+  });
+}
+
 function randomHoldMs() {
   return HOLD_MIN_MS + Math.random() * HOLD_SPAN_MS;
 }
@@ -63,12 +77,18 @@ export function KenBurnsImage({
   style,
   contentFit = "cover",
   accessibilityLabel,
+  crossfadeDurationMs = CROSSFADE_MS,
+  kenBurnsDurationMs = KEN_BURNS_MS,
+  debugLabel,
 }: {
   path?: string | null;
   paths?: Array<string | null | undefined>;
   style?: StyleProp<ViewStyle>;
   contentFit?: "cover" | "contain";
   accessibilityLabel?: string;
+  crossfadeDurationMs?: number;
+  kenBurnsDurationMs?: number;
+  debugLabel?: string;
 }) {
   const list = uniqueImagePaths(paths, path);
   const pathsKey = list.join("\0");
@@ -77,24 +97,35 @@ export function KenBurnsImage({
   const indexRef = useRef(0);
   const showingOverlayRef = useRef(false);
   const loadedRef = useRef(new Set<string>());
-  const [basePath, setBasePath] = useState(list[0]);
-  const [overlayPath, setOverlayPath] = useState(list[1]);
-  const basePathRef = useRef(list[0]);
-  const overlayPathRef = useRef(list[1]);
+  const [basePath, setBasePath] = useState<string | undefined>(list[0]);
+  const [overlayPath, setOverlayPath] = useState<string | undefined>(list[1]);
+  const basePathRef = useRef<string | undefined>(list[0]);
+  const overlayPathRef = useRef<string | undefined>(list[1]);
   const fade = useSharedValue(0);
   const progress = useSharedValue(0);
   const reducedMotion = useReducedMotion();
   const startDelayMs = useRef(Math.random() * START_SPAN_MS).current;
   const kenBurnsStart = useRef(Math.random()).current;
 
+  useEffect(() => {
+    logKenBurnsImage(debugLabel, "paths-changed", {
+      paths: listRef.current,
+      visiblePath: showingOverlayRef.current
+        ? overlayPathRef.current
+        : basePathRef.current,
+    });
+  }, [debugLabel, pathsKey]);
+
   const markLoaded = (nextPath?: string | null) => {
-    if (nextPath) loadedRef.current.add(nextPath);
+    if (!nextPath) return;
+    loadedRef.current.add(nextPath);
+    logKenBurnsImage(debugLabel, "image-loaded", { imagePath: nextPath });
   };
 
   useEffect(() => {
+    if (!reducedMotion) return;
     indexRef.current = 0;
     showingOverlayRef.current = false;
-    loadedRef.current = new Set();
     const nextBase = listRef.current[0];
     const nextOverlay = listRef.current[1];
     basePathRef.current = nextBase;
@@ -102,7 +133,7 @@ export function KenBurnsImage({
     setBasePath(nextBase);
     setOverlayPath(nextOverlay);
     fade.value = 0;
-  }, [fade, pathsKey]);
+  }, [fade, pathsKey, reducedMotion]);
 
   useEffect(() => {
     if (reducedMotion) {
@@ -112,17 +143,17 @@ export function KenBurnsImage({
     progress.value = kenBurnsStart;
     progress.value = withRepeat(
       withTiming(1, {
-        duration: KEN_BURNS_MS,
+        duration: kenBurnsDurationMs,
         easing: Easing.inOut(Easing.sin),
       }),
       -1,
       true,
     );
     return () => cancelAnimation(progress);
-  }, [progress, reducedMotion]);
+  }, [kenBurnsDurationMs, progress, reducedMotion]);
 
   useEffect(() => {
-    if (reducedMotion || listRef.current.length < 2) return;
+    if (reducedMotion) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -157,22 +188,136 @@ export function KenBurnsImage({
       }
     };
 
+    const setUpcoming = () => {
+      const photos = listRef.current;
+      const upcoming = photos[1] ?? photos[0];
+      if (!upcoming) return;
+      if (showingOverlayRef.current) {
+        basePathRef.current = upcoming;
+        setBasePath(upcoming);
+      } else {
+        overlayPathRef.current = upcoming;
+        setOverlayPath(upcoming);
+      }
+    };
+
+    const crossfadeToIncoming = async (incoming: string) => {
+      logKenBurnsImage(debugLabel, "crossfade-start", {
+        fromPath: showingOverlayRef.current
+          ? overlayPathRef.current
+          : basePathRef.current,
+        toPath: incoming,
+        durationMs: crossfadeDurationMs,
+      });
+      if (showingOverlayRef.current) {
+        if (basePathRef.current !== incoming) {
+          basePathRef.current = incoming;
+          setBasePath(incoming);
+        }
+        await waitForLoaded(incoming);
+        if (cancelled) return;
+        fade.value = withTiming(0, {
+          duration: crossfadeDurationMs,
+          easing: Easing.inOut(Easing.cubic),
+        });
+        await wait(crossfadeDurationMs);
+        if (cancelled) return;
+        showingOverlayRef.current = false;
+      } else {
+        if (overlayPathRef.current !== incoming) {
+          overlayPathRef.current = incoming;
+          setOverlayPath(incoming);
+        }
+        await waitForLoaded(incoming);
+        if (cancelled) return;
+        fade.value = withTiming(1, {
+          duration: crossfadeDurationMs,
+          easing: Easing.inOut(Easing.cubic),
+        });
+        await wait(crossfadeDurationMs);
+        if (cancelled) return;
+        showingOverlayRef.current = true;
+      }
+      indexRef.current = 0;
+      setUpcoming();
+      logKenBurnsImage(debugLabel, "crossfade-complete", {
+        visiblePath: incoming,
+      });
+    };
+
     const run = async () => {
-      await wait(startDelayMs);
+      const fadeNow = fade.value;
+      if (fadeNow >= 0.5) {
+        showingOverlayRef.current = true;
+        if (fadeNow !== 1) fade.value = 1;
+      } else {
+        showingOverlayRef.current = false;
+        if (fadeNow !== 0) fade.value = 0;
+      }
+
+      const photos = listRef.current;
+      const incoming = photos[0];
+      const visible = showingOverlayRef.current
+        ? overlayPathRef.current
+        : basePathRef.current;
+
+      if (!incoming) {
+        showingOverlayRef.current = false;
+        basePathRef.current = undefined;
+        overlayPathRef.current = undefined;
+        setBasePath(undefined);
+        setOverlayPath(undefined);
+        fade.value = 0;
+        return;
+      }
+
+      let didCrossfadeToIncoming = false;
+      if (visible && visible !== incoming) {
+        await crossfadeToIncoming(incoming);
+        didCrossfadeToIncoming = true;
+        if (cancelled) return;
+      } else if (!visible) {
+        showingOverlayRef.current = false;
+        basePathRef.current = incoming;
+        overlayPathRef.current = photos[1];
+        setBasePath(incoming);
+        setOverlayPath(photos[1]);
+        fade.value = 0;
+      } else {
+        indexRef.current = 0;
+        setUpcoming();
+      }
+
+      if (listRef.current.length < 2) return;
+
+      if (!didCrossfadeToIncoming) {
+        await wait(startDelayMs);
+      }
       while (!cancelled) {
         const to = showingOverlayRef.current ? 0 : 1;
-        const incoming = to === 1 ? overlayPathRef.current : basePathRef.current;
-        await waitForLoaded(incoming);
+        const nextIncoming =
+          to === 1 ? overlayPathRef.current : basePathRef.current;
+        await waitForLoaded(nextIncoming);
         if (cancelled) return;
         await wait(randomHoldMs());
         if (cancelled) return;
+        logKenBurnsImage(debugLabel, "crossfade-start", {
+          fromPath: showingOverlayRef.current
+            ? overlayPathRef.current
+            : basePathRef.current,
+          toPath: nextIncoming,
+          durationMs: crossfadeDurationMs,
+        });
         fade.value = withTiming(to, {
-          duration: CROSSFADE_MS,
+          duration: crossfadeDurationMs,
           easing: Easing.inOut(Easing.cubic),
         });
-        await wait(CROSSFADE_MS);
+        await wait(crossfadeDurationMs);
         if (cancelled) return;
         revealHidden(to === 1);
+        logKenBurnsImage(debugLabel, "crossfade-complete", {
+          visiblePath: nextIncoming,
+        });
       }
     };
 
@@ -182,7 +327,14 @@ export function KenBurnsImage({
       if (timer) clearTimeout(timer);
       cancelAnimation(fade);
     };
-  }, [fade, pathsKey, reducedMotion, startDelayMs]);
+  }, [
+    crossfadeDurationMs,
+    debugLabel,
+    fade,
+    pathsKey,
+    reducedMotion,
+    startDelayMs,
+  ]);
 
   const motionStyle = useAnimatedStyle(() => ({
     transform: [

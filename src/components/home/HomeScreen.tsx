@@ -9,6 +9,7 @@ import {
   View,
   StyleSheet,
 } from "react-native";
+import Svg, { Circle, Path } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { useAuth, useUser } from "@clerk/expo";
@@ -189,6 +190,44 @@ function praySubjects(
   ];
   return subjects.sort((a, b) =>
     a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
+  );
+}
+
+function formatDeckDate(localDate: string) {
+  const [year, month, day] = localDate.split("-").map(Number);
+  if (!year || !month || !day) return localDate;
+  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function MorningIcon({ color, size = 16 }: { color: string; size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx={12} cy={12} r={4} stroke={color} strokeWidth={1.8} />
+      <Path
+        d="M12 3v2.2M12 18.8V21M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M3 12h2.2M18.8 12H21M4.9 19.1l1.6-1.6M17.5 6.5l1.6-1.6"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+function EveningIcon({ color, size = 16 }: { color: string; size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M16.4 14.2A6.4 6.4 0 0 1 9.8 7.6 6.2 6.2 0 1 0 16.4 14.2Z"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinejoin="round"
+      />
+    </Svg>
   );
 }
 
@@ -1157,7 +1196,7 @@ export function HomeScreen() {
               <>
                 <Text style={styles.section}>Today's Prayer Deck</Text>
                 <Pressable
-                  accessibilityLabel={`Open ${home.dailyDeck.timeOfDay} prayer deck`}
+                  accessibilityLabel={`Open ${home.dailyDeck.timeOfDay} prayer deck for ${formatDeckDate(home.dailyDeck.localDate)}`}
                   accessibilityRole="button"
                   onPress={() =>
                     router.push(
@@ -1173,9 +1212,27 @@ export function HomeScreen() {
                     <Text style={styles.deckEyebrow}>
                       {home.dailyDeck.timeOfDay} · {home.dailyDeck.status}
                     </Text>
-                    <Text style={styles.deckTitle}>
-                      {home.dailyDeck.labels.join(" · ") || "Daily prayers"}
-                    </Text>
+                    <View style={styles.deckTitleRow}>
+                      <Text style={styles.deckTitle}>
+                        {formatDeckDate(home.dailyDeck.localDate)}
+                      </Text>
+                      <View style={styles.deckIcons}>
+                        <MorningIcon
+                          color={
+                            home.dailyDeck.timeOfDay === "morning"
+                              ? colors.accentText
+                              : colors.mutedSoft
+                          }
+                        />
+                        <EveningIcon
+                          color={
+                            home.dailyDeck.timeOfDay === "evening"
+                              ? colors.accentText
+                              : colors.mutedSoft
+                          }
+                        />
+                      </View>
+                    </View>
                     <Text style={styles.deckMeta}>
                       {home.dailyDeck.readyCards} of {home.dailyDeck.totalCards} ready
                     </Text>
@@ -1628,11 +1685,22 @@ function createStyles(colors: ColorTokens) {
     letterSpacing: 0.7,
     textTransform: "uppercase",
   },
+  deckTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 5,
+  },
   deckTitle: {
     color: colors.title,
     fontFamily: fonts.displayMedium,
     fontSize: 17,
-    marginTop: 5,
+    flexShrink: 1,
+  },
+  deckIcons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   deckMeta: {
     color: colors.mutedSoft,

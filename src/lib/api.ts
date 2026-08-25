@@ -615,6 +615,20 @@ export async function getPrayerDeck(
   };
 }
 
+export async function archivePrayerDeck(
+  deckuuid: string,
+  token: string,
+): Promise<void> {
+  await authenticatedRequest(
+    `/api/mobile/prayer-decks/${encodeURIComponent(deckuuid)}`,
+    token,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ action: "archive" }),
+    },
+  );
+}
+
 export async function retryPrayerDeckItem(
   deckuuid: string,
   subjectId: string,
