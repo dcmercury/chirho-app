@@ -1,4 +1,4 @@
-# App Store Review Notes (ChiRho 1.1.0)
+# App Store Review Notes (ChiRho 1.1.2)
 
 Paste the **Reviewer notes** section into App Store Connect. Fill in the Clerk test phone before submitting.
 
