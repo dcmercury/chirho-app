@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Pressable,
   StyleSheet,
@@ -7,18 +8,43 @@ import {
   View,
 } from "react-native";
 import { fonts, type as typography, type ColorTokens } from "../../../theme/tokens";
-import { useThemedStyles } from "../../../theme/ThemeProvider";
+import { useTheme, useThemedStyles } from "../../../theme/ThemeProvider";
 import { AuthenticatedImage } from "../../ui/AuthenticatedImage";
+import { PauseIcon, PlayIcon } from "../../../features/groups/components/Icons";
 
 export function useProfileStyles() {
   return useThemedStyles(createProfileStyles);
 }
 
-export function Section({ title, children }: { title: string; children: ReactNode }) {
+export function CategoryLabel({ children }: { children: ReactNode }) {
+  const styles = useProfileStyles();
+  return (
+    <Text accessibilityRole="header" style={styles.categoryLabel}>
+      {children}
+    </Text>
+  );
+}
+
+export function Section({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
   const styles = useProfileStyles();
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      {action ? (
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>{title}</Text>
+          {action}
+        </View>
+      ) : (
+        <Text style={styles.sectionTitle}>{title}</Text>
+      )}
       {children}
     </View>
   );
@@ -162,6 +188,74 @@ export function Pill({
   );
 }
 
+/** A selectable pill that also plays a sample of the voice it names. */
+export function VoicePill({
+  label,
+  active,
+  disabled,
+  loading = false,
+  playing,
+  onPress,
+  onPreview,
+}: {
+  label: string;
+  active: boolean;
+  disabled?: boolean;
+  loading?: boolean;
+  playing: boolean;
+  onPress: () => void;
+  onPreview: () => void;
+}) {
+  const styles = useProfileStyles();
+  const { colors } = useTheme();
+  const iconColor = active ? colors.accentText : colors.mutedSoft;
+  return (
+    <View
+      style={[
+        styles.pill,
+        styles.voicePill,
+        active && styles.pillActive,
+        disabled && styles.disabled,
+      ]}
+    >
+      <Pressable
+        accessibilityLabel={label}
+        accessibilityRole="button"
+        accessibilityState={{ selected: active, disabled }}
+        disabled={disabled}
+        hitSlop={{ top: 10, bottom: 10, left: 10 }}
+        onPress={onPress}
+      >
+        <Text style={[styles.pillText, active && styles.pillTextActive]}>{label}</Text>
+      </Pressable>
+      <Pressable
+        accessibilityLabel={
+          loading
+            ? `Cancel loading ${label} sample`
+            : playing
+              ? `Stop ${label} sample`
+              : `Play ${label} sample`
+        }
+        accessibilityRole="button"
+        hitSlop={{ top: 8, bottom: 8, right: 8 }}
+        onPress={onPreview}
+        style={({ pressed }) => [
+          styles.voicePreview,
+          pressed && styles.voicePreviewPressed,
+        ]}
+      >
+        {loading ? (
+          <ActivityIndicator color={iconColor} size={12} />
+        ) : playing ? (
+          <PauseIcon color={iconColor} size={12} />
+        ) : (
+          <PlayIcon color={iconColor} size={12} />
+        )}
+      </Pressable>
+    </View>
+  );
+}
+
 export function Action({
   label,
   disabled,
@@ -232,8 +326,34 @@ function createProfileStyles(colors: ColorTokens) {
     marginTop: 3,
     textTransform: "uppercase",
   },
-  section: { marginTop: 28, gap: 10 },
+  categoryLabel: {
+    marginTop: 38,
+    color: colors.title,
+    fontFamily: fonts.displayMedium,
+    fontSize: 17,
+  },
+  section: { marginTop: 20, gap: 10 },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   sectionTitle: { ...typography.labelSm, color: colors.muted },
+  sectionPlus: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.glassBorderRow,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sectionPlusPressed: { opacity: 0.68 },
+  sectionPlusText: {
+    color: colors.title,
+    fontSize: 16,
+    lineHeight: 18,
+  },
   toggleActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   toggleLabel: { flex: 1, paddingRight: 8 },
   accountSummary: {
@@ -243,16 +363,16 @@ function createProfileStyles(colors: ColorTokens) {
   },
   accountAvatarButton: { position: "relative" },
   accountAvatarPressed: { opacity: 0.68 },
-  accountAvatarEditDot: {
+  accountAvatarCamera: {
     position: "absolute",
-    right: 7,
-    bottom: 5,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: colors.canvas,
-    backgroundColor: colors.accent,
+    left: 0,
+    top: 0,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.42)",
   },
   accountSummaryToggle: {
     minHeight: 50,
@@ -289,18 +409,16 @@ function createProfileStyles(colors: ColorTokens) {
   },
   statPressed: { opacity: 0.68 },
   input: {
-    minHeight: 42,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    backgroundColor: colors.glassFill,
-    color: colors.title,
-    fontFamily: fonts.body,
-    fontSize: 12,
-    paddingHorizontal: 12,
+    minWidth: 0,
   },
   nameFields: { flexDirection: "row", gap: 8 },
   nameField: { flex: 1, minWidth: 0 },
+  nameActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
   nameSave: {
     alignSelf: "flex-end",
     minWidth: 116,
@@ -320,17 +438,17 @@ function createProfileStyles(colors: ColorTokens) {
     fontSize: 12,
   },
   nameSaveTextDisabled: { color: colors.muted },
-  communitySearch: { flexDirection: "row", gap: 8 },
-  communityInput: { flex: 1 },
-  searchButton: {
-    minWidth: 68,
-    borderRadius: 10,
-    backgroundColor: colors.buttonPrimary,
+  communitySearch: { position: "relative" },
+  communityInput: { paddingRight: 40 },
+  communitySearchIcon: {
+    position: "absolute",
+    right: 4,
+    top: 0,
+    bottom: 0,
+    width: 40,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 10,
   },
-  searchText: { color: colors.buttonOnPrimary, fontFamily: fonts.bodyMedium, fontSize: 11 },
   infoRow: {
     minHeight: 48,
     flexDirection: "row",
@@ -385,6 +503,14 @@ function createProfileStyles(colors: ColorTokens) {
   },
   pillText: { color: colors.mutedSoft, fontFamily: fonts.body, fontSize: 11 },
   pillTextActive: { color: colors.accentText },
+  voicePill: { flexDirection: "row", alignItems: "center", gap: 8 },
+  voicePreview: {
+    width: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  voicePreviewPressed: { opacity: 0.55 },
   settingGroup: { marginBottom: 8 },
   settingMeta: {
     color: colors.muted,
@@ -398,17 +524,19 @@ function createProfileStyles(colors: ColorTokens) {
   listFooter: { paddingVertical: 18 },
   drawerCount: { marginBottom: 12 },
   manageRow: {
-    minHeight: 50,
+    minHeight: 58,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     borderBottomWidth: 1,
     borderBottomColor: colors.glassBorderSoft,
+    paddingVertical: 8,
   },
   manageAvatar: {
     width: 34,
     height: 34,
     borderRadius: 17,
+    overflow: "hidden",
     marginRight: 10,
     borderWidth: 1,
     borderColor: colors.glassBorder,
@@ -423,9 +551,15 @@ function createProfileStyles(colors: ColorTokens) {
     fontFamily: fonts.displayMedium,
     fontSize: 13,
   },
-  manageCopy: { flex: 1 },
+  manageCopy: { flex: 1, minWidth: 0, paddingRight: 8 },
   manageName: { color: colors.title, fontFamily: fonts.bodyMedium, fontSize: 13 },
-  manageMeta: { color: colors.muted, fontFamily: fonts.body, fontSize: 10 },
+  manageMeta: {
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: 10,
+    lineHeight: 14,
+    marginTop: 2,
+  },
   manageActions: { flexDirection: "row", alignItems: "center" },
   manageActionTouch: {
     minWidth: 44,

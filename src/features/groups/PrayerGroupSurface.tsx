@@ -16,10 +16,15 @@ import {
   getGroupMessages,
   getGroupPrayerCounts,
   getPrayerGroupSurface,
+  getPrayerRequestEvents,
   getPrayerResponses,
+  postPrayerRequestUpdate,
   prayForGroupMessage,
   reportGroupContent,
+  requestPrayerRequestUpdate,
   sendGroupMessage,
+  suggestPrayerRequestArchive,
+  transitionPrayerRequest,
 } from "../../lib/api";
 import { resolveImage } from "../../lib/assets";
 import {
@@ -33,18 +38,20 @@ import type {
   GroupMessage,
   PrayerGroupSurfaceData,
   PrayerIntensity,
+  PrayerRequestArchiveReason,
+  PrayerRequestEvent,
+  PrayerRequestResolveReason,
   PrayerResponse,
   TokenProvider,
 } from "./types";
 import { GroupBackground } from "./components/GroupBackground";
 import { CogIcon } from "./components/Icons";
 import { GroupOverview } from "./components/GroupOverview";
+import { InviteSheet } from "./components/InviteSheet";
 import { MembersSheet } from "./components/MembersSheet";
 import type { ReportReasonId } from "./components/ContentSafetyButton";
 import { PrayerRequestView } from "./components/PrayerRequestView";
 import { LoadingChiRhoOverlay } from "../../components/ui/LoadingChiRhoOverlay";
-
-const chiRhoIcon = require("../../../assets/onboarding/chirho.svg");
 
 async function prefetchGroupImages(result: PrayerGroupSurfaceData) {
   const paths = [
@@ -111,18 +118,26 @@ export function PrayerGroupSurface({
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [mode, setMode] = useState<"group" | "prayers">("group");
+  const [requestView, setRequestView] = useState<"active" | "history">("active");
+  const [historyData, setHistoryData] =
+    useState<PrayerGroupSurfaceData | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [requestOpen, setRequestOpen] = useState(false);
   const [requestText, setRequestText] = useState("");
   const [generatingRequest, setGeneratingRequest] = useState(false);
   const [sendingRequest, setSendingRequest] = useState(false);
   const [responses, setResponses] = useState<PrayerResponse[]>([]);
+  const [overviewParticipants, setOverviewParticipants] = useState<
+    Record<string, string[]>
+  >({});
   const [loadingResponses, setLoadingResponses] = useState(false);
   const [generatedPrayer, setGeneratedPrayer] = useState<string | null>(null);
   const [generatingPrayer, setGeneratingPrayer] = useState(false);
   const [sendingPrayer, setSendingPrayer] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [lifecycleEvents, setLifecycleEvents] = useState<PrayerRequestEvent[]>([]);
   const [membersOpen, setMembersOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
   const appliedInitialRoute = useRef(false);
   const blockedIdsRef = useRef<Set<string>>(new Set());
 
@@ -159,6 +174,29 @@ export function PrayerGroupSurface({
     [groupuuid, requireToken],
   );
 
+  const loadHistory = useCallback(async () => {
+    const token = await requireToken();
+    const result = await getPrayerGroupSurface(groupuuid, token, "archived");
+    setHistoryData(result);
+    return result;
+  }, [groupuuid, requireToken]);
+
+  const changeRequestView = useCallback(
+    async (nextView: "active" | "history") => {
+      setActionError(null);
+      setRequestView(nextView);
+      setCurrentIndex(0);
+      if (nextView === "history" && !historyData) {
+        try {
+          await loadHistory();
+        } catch (err) {
+          setActionError(messageFor(err, "Unable to load Prayer History."));
+        }
+      }
+    },
+    [historyData, loadHistory],
+  );
+
   useEffect(() => {
     load();
   }, [load]);
@@ -180,6 +218,66 @@ export function PrayerGroupSurface({
     }
   }, [data, initialMessageId, initialRequestOpen]);
 
+  const visibleData = requestView === "history" ? historyData : data;
+  const visibleMessages = visibleData?.messages || [];
+  const visiblePrayerCounts = visibleData?.prayerCounts || {};
+
+  const overviewParticipantKey = visibleData
+    ? visibleMessages
+        .slice(-3)
+        .map(
+          (message) =>
+            `${message.messageId}:${visiblePrayerCounts[message.messageId]?.count ?? 0}`,
+        )
+        .join("|")
+    : "";
+
+  useEffect(() => {
+    if (!visibleData || !overviewParticipantKey) return;
+    const recent = visibleMessages.slice(-3);
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const token = await requireToken();
+        const entries = await Promise.all(
+          recent.map(async (message) => {
+            const count = visiblePrayerCounts[message.messageId]?.count ?? 0;
+            if (count <= 0) return [message.messageId, [] as string[]] as const;
+            const prayers = await getPrayerResponses(
+              groupuuid,
+              message.messageId,
+              token,
+            );
+            return [
+              message.messageId,
+              Array.from(new Set(prayers.map((prayer) => prayer.clerkId))),
+            ] as [string, string[]];
+          }),
+        );
+        if (cancelled) return;
+        setOverviewParticipants((prev) => {
+          const next = { ...prev };
+          for (const [id, ids] of entries) next[id] = ids;
+          return next;
+        });
+      } catch {
+        // Keep existing participant avatars if the background fetch fails.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    groupuuid,
+    overviewParticipantKey,
+    requireToken,
+    visibleData,
+    visibleMessages,
+    visiblePrayerCounts,
+  ]);
+
   const pollActivity = useCallback(async () => {
     try {
       const token = await requireToken();
@@ -189,7 +287,17 @@ export function PrayerGroupSurface({
       ]);
       setData((current) => {
         if (!current) return current;
-        const merged = mergeMessages(current.messages, messages).filter(
+        const incomingIds = new Set(messages.map((message) => message.messageId));
+        const oldestIncomingSequence = messages[0]?.sequenceNumber;
+        const retained =
+          messages.length < 10 || oldestIncomingSequence === undefined
+            ? []
+            : current.messages.filter(
+                (message) =>
+                  message.sequenceNumber < oldestIncomingSequence ||
+                  incomingIds.has(message.messageId),
+              );
+        const merged = mergeMessages(retained, messages).filter(
           (item) => !blockedIdsRef.current.has(item.userId),
         );
         return {
@@ -220,6 +328,15 @@ export function PrayerGroupSurface({
                   content: message.content,
                   timestamp: message.timestamp,
                   sequenceNumber: message.sequenceNumber,
+                  status: "active",
+                  lastUpdateAt: message.timestamp,
+                  archivedAt: null,
+                  archivedBy: null,
+                  archiveDisposition: null,
+                  archiveReason: null,
+                  archiveNote: null,
+                  staleSnoozedUntil: null,
+                  isStale: false,
                 },
               ]),
             }
@@ -270,31 +387,66 @@ export function PrayerGroupSurface({
     };
   }, [connected, pollActivity]);
 
-  const selectedMessage = data?.messages[currentIndex];
+  const selectedMessage = visibleMessages[currentIndex];
+  const selectedMessageId = selectedMessage?.messageId ?? null;
+  const loadedResponsesForRef = useRef<string | null>(null);
   const loadResponses = useCallback(
     async (message: GroupMessage) => {
-      setLoadingResponses(true);
+      const alreadyShown = loadedResponsesForRef.current === message.messageId;
+      if (!alreadyShown) setLoadingResponses(true);
       try {
         const token = await requireToken();
-        setResponses(
-          await getPrayerResponses(groupuuid, message.messageId, token),
+        const next = await getPrayerResponses(
+          groupuuid,
+          message.messageId,
+          token,
         );
+        loadedResponsesForRef.current = message.messageId;
+        setResponses(next);
       } catch {
-        setResponses([]);
+        if (!alreadyShown) setResponses([]);
       } finally {
-        setLoadingResponses(false);
+        if (!alreadyShown) setLoadingResponses(false);
       }
     },
     [groupuuid, requireToken],
   );
 
   useEffect(() => {
-    if (mode !== "prayers" || !selectedMessage) {
-      setResponses([]);
+    if (mode !== "prayers" || !selectedMessageId || !selectedMessage) {
+      if (mode !== "prayers") {
+        setResponses([]);
+        loadedResponsesForRef.current = null;
+      }
       return;
     }
-    loadResponses(selectedMessage);
-  }, [loadResponses, mode, selectedMessage]);
+    if (loadedResponsesForRef.current === selectedMessageId) return;
+    void loadResponses(selectedMessage);
+  }, [loadResponses, mode, selectedMessage, selectedMessageId]);
+
+  useEffect(() => {
+    if (mode !== "prayers" || !selectedMessageId) {
+      setLifecycleEvents([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await requireToken();
+        const events = await getPrayerRequestEvents(
+          groupuuid,
+          selectedMessageId,
+          token,
+        );
+        if (!cancelled) setLifecycleEvents(events);
+      } catch {
+        if (!cancelled) setLifecycleEvents([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [groupuuid, mode, requireToken, selectedMessageId]);
 
   const refreshPrayerState = async (message: GroupMessage) => {
     const token = await requireToken();
@@ -302,10 +454,22 @@ export function PrayerGroupSurface({
       getGroupPrayerCounts(groupuuid, token),
       getPrayerResponses(groupuuid, message.messageId, token),
     ]);
-    setData((current) =>
-      current ? { ...current, prayerCounts } : current,
-    );
+    if (requestView === "history") {
+      setHistoryData((current) =>
+        current ? { ...current, prayerCounts } : current,
+      );
+    } else {
+      setData((current) =>
+        current ? { ...current, prayerCounts } : current,
+      );
+    }
     setResponses(nextResponses);
+    setOverviewParticipants((prev) => ({
+      ...prev,
+      [message.messageId]: [
+        ...new Set(nextResponses.map((prayer) => prayer.clerkId)),
+      ],
+    }));
   };
 
   const handlePray = async (message: GroupMessage) => {
@@ -320,15 +484,25 @@ export function PrayerGroupSurface({
   };
 
   const removeMessageFromDeck = (messageId: string) => {
-    if (!data) return;
-    const messages = data.messages.filter(
+    if (!visibleData) return;
+    const messages = visibleData.messages.filter(
       (item) => item.messageId !== messageId,
     );
-    setData({
-      ...data,
+    const next = {
+      ...visibleData,
       messages,
-      prayerRequestCount: Math.max(0, data.prayerRequestCount - 1),
-    });
+      prayerRequestCount: Math.max(0, visibleData.prayerRequestCount - 1),
+      activeRequestCount:
+        requestView === "active"
+          ? Math.max(0, visibleData.activeRequestCount - 1)
+          : visibleData.activeRequestCount,
+      historyRequestCount:
+        requestView === "history"
+          ? Math.max(0, visibleData.historyRequestCount - 1)
+          : visibleData.historyRequestCount,
+    };
+    if (requestView === "history") setHistoryData(next);
+    else setData(next);
     setCurrentIndex(Math.min(currentIndex, Math.max(messages.length - 1, 0)));
     if (!messages.length) setMode("group");
   };
@@ -341,6 +515,97 @@ export function PrayerGroupSurface({
       removeMessageFromDeck(message.messageId);
     } catch (err) {
       setActionError(messageFor(err, "Unable to delete this request."));
+    }
+  };
+
+  const refreshLifecycleViews = async () => {
+    const [, history] = await Promise.all([load(true), loadHistory()]);
+    setHistoryData(history);
+  };
+
+  const handlePostUpdate = async (
+    message: GroupMessage,
+    content: string,
+  ) => {
+    setActionError(null);
+    try {
+      const token = await requireToken();
+      await postPrayerRequestUpdate(
+        groupuuid,
+        message.messageId,
+        content,
+        token,
+      );
+      const events = await getPrayerRequestEvents(
+        groupuuid,
+        message.messageId,
+        token,
+      );
+      setLifecycleEvents(events);
+      await load(true);
+    } catch (err) {
+      setActionError(messageFor(err, "Unable to post this update."));
+      throw err;
+    }
+  };
+
+  const handleLifecycleTransition = async (
+    message: GroupMessage,
+    action: "resolve" | "archive" | "restore" | "keep_active",
+    reason?: PrayerRequestResolveReason | PrayerRequestArchiveReason,
+  ) => {
+    setActionError(null);
+    try {
+      const token = await requireToken();
+      await transitionPrayerRequest(
+        groupuuid,
+        message.messageId,
+        action,
+        token,
+        { reason },
+      );
+      await refreshLifecycleViews();
+      if (action !== "keep_active") {
+        setMode("group");
+        setCurrentIndex(0);
+      }
+    } catch (err) {
+      setActionError(messageFor(err, "Unable to update this prayer."));
+      throw err;
+    }
+  };
+
+  const handleSuggestArchive = async (
+    message: GroupMessage,
+    reason: PrayerRequestArchiveReason,
+  ) => {
+    setActionError(null);
+    try {
+      const token = await requireToken();
+      await suggestPrayerRequestArchive(
+        groupuuid,
+        message.messageId,
+        reason,
+        token,
+      );
+    } catch (err) {
+      setActionError(messageFor(err, "Unable to send this suggestion."));
+      throw err;
+    }
+  };
+
+  const handleRequestUpdate = async (message: GroupMessage) => {
+    setActionError(null);
+    try {
+      const token = await requireToken();
+      await requestPrayerRequestUpdate(
+        groupuuid,
+        message.messageId,
+        token,
+      );
+    } catch (err) {
+      setActionError(messageFor(err, "Unable to request an update."));
+      throw err;
     }
   };
 
@@ -419,15 +684,17 @@ export function PrayerGroupSurface({
       setResponses((current) =>
         current.filter((response) => response.clerkId !== clerkId),
       );
-      if (data) {
-        const messages = data.messages.filter(
+      if (visibleData) {
+        const messages = visibleData.messages.filter(
           (item) => item.userId !== clerkId,
         );
-        setData({
-          ...data,
+        const next = {
+          ...visibleData,
           messages,
           prayerRequestCount: messages.length,
-        });
+        };
+        if (requestView === "history") setHistoryData(next);
+        else setData(next);
         setCurrentIndex(Math.min(currentIndex, Math.max(messages.length - 1, 0)));
         if (!messages.length) setMode("group");
       }
@@ -580,38 +847,50 @@ export function PrayerGroupSurface({
     if (!data?.group.canCreatePrayerRequests) return;
     setActionError(null);
     setGeneratedPrayer(null);
+    setRequestView("active");
     setMode("group");
     setRequestOpen(true);
   };
 
-  const openPrayers = () => {
+  const openPrayers = (messageId?: string) => {
     setRequestOpen(false);
     setGeneratedPrayer(null);
     setMode("prayers");
-    if (data?.messages.length) setCurrentIndex(data.messages.length - 1);
+    if (!visibleMessages.length) return;
+    if (messageId) {
+      const index = visibleMessages.findIndex(
+        (message) => message.messageId === messageId,
+      );
+      setCurrentIndex(index >= 0 ? index : visibleMessages.length - 1);
+      return;
+    }
+    setCurrentIndex(visibleMessages.length - 1);
   };
 
   const previous = async () => {
-    if (!data) return;
+    if (!visibleData) return;
     if (currentIndex > 0) {
       setGeneratedPrayer(null);
       setCurrentIndex(currentIndex - 1);
       return;
     }
-    if (!data.hasMoreMessages || !data.messages.length) return;
+    if (!visibleData.hasMoreMessages || !visibleMessages.length) return;
     setLoadingOlder(true);
     try {
       const token = await requireToken();
       const older = await getGroupMessages(groupuuid, token, {
         limit: 10,
-        before: data.messages[0].timestamp,
+        before: visibleMessages[0].timestamp,
+        status: requestView === "history" ? "archived" : "active",
       });
-      const messages = mergeMessages(older, data.messages);
-      setData({
-        ...data,
+      const messages = mergeMessages(older, visibleMessages);
+      const nextData = {
+        ...visibleData,
         messages,
         hasMoreMessages: older.length >= 10,
-      });
+      };
+      if (requestView === "history") setHistoryData(nextData);
+      else setData(nextData);
       setCurrentIndex(Math.max(older.length - 1, 0));
     } catch (err) {
       setActionError(messageFor(err, "Unable to load earlier requests."));
@@ -621,7 +900,7 @@ export function PrayerGroupSurface({
   };
 
   const next = () => {
-    if (!data || currentIndex >= data.messages.length - 1) return;
+    if (!visibleData || currentIndex >= visibleMessages.length - 1) return;
     setGeneratedPrayer(null);
     setCurrentIndex(currentIndex + 1);
   };
@@ -656,37 +935,33 @@ export function PrayerGroupSurface({
         </View>
       ) : data ? (
         <>
-          <Pressable
-            accessibilityHint="Returns to the home screen"
-            accessibilityLabel="Open home"
-            accessibilityRole="button"
-            onPress={onOpenHome}
-            style={({ pressed }) => [
-              styles.homeButton,
-              { top: insets.top + 10 },
-              pressed && styles.homeButtonPressed,
-            ]}
-          >
-            <Image
-              accessible={false}
-              contentFit="contain"
-              source={chiRhoIcon}
-              style={styles.homeIcon}
-            />
-          </Pressable>
           {mode === "group" ? (
             <GroupOverview
               group={data.group}
               members={data.members}
-              prayerRequestCount={data.prayerRequestCount}
+              messages={visibleMessages}
+              participantsByMessage={overviewParticipants}
+              prayerRequestCount={visibleData?.prayerRequestCount || 0}
+              activeRequestCount={data.activeRequestCount}
+              historyRequestCount={
+                historyData?.historyRequestCount || data.historyRequestCount
+              }
+              requestView={requestView}
               refreshing={refreshing}
               requestOpen={requestOpen}
               requestText={requestText}
               generatingRequest={generatingRequest}
               sendingRequest={sendingRequest}
               actionError={actionError}
-              onRefresh={() => load(true)}
-              onOpenPrayers={openPrayers}
+              onRefresh={() => {
+                if (requestView === "history") {
+                  void loadHistory();
+                } else {
+                  void load(true);
+                }
+              }}
+              onOpenPrayers={() => openPrayers()}
+              onOpenPrayer={(messageId) => openPrayers(messageId)}
               onOpenRequest={openRequest}
               onCloseRequest={() => {
                 setRequestOpen(false);
@@ -695,21 +970,23 @@ export function PrayerGroupSurface({
               onRequestTextChange={setRequestText}
               onGenerateRequest={handleGenerateRequest}
               onSubmitRequest={handleSubmitRequest}
-              onOpenMembers={() => setMembersOpen(true)}
+              onOpenInvite={() => setInviteOpen(true)}
+              onOpenHome={onOpenHome}
+              onChangeRequestView={(view) => void changeRequestView(view)}
             />
           ) : (
             <PrayerRequestView
               groupName={data.group.name}
-              messages={data.messages}
+              messages={visibleMessages}
               currentIndex={currentIndex}
               members={data.members}
-              prayerCounts={data.prayerCounts}
+              prayerCounts={visiblePrayerCounts}
               responses={responses}
               loadingResponses={loadingResponses}
               generatedPrayer={generatedPrayer}
               generatingPrayer={generatingPrayer}
               sendingPrayer={sendingPrayer}
-              hasMoreMessages={data.hasMoreMessages}
+              hasMoreMessages={visibleData?.hasMoreMessages || false}
               loadingOlder={loadingOlder}
               actionError={actionError}
               onBack={() => setMode("group")}
@@ -724,28 +1001,56 @@ export function PrayerGroupSurface({
               onDismissGenerated={() => setGeneratedPrayer(null)}
               onNewRequest={openRequest}
               canCreatePrayerRequests={data.group.canCreatePrayerRequests}
+              lifecycleEnabled={data.group.canCreatePrayerRequests}
               isAdmin={data.group.isAdmin}
               onDeleteRequest={handleDeleteRequest}
               onReportRequest={handleReportRequest}
               onDeleteResponse={handleDeleteResponse}
               onReportResponse={handleReportResponse}
               onBlockMember={handleBlockMember}
+              lifecycleEvents={lifecycleEvents}
+              onPostUpdate={handlePostUpdate}
+              onResolve={(message, reason) =>
+                handleLifecycleTransition(message, "resolve", reason)
+              }
+              onArchive={(message, reason) =>
+                handleLifecycleTransition(message, "archive", reason)
+              }
+              onSuggestArchive={handleSuggestArchive}
+              onRestore={(message) =>
+                handleLifecycleTransition(message, "restore")
+              }
+              onKeepActive={(message) =>
+                handleLifecycleTransition(message, "keep_active")
+              }
+              onRequestUpdate={handleRequestUpdate}
             />
           )}
-          {data.group.isAdmin ? (
+          {data.group.isAdmin || data.group.canLeave ? (
             <Pressable
-              accessibilityLabel={`Open ${data.group.name} settings`}
+              accessibilityLabel={
+                data.group.isAdmin
+                  ? `Open ${data.group.name} settings`
+                  : `Open ${data.group.name} members`
+              }
               accessibilityRole="button"
               onPress={() => setMembersOpen(true)}
               style={({ pressed }) => [
                 styles.groupDrawerTrigger,
-                { top: insets.top + 60 },
+                { top: insets.top + 10 },
                 pressed && styles.groupDrawerTriggerPressed,
               ]}
             >
               <CogIcon color={colors.mutedStrong} size={18} />
             </Pressable>
           ) : null}
+          <InviteSheet
+            visible={inviteOpen}
+            group={data.group}
+            tokenProvider={tokenProvider}
+            onClose={() => setInviteOpen(false)}
+            onChanged={() => load(true)}
+          />
           <MembersSheet
             visible={membersOpen}
             group={data.group}
@@ -808,27 +1113,6 @@ function createStyles(colors: ColorTokens) {
     backgroundColor: colors.buttonPrimary,
   },
   retryText: { color: colors.buttonOnPrimary, fontFamily: fonts.bodyMedium, fontSize: 11 },
-  homeButton: {
-    position: "absolute",
-    right: 20,
-    zIndex: 10,
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    borderWidth: 1,
-    borderColor: colors.creamBorder,
-    backgroundColor: colors.creamFill,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  homeIcon: {
-    width: 18,
-    height: 24,
-  },
-  homeButtonPressed: {
-    opacity: 0.72,
-    transform: [{ scale: 0.96 }],
-  },
   groupDrawerTrigger: {
     position: "absolute",
     right: 20,

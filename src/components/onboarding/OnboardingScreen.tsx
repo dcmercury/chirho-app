@@ -20,8 +20,10 @@ import Animated, {
 import welcome from "../../data/welcome.json";
 import type { WelcomeStep } from "../../types/welcome";
 import type { Community } from "../../lib/api";
-import { clerkErrorMessage, joinCommunity, searchCommunities } from "../../lib/api";
+import type { LovedOneGender } from "../../types/home";
+import { clerkErrorMessage, joinCommunity, searchCommunities, updateAccountGender } from "../../lib/api";
 import { resolveImage, video } from "../../lib/assets";
+import { buildSignupConsentMetadata } from "../../lib/legalConsent";
 import {
   formatPhoneDisplay,
   formatPhoneInput,
@@ -44,12 +46,14 @@ import {
   CommunitySelected,
 } from "../ui/CommunityResult";
 import { GlassInput } from "../ui/GlassInput";
+import { GenderCircles } from "../ui/GenderCircles";
 import { OtpInput } from "../ui/OtpInput";
 import { PrimaryButton } from "../ui/PrimaryButton";
 import { GhostBack } from "../ui/GhostBack";
 import { ErrorBanner } from "../ui/ErrorBanner";
 import { StepFooter } from "../ui/StepFooter";
 import { PrivacyPolicyLink } from "../ui/PrivacyPolicyLink";
+import { SignupConsentControls } from "../ui/SignupConsentControls";
 
 const steps = welcome.steps as WelcomeStep[];
 
@@ -101,6 +105,9 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
 
   const [signUpMode, setSignUpMode] = useState(false);
   const [firstName, setFirstName] = useState("");
+  const [gender, setGender] = useState<LovedOneGender | null>(null);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [aiProcessingAllowed, setAiProcessingAllowed] = useState(false);
   const [signUpStep, setSignUpStep] = useState<"community" | "phone">("community");
   const [joinOption, setJoinOption] = useState<"church-group" | "just-myself" | null>(
     null,
@@ -122,9 +129,7 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
     steps.slice(0, currentStep + 1).filter((s) => s.type === "info").length - 1;
   const step = steps[currentStep];
   const isSignInStep = step?.type === "signin";
-  const isLastInfoStep =
-    step?.type === "info" &&
-    currentStep === steps.reduce((last, s, i) => (s.type === "info" ? i : last), 0);
+  const isFirstInfoStep = step?.type === "info" && currentStep === 0;
   const hasVideo = step?.video != null;
 
   const goAfterAuth = useCallback(() => {
@@ -219,6 +224,18 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
     if (signInIdx !== -1) goToStep(signInIdx);
   }, [goToStep]);
 
+  const handleSignUpClick = useCallback(() => {
+    const signUpIdx = steps.findIndex((s) => s.type === "signin");
+    if (signUpIdx === -1) return;
+    setSignUpMode(true);
+    goToStep(signUpIdx);
+  }, [goToStep]);
+
+  const handleInfoBack = useCallback(() => {
+    if (currentStep <= 0) return;
+    goToStep(currentStep - 1);
+  }, [currentStep, goToStep]);
+
   const handleBackFromSignIn = useCallback(() => {
     goToStep(0);
     setPendingVerification(false);
@@ -226,6 +243,9 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
     setAuthError(null);
     setSignUpMode(false);
     setFirstName("");
+    setGender(null);
+    setTermsAccepted(false);
+    setAiProcessingAllowed(false);
     setSignUpStep("community");
     setJoinOption(null);
     setSelectedGroup(null);
@@ -317,12 +337,16 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
     try {
       if (!pendingVerification) {
         if (!phoneNumber.trim()) throw new Error("Please enter your phone number");
+        if (!termsAccepted) {
+          throw new Error("Please agree to the Terms of Use to continue");
+        }
         const normalized = normalizePhone(phoneNumber);
         if (!normalized) throw new Error("Invalid phone number format");
         try {
           await signUp.create({
             phoneNumber: normalized,
             firstName: firstName.trim() || undefined,
+            unsafeMetadata: buildSignupConsentMetadata(aiProcessingAllowed),
           });
           await signUp.preparePhoneNumberVerification({ strategy: "phone_code" });
           setPendingVerification(true);
@@ -341,6 +365,15 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
         const result = await signUp.attemptPhoneNumberVerification({ code: otpCode });
         if (result.status === "complete") {
           await setSignUpActive({ session: result.createdSessionId });
+          if (gender) {
+            try {
+              await new Promise((r) => setTimeout(r, 500));
+              const token = await getToken();
+              if (token) await updateAccountGender(gender, token);
+            } catch {
+              // Account gender can be set later in Profile.
+            }
+          }
           if (selectedGroup) {
             await new Promise((r) => setTimeout(r, 500));
             await handleJoin();
@@ -517,11 +550,18 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
           </OrangeCaption>
           <GlassInput
             value={firstName}
-            onChangeText={setFirstName}
+            onChangeText={(v) =>
+              setFirstName(v.replace(/[^\p{L}\s'-]/gu, ""))
+            }
             placeholder="First Name"
             autoFocus
             autoCapitalize="words"
+            autoComplete="given-name"
+            textContentType="givenName"
           />
+          {firstName.trim() ? (
+            <GenderCircles onChange={setGender} value={gender} />
+          ) : null}
           <GlassInput
             value={phoneNumber}
             onChangeText={(v) => {
@@ -533,13 +573,24 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
             maxLength={14}
           />
           {authError ? <ErrorBanner message={authError} /> : null}
+          <SignupConsentControls
+            termsAccepted={termsAccepted}
+            onTermsAcceptedChange={setTermsAccepted}
+            aiProcessingAllowed={aiProcessingAllowed}
+            onAiProcessingAllowedChange={setAiProcessingAllowed}
+            disabled={authenticating}
+          />
           <PrimaryButton
             label={authenticating ? "Sending code..." : "Sign Up"}
             onPress={handleSignUp}
-            disabled={authenticating || !isValidPhone(phoneNumber)}
+            disabled={
+              authenticating ||
+              !termsAccepted ||
+              !isValidPhone(phoneNumber) ||
+              (Boolean(firstName.trim()) && !gender)
+            }
             loading={authenticating}
           />
-          <PrivacyPolicyLink style={styles.legal} />
           <GhostBack
             onPress={() => {
               setSignUpStep("community");
@@ -696,16 +747,29 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
         player={player}
         videoVisible={hasVideo}
         videoFaded={videoEnded}
+        header={
+          !isSignInStep ? (
+            <Pressable
+              onPress={handleSignUpClick}
+              style={({ pressed }) => [
+                styles.signUp,
+                pressed && { transform: [{ scale: 1.05 }] },
+              ]}
+            >
+              <Text style={styles.signUpText}>Sign Up</Text>
+            </Pressable>
+          ) : null
+        }
         footer={
           <StepFooter
             variant={isSignInStep ? "auth" : "info"}
             dots={infoSteps.length}
             activeDot={infoStepIndex}
             footerLabel={signUpMode && isSignInStep ? "Sign Up" : step.footerLabel}
-            isLastInfoStep={isLastInfoStep}
+            isFirstInfoStep={isFirstInfoStep}
             onNext={handleNextStep}
             onSignIn={handleSignInClick}
-            onBack={handleBackFromSignIn}
+            onBack={isSignInStep ? handleBackFromSignIn : handleInfoBack}
           />
         }
       >
@@ -782,6 +846,19 @@ function createStyles(colors: ColorTokens) {
     lineHeight: 16,
     textAlign: "center",
     fontFamily: fonts.body,
+  },
+  signUp: {
+    height: 32,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    backgroundColor: colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  signUpText: {
+    color: colors.white,
+    fontSize: 13,
+    fontFamily: fonts.displayMedium,
   },
   });
 }

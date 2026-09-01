@@ -25,20 +25,6 @@ export function configureNotificationHandler() {
 
 configureNotificationHandler();
 
-export async function applyIncomingNotificationBadge(notification?: {
-  request: { content: { badge?: number | null } };
-}): Promise<void> {
-  if (Platform.OS === "web") return;
-  const Notifications = await import("expo-notifications");
-  const payloadBadge = notification?.request.content.badge;
-  if (typeof payloadBadge === "number" && payloadBadge >= 0) {
-    await Notifications.setBadgeCountAsync(payloadBadge);
-    return;
-  }
-  const current = await Notifications.getBadgeCountAsync();
-  await Notifications.setBadgeCountAsync(current + 1);
-}
-
 function isNotificationPermissionGranted(
   Notifications: typeof import("expo-notifications"),
   settings: Awaited<
@@ -199,8 +185,29 @@ export async function registerForPushNotifications(
   try {
     const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
     return tokenData.data;
-  } catch (error) {
-    console.error("Failed to get Expo push token:", error);
+  } catch {
+    if (__DEV__) console.error("Failed to get Expo push token");
     return null;
   }
 }
+
+export async function clearAppIconBadge(): Promise<void> {
+  if (Platform.OS === "web") return;
+  const Notifications = await import("expo-notifications");
+  await Notifications.setBadgeCountAsync(0);
+}
+
+export async function syncAppIconBadge(options?: {
+  dismissIdentifier?: string;
+}): Promise<number> {
+  if (Platform.OS === "web") return 0;
+  const Notifications = await import("expo-notifications");
+  if (options?.dismissIdentifier) {
+    await Notifications.dismissNotificationAsync(options.dismissIdentifier);
+  }
+  // Opening the app means the icon badge has been acknowledged. Keep untapped
+  // entries in Notification Center so users can still return to them.
+  await Notifications.setBadgeCountAsync(0);
+  return 0;
+}
+

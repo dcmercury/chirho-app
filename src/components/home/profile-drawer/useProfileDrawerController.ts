@@ -15,6 +15,8 @@ import {
   sendTestNotification,
   setActiveCommunity,
   updateAccountName,
+  updateAccountGender,
+  updateLovedOne,
   updateNotificationPreference,
   updatePrayerFocus,
   updateProfile,
@@ -22,14 +24,16 @@ import {
   uploadDashboardBackground,
   type Community,
 } from "../../../lib/api";
+import { backgroundIdForUrl } from "../../../lib/backgroundLibrary";
 import { registerForPushNotifications } from "../../../lib/push";
-import { setBackgroundMusicEnabled } from "../../../lib/backgroundMusicPreference";
+import { setBackgroundMusicEnabled, setBackgroundMusicUrl } from "../../../lib/backgroundMusicPreference";
 import { prepareLovedOnePhoto } from "../../../lib/lovedOnePhoto";
 import { useTheme } from "../../../theme/ThemeProvider";
 import type { Appearance } from "../../../theme/tokens";
 import type {
   DailyPrayerSettings,
   HomeProfile,
+  LovedOneGender,
   PrayerFocus,
   PrayerFocusInput,
 } from "../../../types/home";
@@ -155,9 +159,21 @@ export function useProfileDrawerController(
       "Unable to update your name",
     );
 
+  const saveAccountGender = (gender: LovedOneGender) =>
+    mutate(
+      "account-gender",
+      (token) => updateAccountGender(gender, token),
+      "Unable to save gender",
+    );
+
   const selectTradition = (tradition: string) =>
     mutate("tradition", (token) =>
       updateProfile({ preferences: { defaultTradition: tradition } }, token),
+    );
+
+  const setPrayerLength = (prayerLength: HomeProfile["prayerLength"]) =>
+    mutate("prayer-length", (token) =>
+      updateProfile({ preferences: { prayerLength } }, token),
     );
 
   const selectVoice = (voice: string) =>
@@ -206,11 +222,62 @@ export function useProfileDrawerController(
     }
   };
 
+  const musicIntentRef = useRef<{
+    enabled: boolean;
+    musicuuid?: string;
+    url?: string;
+  } | null>(null);
+
+  const flushBackgroundMusic = async () => {
+    if (!begin("background-music")) return;
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Your session expired. Please sign in again.");
+      while (musicIntentRef.current) {
+        const next = musicIntentRef.current;
+        musicIntentRef.current = null;
+        setBackgroundMusicEnabled(next.enabled);
+        if (next.url) setBackgroundMusicUrl(next.url);
+        await updateProfile(
+          {
+            preferences: {
+              backgroundMusicEnabled: next.enabled,
+              ...(next.musicuuid !== undefined
+                ? { backgroundMusicId: next.musicuuid }
+                : {}),
+            },
+          },
+          token,
+        );
+      }
+      await refreshProfile();
+    } catch (error) {
+      setOperationError("background-music", error, "Unable to save changes");
+    } finally {
+      finish("background-music");
+      if (musicIntentRef.current) void flushBackgroundMusic();
+    }
+  };
+
   const setBackgroundMusic = (enabled: boolean) => {
     setBackgroundMusicEnabled(enabled);
-    return mutate("background-music", (token) =>
-      updateProfile({ preferences: { backgroundMusicEnabled: enabled } }, token),
-    );
+    musicIntentRef.current = {
+      enabled,
+      musicuuid: musicIntentRef.current?.musicuuid,
+      url: musicIntentRef.current?.url,
+    };
+    void flushBackgroundMusic();
+  };
+
+  const selectBackgroundMusic = (musicuuid: string, musicUrl: string) => {
+    setBackgroundMusicEnabled(true);
+    setBackgroundMusicUrl(musicUrl);
+    musicIntentRef.current = {
+      enabled: true,
+      musicuuid,
+      url: musicUrl,
+    };
+    void flushBackgroundMusic();
   };
 
   const setTheme = (appearance: Appearance) => {
@@ -223,7 +290,10 @@ export function useProfileDrawerController(
   const selectHomeBackground = (imageUrl: string, current: string[]) =>
     mutate(
       "dashboard-background:select",
-      (token) => selectDashboardBackground(imageUrl, current, token),
+      (token) =>
+        selectDashboardBackground(imageUrl, current, token, {
+          backgrounduuid: backgroundIdForUrl(imageUrl),
+        }),
       "Unable to set this background.",
     );
 
@@ -247,10 +317,17 @@ export function useProfileDrawerController(
       updateProfile({ privacy: { [key]: enabled } }, token),
     );
 
+  const setLovedOneGender = (id: string, gender: LovedOneGender) =>
+    mutate(
+      `loved-one:${id}`,
+      (token) => updateLovedOne(id, { gender }, token),
+      "Unable to save gender",
+    );
+
   const confirmRemoveLovedOne = (id: string, firstName: string) => {
     Alert.alert(
       `Remove ${firstName}?`,
-      "This removes them from your loved ones.",
+      "This removes them from the people you pray for.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -414,9 +491,12 @@ export function useProfileDrawerController(
     errors,
     pickAvatar,
     saveAccount,
+    saveAccountGender,
     selectTradition,
+    setPrayerLength,
     selectVoice,
     setBackgroundMusic,
+    selectBackgroundMusic,
     setTheme,
     selectHomeBackground,
     uploadHomeBackground,
@@ -424,6 +504,7 @@ export function useProfileDrawerController(
     setNotification,
     testNotification,
     setPrivacy,
+    setLovedOneGender,
     confirmRemoveLovedOne,
     savePrayerFocus,
     confirmRemovePrayerFocus,

@@ -36,11 +36,13 @@ export function GroupDrawerPill({
   label,
   selected,
   disabled,
+  compact,
   onPress,
 }: {
   label: string;
   selected: boolean;
   disabled?: boolean;
+  compact?: boolean;
   onPress: () => void;
 }) {
   const styles = useGroupDrawerStyles();
@@ -53,11 +55,18 @@ export function GroupDrawerPill({
       onPress={onPress}
       style={[
         styles.pill,
+        compact && styles.pillCompact,
         selected && styles.pillSelected,
         disabled && styles.disabled,
       ]}
     >
-      <Text style={[styles.pillText, selected && styles.pillTextSelected]}>
+      <Text
+        style={[
+          styles.pillText,
+          compact && styles.pillTextCompact,
+          selected && styles.pillTextSelected,
+        ]}
+      >
         {label}
       </Text>
     </Pressable>
@@ -110,6 +119,10 @@ function createGroupDrawerStyles(colors: ColorTokens) {
     marginTop: 28,
     gap: 10,
   },
+  compactSection: {
+    marginTop: 0,
+    gap: 8,
+  },
   sectionTitle: {
     ...typography.labelSm,
     color: colors.muted,
@@ -161,22 +174,23 @@ function createGroupDrawerStyles(colors: ColorTokens) {
   input: {
     minWidth: 0,
     flex: 1,
-    minHeight: 40,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    backgroundColor: colors.glassFill,
-    color: colors.title,
-    fontFamily: fonts.body,
-    fontSize: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
   },
   firstNameInput: {
     flex: 0.75,
   },
   messageInput: {
     minHeight: 68,
+  },
+  compactInput: {
+    minHeight: 34,
+    borderRadius: 8,
+    fontSize: 13,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  compactMessage: {
+    minHeight: 44,
+    paddingTop: 8,
   },
   methodRow: {
     flexDirection: "row",
@@ -201,6 +215,14 @@ function createGroupDrawerStyles(colors: ColorTokens) {
     fontFamily: fonts.body,
     fontSize: 11,
   },
+  pillCompact: {
+    minHeight: 28,
+    borderRadius: 14,
+    paddingHorizontal: 8,
+  },
+  pillTextCompact: {
+    fontSize: 10,
+  },
   pillTextSelected: {
     color: colors.accentText,
   },
@@ -221,6 +243,13 @@ function createGroupDrawerStyles(colors: ColorTokens) {
     color: colors.buttonOnPrimary,
     fontFamily: fonts.displayMedium,
     fontSize: 12,
+  },
+  compactAction: {
+    minHeight: 36,
+    borderRadius: 18,
+  },
+  compactActionText: {
+    fontSize: 11,
   },
   resultLabel: {
     ...typography.labelSm,
@@ -247,6 +276,10 @@ function createGroupDrawerStyles(colors: ColorTokens) {
     borderRadius: 19,
     borderWidth: 1,
     borderColor: colors.glassBorder,
+  },
+  compactCopy: {
+    minHeight: 32,
+    borderRadius: 16,
   },
   copyButtonDone: {
     borderColor: colors.successBorder,

@@ -1,22 +1,20 @@
-export const STOCK_GROUP_BACKGROUNDS = [
-  "/cover1.jpg",
-  "/cover2.jpg",
-  "/cover3.jpg",
-  "/cover4.jpg",
-  "/cover5.jpg",
-  "/cover6.jpg",
-  "/church.jpg",
-  "/prayercards/backgrounds/church.jpg",
-  "/prayercards/backgrounds/sheep.jpg",
-];
+import { FALLBACK_PRAYER_IMAGE } from "./assets";
+
+/**
+ * Stock art lives in the admin-managed library, so callers pass the fetched
+ * list in. This only covers the case where the library has not loaded yet.
+ */
+export const FALLBACK_BACKGROUNDS = [FALLBACK_PRAYER_IMAGE];
 
 export function groupBackgroundGallery(
   active?: string | null,
   saved?: Array<string | null | undefined> | null,
+  stock?: ReadonlyArray<string> | null,
 ): string[] {
   const seen = new Set<string>();
   const urls: string[] = [];
-  for (const item of [...(saved || []), active, ...STOCK_GROUP_BACKGROUNDS]) {
+  const library = stock?.length ? stock : FALLBACK_BACKGROUNDS;
+  for (const item of [...(saved || []), active, ...library]) {
     if (!item || seen.has(item)) continue;
     seen.add(item);
     urls.push(item);

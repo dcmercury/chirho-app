@@ -7,7 +7,6 @@ export interface SerializedDailyPrayer {
   time: string | null;
   timezone: string | null;
   textOnly: boolean;
-  prayeruuid: null;
 }
 
 export interface DailyPrayerPayload {
@@ -15,6 +14,8 @@ export interface DailyPrayerPayload {
   evening: SerializedDailyPrayer;
 }
 
+// Mirrors the backend voice catalog. The API also normalizes display keys, but
+// resolving here keeps a shipped build correct against an older backend.
 const voiceIds: Record<string, string> = {
   "american-priest": "MCkmNHsdG826UovZqqSA",
   "british-priest": "RsgZlqabeFOyHtTfpERU",
@@ -32,6 +33,16 @@ export function resolveVoiceId(voice: string): string {
   return voiceIds[voice] || voice;
 }
 
+export function deviceTimezone(): string {
+  try {
+    return (
+      Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York"
+    );
+  } catch {
+    return "America/New_York";
+  }
+}
+
 function serializeDailyPrayer(
   value: DailyPrayerSettings,
   suffix: "AM" | "PM",
@@ -41,9 +52,8 @@ function serializeDailyPrayer(
     time: value.enabled
       ? `${value.hour}:${value.minutes.padStart(2, "0")}${suffix}`
       : null,
-    timezone: value.enabled ? value.timezone : null,
+    timezone: value.enabled ? deviceTimezone() : null,
     textOnly: value.textOnly,
-    prayeruuid: null,
   };
 }
 

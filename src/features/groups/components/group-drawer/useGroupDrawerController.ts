@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Linking } from "react-native";
-import * as Clipboard from "expo-clipboard";
+import { Alert } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import {
   deleteGroup,
   getGroupAdminDetails,
   getGroupMembers,
-  inviteGroupMember,
   leaveGroup,
   previewGroupContent,
   regenerateGroupBackground,
@@ -18,7 +16,6 @@ import {
 import { prepareLovedOnePhoto } from "../../../../lib/lovedOnePhoto";
 import type {
   GroupAdminRecord,
-  GroupInviteResult,
   GroupMember,
   GroupScripture,
   PrayerGroup,
@@ -27,7 +24,6 @@ import type {
 
 type ActionKey =
   | "load"
-  | "invite"
   | "leave"
   | "delete"
   | "purpose"
@@ -72,10 +68,6 @@ export function useGroupDrawerController({
     Partial<Record<ActionKey, boolean>>
   >({});
   const [errors, setErrors] = useState<Partial<Record<ActionKey, string>>>({});
-  const [inviteResult, setInviteResult] = useState<GroupInviteResult | null>(
-    null,
-  );
-  const [copied, setCopied] = useState(false);
   const [purposeDraft, setPurposeDraft] = useState("");
   const [purposeEditing, setPurposeEditing] = useState(false);
   const [scriptureFormOpen, setScriptureFormOpen] = useState(false);
@@ -170,8 +162,6 @@ export function useGroupDrawerController({
       setIsAdmin(false);
       setErrors({});
       setPending({});
-      setInviteResult(null);
-      setCopied(false);
       setPurposeDraft("");
       setPurposeEditing(false);
       setScriptureFormOpen(false);
@@ -182,8 +172,6 @@ export function useGroupDrawerController({
 
     setErrors({});
     setPending({});
-    setInviteResult(null);
-    setCopied(false);
     setPurposeDraft("");
     setPurposeEditing(false);
     setScriptureFormOpen(false);
@@ -235,71 +223,9 @@ export function useGroupDrawerController({
     [clearError, isCurrentSession, requireToken, setActionError],
   );
 
-  const submitInvite = useCallback(
-    (
-      firstName: string,
-      phone: string,
-      customMessage: string,
-      method: "automatic" | "personal",
-    ) => {
-      const digits = phone.replace(/\D/g, "");
-      if (!firstName.trim() || digits.length < 10) {
-        setActionError("invite", "Enter a first name and valid phone number.");
-        return;
-      }
-      const normalized = digits.length === 10 ? `+1${digits}` : `+${digits}`;
-      void runAction(
-        "invite",
-        async (token, session) => {
-          const result = await inviteGroupMember(
-            surfaceGroup.groupuuid,
-            firstName.trim(),
-            normalized,
-            method === "personal",
-            customMessage.trim() || undefined,
-            token,
-          );
-          await refreshAfterWrite(session);
-          if (isCurrentSession(session)) {
-            setInviteResult(result);
-            setCopied(false);
-          }
-          if (method === "personal") {
-            const body = encodeURIComponent(
-              `I want to invite you to ${surfaceGroup.name}. ${result.inviteLink}`,
-            );
-            await Linking.openURL(`sms:${normalized}?body=${body}`);
-          }
-          return result;
-        },
-        "Unable to create invitation.",
-      );
-    },
-    [
-      isCurrentSession,
-      refreshAfterWrite,
-      runAction,
-      setActionError,
-      surfaceGroup.groupuuid,
-      surfaceGroup.name,
-    ],
-  );
-
-  const copyInvite = useCallback(async () => {
-    if (!inviteResult) return;
-    const session = sessionRef.current;
-    try {
-      await Clipboard.setStringAsync(inviteResult.inviteLink);
-      if (isCurrentSession(session)) setCopied(true);
-    } catch (error) {
-      if (isCurrentSession(session)) {
-        setActionError(
-          "invite",
-          messageFor(error, "Unable to copy invite link."),
-        );
-      }
-    }
-  }, [inviteResult, isCurrentSession, setActionError]);
+  const refresh = useCallback(() => {
+    return queueRefresh(sessionRef.current);
+  }, [queueRefresh]);
 
   const confirmRemove = useCallback(
     (member: GroupMember, name: string) => {
@@ -651,8 +577,6 @@ export function useGroupDrawerController({
     loading,
     pending,
     errors,
-    inviteResult,
-    copied,
     purposeDraft,
     purposeEditing,
     scriptureFormOpen,
@@ -661,8 +585,7 @@ export function useGroupDrawerController({
     canLeave: Boolean(group && !isAdmin && surfaceGroup.canLeave),
     canRegeneratePurpose: Boolean(group?.creationMetadata?.groupType),
     clearError,
-    submitInvite,
-    copyInvite,
+    refresh,
     confirmRemove,
     confirmLeave,
     selectTradition,

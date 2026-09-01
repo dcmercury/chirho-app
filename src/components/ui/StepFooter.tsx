@@ -1,6 +1,6 @@
 import { Pressable, Text, View, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Path, Polyline } from "react-native-svg";
+import Svg, { Path } from "react-native-svg";
 import { fonts, type ColorTokens } from "../../theme/tokens";
 import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
 
@@ -11,13 +11,8 @@ function createStyles(colors: ColorTokens) {
       borderTopWidth: 1,
       borderTopColor: colors.footerRule,
       flexDirection: "row",
-      justifyContent: "space-between",
       alignItems: "center",
       zIndex: 20,
-    },
-    left: {
-      flexDirection: "column",
-      gap: 8,
     },
     dots: {
       flexDirection: "row",
@@ -34,22 +29,29 @@ function createStyles(colors: ColorTokens) {
       backgroundColor: colors.title,
       transform: [{ scale: 1.25 }],
     },
+    spacer: {
+      flex: 1,
+    },
     label: {
       color: colors.footerLabel,
       fontSize: 12,
       fontWeight: "500",
       fontFamily: fonts.displayMedium,
     },
-    right: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 12,
+    authLeft: {
+      flex: 1,
+    },
+    learnMore: {
+      color: colors.mutedStrong,
+      fontSize: 12,
+      fontFamily: fonts.bodyMedium,
+      marginRight: 12,
     },
     signin: {
       color: colors.muted,
       fontSize: 11.2,
-      fontWeight: "400",
       fontFamily: fonts.body,
+      marginRight: 12,
     },
     signinLink: {
       color: colors.mutedStrong,
@@ -62,6 +64,17 @@ function createStyles(colors: ColorTokens) {
       backgroundColor: colors.buttonPrimary,
       alignItems: "center",
       justifyContent: "center",
+      marginLeft: 12,
+    },
+    backArrow: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.glassBorderLoud,
+      alignItems: "center",
+      justifyContent: "center",
+      marginRight: 10,
     },
     back: {
       color: colors.muted,
@@ -76,7 +89,7 @@ export function StepFooter({
   dots,
   activeDot,
   footerLabel,
-  isLastInfoStep,
+  isFirstInfoStep,
   onNext,
   onSignIn,
   onBack,
@@ -85,7 +98,7 @@ export function StepFooter({
   dots?: number;
   activeDot?: number;
   footerLabel: string;
-  isLastInfoStep?: boolean;
+  isFirstInfoStep?: boolean;
   onNext?: () => void;
   onSignIn?: () => void;
   onBack?: () => void;
@@ -98,67 +111,86 @@ export function StepFooter({
     <View style={[styles.footer, { paddingBottom: 24 + insets.bottom }]}>
       {variant === "info" ? (
         <>
-          <View style={styles.left}>
-            <View style={styles.dots}>
-              {Array.from({ length: dots ?? 0 }).map((_, i) => (
-                <View
-                  key={i}
-                  style={[
-                    styles.dot,
-                    i === activeDot && styles.dotActive,
-                  ]}
-                />
-              ))}
-            </View>
-            <Text style={styles.label}>{footerLabel}</Text>
-          </View>
-          <View style={styles.right}>
-            <Pressable onPress={onSignIn} hitSlop={8}>
-              <Text style={styles.signin}>
-                Already a member? <Text style={styles.signinLink}>Sign in</Text>
-              </Text>
-            </Pressable>
+          {!isFirstInfoStep ? (
             <Pressable
+              accessibilityLabel="Back"
+              hitSlop={8}
+              onPress={onBack}
+              style={({ pressed }) => [
+                styles.backArrow,
+                pressed && { transform: [{ scale: 1.05 }] },
+              ]}
+            >
+              <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+                <Path
+                  d="M19 12H5"
+                  stroke={colors.title}
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <Path
+                  d="m12 19-7-7 7-7"
+                  stroke={colors.title}
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </Svg>
+            </Pressable>
+          ) : null}
+          <View style={styles.dots}>
+            {Array.from({ length: dots ?? 0 }).map((_, i) => (
+              <View
+                key={i}
+                style={[styles.dot, i === activeDot && styles.dotActive]}
+              />
+            ))}
+          </View>
+          <View style={styles.spacer} />
+          {isFirstInfoStep ? (
+            <>
+              <Pressable onPress={onNext} hitSlop={8}>
+                <Text style={styles.learnMore}>Learn more</Text>
+              </Pressable>
+              <Pressable onPress={onSignIn} hitSlop={8}>
+                <Text style={styles.signin}>
+                  Already a member?{" "}
+                  <Text style={styles.signinLink}>Sign in</Text>
+                </Text>
+              </Pressable>
+            </>
+          ) : (
+            <Pressable
+              accessibilityLabel="Next"
               onPress={onNext}
               style={({ pressed }) => [
                 styles.arrow,
                 pressed && { transform: [{ scale: 1.05 }] },
               ]}
             >
-              {isLastInfoStep ? (
-                <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-                  <Polyline
-                    points="20 6 9 17 4 12"
-                    stroke={colors.buttonOnPrimary}
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </Svg>
-              ) : (
-                <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-                  <Path
-                    d="M5 12h14"
-                    stroke={colors.buttonOnPrimary}
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <Path
-                    d="m12 5 7 7-7 7"
-                    stroke={colors.buttonOnPrimary}
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </Svg>
-              )}
+              <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+                <Path
+                  d="M5 12h14"
+                  stroke={colors.buttonOnPrimary}
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <Path
+                  d="m12 5 7 7-7 7"
+                  stroke={colors.buttonOnPrimary}
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </Svg>
             </Pressable>
-          </View>
+          )}
         </>
       ) : (
         <>
-          <View style={styles.left}>
+          <View style={styles.authLeft}>
             <Text style={styles.label}>{footerLabel}</Text>
           </View>
           <Pressable onPress={onBack} hitSlop={8}>

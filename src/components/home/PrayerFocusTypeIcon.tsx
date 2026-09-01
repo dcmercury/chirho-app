@@ -39,6 +39,20 @@ export function PrayerFocusTypeIcon({
       </Svg>
     );
   }
+  if (type === "country") {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Circle cx={12} cy={12} r={8.5} stroke={color} strokeWidth={1.7} />
+        <Path
+          d="M3.5 12h17M12 3.5c2.2 2.4 3.4 5.4 3.4 8.5S14.2 18.1 12 20.5c-2.2-2.4-3.4-5.4-3.4-8.5S9.8 5.9 12 3.5Z"
+          stroke={color}
+          strokeWidth={1.7}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </Svg>
+    );
+  }
   if (type === "health") {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -62,12 +76,18 @@ export function PrayerFocusTypeIcon({
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
         <Path
-          d="M4 6h16v12H4zM8 6V4h8v2M4 11h16M10 11v2h4v-2"
+          d="M12 4.2 21 19.5H3L12 4.2Z"
+          stroke={color}
+          strokeWidth={1.7}
+          strokeLinejoin="round"
+        />
+        <Path
+          d="M12 10.2v4.2"
           stroke={color}
           strokeWidth={1.7}
           strokeLinecap="round"
-          strokeLinejoin="round"
         />
+        <Circle cx={12} cy={16.8} r={1} fill={color} />
       </Svg>
     );
   }

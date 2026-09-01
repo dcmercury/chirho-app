@@ -29,6 +29,7 @@ import {
   groupBackgroundGallery,
   selectedGroupBackgrounds,
 } from "../../../lib/groupBackgrounds";
+import { useBackgroundLibrary } from "../../../lib/backgroundLibrary";
 
 interface MembersSheetProps {
   visible: boolean;
@@ -62,6 +63,7 @@ export function MembersSheet({
     onExit,
   });
   const drawerGroup = controller.group;
+  const { urls: libraryUrls } = useBackgroundLibrary();
   const displayName = drawerGroup?.name || group.name;
   const settingsPending = Boolean(
     controller.pending["settings:tradition"] ||
@@ -155,16 +157,13 @@ export function MembersSheet({
           />
           {controller.canInvite ? (
             <InviteSection
-              copied={controller.copied}
-              error={controller.errors.invite}
               groupName={displayName}
-              onClearError={() => controller.clearError("invite")}
-              onCopy={() => {
-                void controller.copyInvite();
+              groupuuid={group.groupuuid}
+              onChanged={async () => {
+                await onChanged();
+                await controller.refresh();
               }}
-              onSubmit={controller.submitInvite}
-              pending={Boolean(controller.pending.invite)}
-              result={controller.inviteResult}
+              tokenProvider={tokenProvider}
               visible={visible}
             />
           ) : null}
@@ -177,6 +176,7 @@ export function MembersSheet({
               images={groupBackgroundGallery(
                 drawerGroup.backgroundImage,
                 drawerGroup.backgroundImages,
+                libraryUrls,
               )}
               onRegenerate={controller.regenerateBackground}
               onSelect={controller.selectBackground}

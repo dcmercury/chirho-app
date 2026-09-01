@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { fonts, type ColorTokens } from "../../../../theme/tokens";
 import { useTheme, useThemedStyles } from "../../../../theme/ThemeProvider";
+import { GlassInput } from "../../../../components/ui/GlassInput";
 import type { GroupScripture } from "../../types";
 import { PlusIcon, SparkleIcon } from "../Icons";
 import {
@@ -65,18 +66,6 @@ function createStyles(colors: ColorTokens) {
       fontFamily: fonts.body,
       fontSize: 11,
       fontStyle: "italic",
-    },
-    input: {
-      minHeight: 42,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: colors.glassBorder,
-      backgroundColor: colors.glassFill,
-      color: colors.title,
-      fontFamily: fonts.body,
-      fontSize: 12,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
     },
     purposeInput: {
       minHeight: 104,
@@ -202,12 +191,11 @@ export function GroupPurposeSection({
   onRegenerate,
 }: GroupPurposeSectionProps) {
   const styles = useThemedStyles(createStyles);
-  const { colors, appearance } = useTheme();
+  const { colors } = useTheme();
   const addDisabled =
     addPending ||
     !scriptureDraft.citation.trim() ||
     !scriptureDraft.text.trim();
-  const keyboardAppearance = appearance === "light" ? "light" : "dark";
 
   return (
     <GroupDrawerSection title="Purpose and scripture">
@@ -236,15 +224,13 @@ export function GroupPurposeSection({
 
       {purposeEditing ? (
         <>
-          <TextInput
+          <GlassInput
             accessibilityLabel="Group purpose"
             editable={!purposePending}
-            keyboardAppearance={keyboardAppearance}
             multiline
             onChangeText={onPurposeDraftChange}
             placeholder="This group's purpose is to…"
-            placeholderTextColor={colors.mutedGhost}
-            style={[styles.input, styles.purposeInput]}
+            style={styles.purposeInput}
             textAlignVertical="top"
             value={purposeDraft}
           />
@@ -324,44 +310,37 @@ export function GroupPurposeSection({
 
       {scriptureFormOpen ? (
         <View style={styles.form}>
-          <TextInput
+          <GlassInput
             accessibilityLabel="Scripture citation"
             autoCapitalize="words"
             editable={!addPending}
-            keyboardAppearance={keyboardAppearance}
             onChangeText={(citation) =>
               onScriptureDraftChange({ ...scriptureDraft, citation })
             }
             placeholder="Citation *"
-            placeholderTextColor={colors.mutedGhost}
-            style={styles.input}
             value={scriptureDraft.citation}
           />
-          <TextInput
+          <GlassInput
             accessibilityLabel="Scripture verse text"
             editable={!addPending}
-            keyboardAppearance={keyboardAppearance}
             multiline
             onChangeText={(text) =>
               onScriptureDraftChange({ ...scriptureDraft, text })
             }
             placeholder="Verse text *"
-            placeholderTextColor={colors.mutedGhost}
-            style={[styles.input, styles.verseInput]}
+            style={styles.verseInput}
             textAlignVertical="top"
             value={scriptureDraft.text}
           />
-          <TextInput
+          <GlassInput
             accessibilityLabel="Why this scripture matters"
             editable={!addPending}
-            keyboardAppearance={keyboardAppearance}
             multiline
             onChangeText={(reason) =>
               onScriptureDraftChange({ ...scriptureDraft, reason })
             }
             placeholder="Why this verse matters (optional)"
-            placeholderTextColor={colors.mutedGhost}
-            style={[styles.input, styles.reasonInput]}
+            style={styles.reasonInput}
             textAlignVertical="top"
             value={scriptureDraft.reason || ""}
           />

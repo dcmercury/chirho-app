@@ -9,14 +9,9 @@ import {
 } from "react-native";
 import { useAuth } from "@clerk/expo";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Animated, {
-  Easing,
-  FadeIn,
-  FadeOut,
-  ReduceMotion,
-} from "react-native-reanimated";
 import { BackIcon } from "../../features/groups/components/Icons";
 import {
+  archivePrayerDeck,
   generatePrayerCardAudio,
   getPrayerDeck,
   retryPrayerDeckItem,
@@ -39,16 +34,17 @@ import { PrayerDetailModal } from "./PrayerDetailModal";
 export function PrayerDeckScreen({
   deckuuid,
   onClose,
+  onFinished,
 }: {
   deckuuid: string;
   onClose: () => void;
+  onFinished: () => void;
 }) {
   const insets = useSafeAreaInsets();
   const { getToken } = useAuth();
   const styles = useThemedStyles(createStyles);
   const { colors } = useTheme();
   const getTokenRef = useRef(getToken);
-  const sequenceActiveRef = useRef(false);
   const pagerRef = useRef<PrayerDeckPagerHandle>(null);
   const [token, setToken] = useState<string | null>(null);
   const [deck, setDeck] = useState<PrayerDeckDetail | null>(null);
@@ -57,12 +53,11 @@ export function PrayerDeckScreen({
   const [selectedCard, setSelectedCard] = useState<HomePrayerCard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [prayAllActive, setPrayAllActive] = useState(false);
   const [detailNavigationDirection, setDetailNavigationDirection] = useState<
     -1 | 1
   >(1);
-  const [preparing, setPreparing] = useState(false);
-  const [sequenceError, setSequenceError] = useState<string | null>(null);
+  const [finishing, setFinishing] = useState(false);
+  const [finishError, setFinishError] = useState<string | null>(null);
   const [retryingItems, setRetryingItems] = useState<Record<string, boolean>>(
     {},
   );
@@ -136,7 +131,6 @@ export function PrayerDeckScreen({
   };
 
   const showAdjacentCard = (direction: -1 | 1) => {
-    if (prayAllActive) return;
     const nextIndex = currentIndex + direction;
     const nextCard = cards[nextIndex];
     if (!nextCard) return;
@@ -145,86 +139,20 @@ export function PrayerDeckScreen({
     prepareIndividualAudio(nextCard);
   };
 
-  const prepareSequentialCard = useCallback(
-    async (index: number) => {
-      if (!sequenceActiveRef.current) return;
-      const card = cards[index];
-      if (!card) {
-        sequenceActiveRef.current = false;
-        setPrayAllActive(false);
-        setPreparing(false);
-        return;
-      }
-      setCurrentIndex(index);
-      setSelectedCard(null);
-      setSequenceError(null);
-      setPreparing(true);
-
-      if (card.narrationUrl && card.audioAvailable !== false) {
-        setPreparing(false);
-        setSelectedCard(card);
-        return;
-      }
-      if (!card.prayeruuid || !token) {
-        setPreparing(false);
-        setSequenceError("This prayer has no audio source yet.");
-        return;
-      }
-
-      try {
-        const audio = await generatePrayerCardAudio(card.prayeruuid, token);
-        const updates: Partial<PrayerDeckCard> = {
-          narrationUrl: audio.narrationUrl,
-          backgroundMusicUrl: audio.backgroundMusicUrl || card.backgroundMusicUrl,
-          backgroundMusicVolume: audio.backgroundMusicVolume,
-          audioAvailable: audio.audioStatus === "ready",
-          audioStatus: audio.audioStatus,
-        };
-        updateCard(card.deckIndex, updates);
-        if (!sequenceActiveRef.current) return;
-        if (audio.audioStatus !== "ready" || !audio.narrationUrl) {
-          throw new Error("Narration could not be prepared.");
-        }
-        setSelectedCard({ ...card, ...updates });
-      } catch (err) {
-        if (sequenceActiveRef.current) {
-          setSequenceError(
-            err instanceof Error ? err.message : "Narration could not be prepared.",
-          );
-        }
-      } finally {
-        setPreparing(false);
-      }
-    },
-    [cards, token, updateCard],
-  );
-
-  const advanceSequence = useCallback(() => {
-    if (!sequenceActiveRef.current) return;
-    setSelectedCard(null);
-    const nextIndex = currentIndex + 1;
-    if (nextIndex >= cards.length) {
-      sequenceActiveRef.current = false;
-      setPrayAllActive(false);
-      setSequenceError(null);
-      return;
+  const finishPraying = async () => {
+    if (!token || finishing) return;
+    setFinishing(true);
+    setFinishError(null);
+    try {
+      await archivePrayerDeck(deckuuid, token);
+      onFinished();
+    } catch (err) {
+      setFinishError(
+        err instanceof Error ? err.message : "Unable to finish this prayer deck.",
+      );
+    } finally {
+      setFinishing(false);
     }
-    void prepareSequentialCard(nextIndex);
-  }, [cards.length, currentIndex, prepareSequentialCard]);
-
-  const startPrayAll = () => {
-    if (!cards.length) return;
-    sequenceActiveRef.current = true;
-    setPrayAllActive(true);
-    void prepareSequentialCard(0);
-  };
-
-  const stopPrayAll = () => {
-    sequenceActiveRef.current = false;
-    setPrayAllActive(false);
-    setPreparing(false);
-    setSequenceError(null);
-    setSelectedCard(null);
   };
 
   const retryFailedItem = async (subjectId: string) => {
@@ -250,7 +178,7 @@ export function PrayerDeckScreen({
     deck?.status === "partial" || deck?.status === "failed"
       ? deck.items.filter((item) => item.status === "failed")
       : [];
-  const completed = currentIndex + (prayAllActive ? 0 : 1);
+  const completed = currentIndex + 1;
   const progress = cards.length ? Math.min(1, completed / cards.length) : 0;
 
   if (loading) {
@@ -282,23 +210,16 @@ export function PrayerDeckScreen({
   return (
     <View style={styles.root}>
       {currentCard ? (
-        <Animated.View
-          key={currentCard.prayeruuid || currentCard.deckIndex}
-          entering={FadeIn.duration(520)
-            .easing(Easing.bezier(0.22, 1, 0.36, 1))
-            .reduceMotion(ReduceMotion.System)}
-          exiting={FadeOut.duration(280)
-            .easing(Easing.bezier(0.25, 1, 0.5, 1))
-            .reduceMotion(ReduceMotion.System)}
-          pointerEvents="none"
-          style={StyleSheet.absoluteFill}
-        >
+        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
           <KenBurnsImage
+            debugLabel="prayer-deck"
             path={currentCard.image}
             paths={currentCard.images}
             style={StyleSheet.absoluteFill}
+            crossfadeDurationMs={360}
+            kenBurnsDurationMs={10_000}
           />
-        </Animated.View>
+        </View>
       ) : null}
       <View style={[StyleSheet.absoluteFill, styles.overlay]} />
       <GridOverlay />
@@ -403,7 +324,6 @@ export function PrayerDeckScreen({
               ref={pagerRef}
               cards={cards}
               currentIndex={currentIndex}
-              disabled={prayAllActive}
               onIndexChange={setCurrentIndex}
               onOpenCard={(card) => {
                 setDetailNavigationDirection(1);
@@ -424,11 +344,11 @@ export function PrayerDeckScreen({
           <Pressable
             accessibilityRole="button"
             accessibilityState={{ disabled: currentIndex === 0 }}
-            disabled={currentIndex === 0 || prayAllActive}
+            disabled={currentIndex === 0}
             onPress={() => pagerRef.current?.previous()}
             style={[
               styles.pageButton,
-              (currentIndex === 0 || prayAllActive) && styles.disabled,
+              currentIndex === 0 && styles.disabled,
             ]}
           >
             <Text style={styles.pageButtonText}>Previous</Text>
@@ -436,68 +356,37 @@ export function PrayerDeckScreen({
           <Pressable
             accessibilityRole="button"
             accessibilityState={{ disabled: currentIndex >= cards.length - 1 }}
-            disabled={currentIndex >= cards.length - 1 || prayAllActive}
+            disabled={currentIndex >= cards.length - 1}
             onPress={() => pagerRef.current?.next()}
             style={[
               styles.pageButton,
-              (currentIndex >= cards.length - 1 || prayAllActive) &&
-                styles.disabled,
+              currentIndex >= cards.length - 1 && styles.disabled,
             ]}
           >
             <Text style={styles.pageButtonText}>Next</Text>
           </Pressable>
         </View>
 
-        {preparing || sequenceError ? (
-          <View style={sequenceError ? styles.errorNotice : styles.notice}>
-            {preparing ? (
-              <View style={styles.preparingRow}>
-                <ActivityIndicator color={colors.accent} size="small" />
-                <Text style={styles.noticeText}>Preparing narration…</Text>
-              </View>
-            ) : (
-              <>
-                <Text accessibilityRole="alert" style={styles.errorText}>
-                  {sequenceError}
-                </Text>
-                <View style={styles.sequenceActions}>
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => void prepareSequentialCard(currentIndex)}
-                    style={styles.smallAction}
-                  >
-                    <Text style={styles.smallActionText}>Retry</Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={advanceSequence}
-                    style={styles.smallAction}
-                  >
-                    <Text style={styles.smallActionText}>Skip</Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={stopPrayAll}
-                    style={styles.smallAction}
-                  >
-                    <Text style={styles.smallActionText}>Stop</Text>
-                  </Pressable>
-                </View>
-              </>
-            )}
+        {finishError ? (
+          <View style={styles.errorNotice}>
+            <Text accessibilityRole="alert" style={styles.errorText}>
+              {finishError}
+            </Text>
           </View>
         ) : null}
 
         <Pressable
           accessibilityRole="button"
-          accessibilityState={{ disabled: !cards.length || preparing }}
-          disabled={!cards.length || preparing}
-          onPress={prayAllActive ? stopPrayAll : startPrayAll}
-          style={[styles.primary, (!cards.length || preparing) && styles.disabled]}
+          accessibilityState={{ busy: finishing, disabled: !token || finishing }}
+          disabled={!token || finishing}
+          onPress={() => void finishPraying()}
+          style={[styles.primary, (!token || finishing) && styles.disabled]}
         >
-          <Text style={styles.primaryText}>
-            {prayAllActive ? "Stop praying" : "Pray All"}
-          </Text>
+          {finishing ? (
+            <ActivityIndicator color={colors.buttonOnPrimary} size="small" />
+          ) : (
+            <Text style={styles.primaryText}>Finished Praying</Text>
+          )}
         </Pressable>
       </ScrollView>
 
@@ -510,7 +399,6 @@ export function PrayerDeckScreen({
         card={selectedCard}
         token={token}
         visible={selectedCard !== null}
-        autoPlay={prayAllActive}
         deckPosition={
           selectedCard && cards.length > 1
             ? `${currentIndex + 1} of ${cards.length}`
@@ -518,26 +406,13 @@ export function PrayerDeckScreen({
         }
         navigationContext="daily-prayer-deck"
         navigationDirection={detailNavigationDirection}
-        onPrevious={
-          !prayAllActive && currentIndex > 0
-            ? () => showAdjacentCard(-1)
-            : undefined
-        }
+        onPrevious={currentIndex > 0 ? () => showAdjacentCard(-1) : undefined}
         onNext={
-          !prayAllActive && currentIndex < cards.length - 1
+          currentIndex < cards.length - 1
             ? () => showAdjacentCard(1)
             : undefined
         }
-        onPlaybackComplete={prayAllActive ? advanceSequence : undefined}
-        onPlaybackError={
-          prayAllActive
-            ? () => {
-                setSelectedCard(null);
-                setSequenceError("Narration could not be played.");
-              }
-            : undefined
-        }
-        onClose={prayAllActive ? stopPrayAll : () => setSelectedCard(null)}
+        onClose={() => setSelectedCard(null)}
       />
     </View>
   );
@@ -705,7 +580,7 @@ function createStyles(colors: ColorTokens) {
     textAlign: "center",
     marginTop: 8,
   },
-  cardStage: { marginTop: 18 },
+  cardStage: { marginTop: 10 },
   emptyState: { alignItems: "center", paddingVertical: 64 },
   emptyTitle: {
     color: colors.title,
@@ -720,58 +595,39 @@ function createStyles(colors: ColorTokens) {
     textAlign: "center",
     marginTop: 8,
   },
-  paging: { flexDirection: "row", gap: 10, marginTop: 28 },
+  paging: { flexDirection: "row", gap: 8, marginTop: 14 },
   pageButton: {
-    minHeight: 48,
+    minHeight: 32,
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 24,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.glassBorderStrong,
+    paddingVertical: 6,
   },
   pageButtonText: {
     color: colors.title,
     fontFamily: fonts.bodyMedium,
-    fontSize: 12,
+    fontSize: 10,
   },
   primary: {
-    minHeight: 54,
+    minHeight: 36,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 27,
+    borderRadius: 18,
     backgroundColor: colors.buttonPrimary,
-    marginTop: 18,
-    paddingHorizontal: 24,
+    marginTop: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   primaryText: {
     color: colors.buttonOnPrimary,
     fontFamily: fonts.displayMedium,
-    fontSize: 14,
+    fontSize: 12,
   },
   secondary: { minHeight: 48, justifyContent: "center", paddingHorizontal: 24 },
   secondaryText: { color: colors.mutedSoft, fontFamily: fonts.body, fontSize: 12 },
-  preparingRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  sequenceActions: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 8,
-    marginTop: 12,
-  },
-  smallAction: {
-    minWidth: 64,
-    minHeight: 42,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 21,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-  },
-  smallActionText: {
-    color: colors.title,
-    fontFamily: fonts.bodyMedium,
-    fontSize: 11,
-  },
   disabled: { opacity: 0.35 },
   });
 }

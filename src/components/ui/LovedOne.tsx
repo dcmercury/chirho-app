@@ -1,4 +1,4 @@
-import { Pressable, Text, StyleSheet } from "react-native";
+import { Pressable, Text, StyleSheet, View } from "react-native";
 import { fonts, type ColorTokens } from "../../theme/tokens";
 import { useThemedStyles } from "../../theme/ThemeProvider";
 import type { LovedOnePhoto } from "../../types/home";
@@ -12,18 +12,19 @@ function createStyles(colors: ColorTokens) {
       gap: 8,
     },
     itemCompact: {
-      width: 72,
+      width: 64,
     },
     pressed: {
       opacity: 0.65,
       transform: [{ scale: 0.96 }],
     },
-    avatar: {
+    avatarRing: {
       width: 56,
       height: 56,
       borderRadius: 28,
-      borderWidth: 2,
-      borderColor: colors.glassBorderRow,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      overflow: "hidden",
     },
     name: {
       fontFamily: fonts.displayMedium,
@@ -47,6 +48,7 @@ export function LovedOne({
   showIntention = true,
   compact = false,
   onPress,
+  onLongPress,
 }: {
   person: {
     id?: string;
@@ -60,14 +62,17 @@ export function LovedOne({
   showIntention?: boolean;
   compact?: boolean;
   onPress?: () => void;
+  onLongPress?: () => void;
 }) {
   const styles = useThemedStyles(createStyles);
   const imagePaths = lovedOneImagePaths(person);
   return (
     <Pressable
-      accessibilityRole={onPress ? "button" : undefined}
+      accessibilityRole={onPress || onLongPress ? "button" : undefined}
+      accessibilityHint={onLongPress ? "Long press to edit prayer reasons" : undefined}
       accessibilityLabel={onPress ? `Pray for ${person.name}` : undefined}
-      disabled={!onPress}
+      disabled={!onPress && !onLongPress}
+      onLongPress={onLongPress}
       onPress={onPress}
       style={({ pressed }) => [
         styles.item,
@@ -75,10 +80,12 @@ export function LovedOne({
         pressed && styles.pressed,
       ]}
     >
-      <KenBurnsImage
-        paths={imagePaths}
-        style={styles.avatar}
-      />
+      <View style={styles.avatarRing}>
+        <KenBurnsImage
+          paths={imagePaths}
+          style={StyleSheet.absoluteFill}
+        />
+      </View>
       <Text style={styles.name} numberOfLines={1}>
         {person.name}
       </Text>

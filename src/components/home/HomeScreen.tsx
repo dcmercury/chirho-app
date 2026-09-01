@@ -9,47 +9,99 @@ import {
   View,
   StyleSheet,
 } from "react-native";
+import Svg, { Circle, Path } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { useAuth, useUser } from "@clerk/expo";
 import { useRouter, type Href } from "expo-router";
 import { fonts, type ColorTokens } from "../../theme/tokens";
 import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
-import { privateImageCachePolicy, resolveImage } from "../../lib/assets";
+import {
+  DEFAULT_BACKGROUND_MUSIC,
+  FALLBACK_PRAYER_IMAGE,
+  privateImageCachePolicy,
+  resolveImage,
+} from "../../lib/assets";
 import { parseAppearance } from "../../lib/appearancePreference";
 import { selectedDashboardBackgrounds } from "../../lib/dashboardBackgrounds";
-import { setBackgroundMusicEnabled } from "../../lib/backgroundMusicPreference";
+import {
+  cachedBackgroundUrls,
+  useBackgroundLibrary,
+} from "../../lib/backgroundLibrary";
+import {
+  setBackgroundMusicEnabled,
+  setBackgroundMusicUrl,
+} from "../../lib/backgroundMusicPreference";
+import { useMusicLibrary, resolveLibraryMusicUrl } from "../../lib/musicLibrary";
 import {
   addLovedOne,
   createGroup,
   createPrayerFocus,
   generateLovedOnePrayer,
+  generatePrayerFocusPrayer,
   generatePrayerCardAudio,
   getLovedOnePhotos,
   getMobileHome,
+  previewGroupContent,
+  regenerateGroupBackground,
   saveLovedOneConfig,
+  selectGroupBackground,
+  uploadGroupBackground,
   uploadLovedOnePhoto,
+  uploadPrayerFocusPhoto,
   updatePersonalPlan,
   updatePrayerFocus,
 } from "../../lib/api";
+import {
+  acceptGroupInvitation,
+  declineGroupInvitation,
+} from "../../lib/groupInviteApi";
+import type { LovedOnePrayerConfiguration } from "../../lib/prayerConfig";
+import type {
+  GroupCreatePayload,
+  GroupPreviewPayload,
+} from "../../features/groups/types";
 import { GridOverlay } from "../ui/GridOverlay";
 import { PrayerCard } from "../ui/PrayerCard";
 import { LovedOne } from "../ui/LovedOne";
 import { KenBurnsImage, lovedOneImagePaths } from "../ui/KenBurnsImage";
 import { LoadingChiRhoOverlay } from "../ui/LoadingChiRhoOverlay";
+import {
+  hasExistingSetupData,
+  isSetupOnboardingComplete,
+  markSetupOnboardingComplete,
+  remainingSetupChapters,
+} from "../../lib/setupOnboarding";
+import {
+  focusImagePaths,
+  focusPhotoPath,
+} from "../../lib/prayerFocusImage";
+import { SetupOnboarding } from "../onboarding/SetupOnboarding";
 import { AddLovedOneModal } from "./AddLovedOneModal";
+import { AddSubjectSheet, type AddSubjectChoice } from "./AddSubjectSheet";
+import { PrayerFocusCircle } from "./PrayerFocusCircle";
+import { HomeNavFab, HOME_NAV_FAB_RESERVE } from "./HomeNavFab";
+import {
+  NeedPrayerDrawer,
+  type NeedPrayerMode,
+} from "./NeedPrayerDrawer";
 import { CreateGroupModal } from "./CreateGroupModal";
 import { LovedOnePhotosModal } from "./LovedOnePhotosModal";
 import { PrayerDetailModal } from "./PrayerDetailModal";
-import { PrayerFocusModal } from "./PrayerFocusModal";
+import {
+  PrayerFocusModal,
+  type PrayerFocusIntent,
+} from "./PrayerFocusModal";
 import { PersonalPlanDrawer } from "./PersonalPlanDrawer";
-import { PrayerFocusTypeIcon } from "./PrayerFocusTypeIcon";
 import { ProfileDrawer } from "./ProfileDrawer";
 import type {
   HomeData,
   HomeLovedOne,
   HomePrayerCard,
+  LovedOneGender,
+  LovedOneKind,
   MobileHomeResponse,
+  PendingGroupInvite,
   PrayerFocus,
   PrayerFocusInput,
 } from "../../types/home";
@@ -63,13 +115,16 @@ async function prefetchHomeImages(result: MobileHomeResponse, token: string) {
     ...selectedDashboardBackgrounds(
       result.community?.backgroundImage,
       result.home.profile.dashboardBackgrounds,
+      cachedBackgroundUrls(),
     ),
     ...result.home.cards.slice(0, 2).map((card) => card.image),
     ...result.home.lovedOnes
       .slice(0, 5)
       .flatMap((person) => lovedOneImagePaths(person)),
     ...result.home.groups.slice(0, 3).map((group) => group.image),
-  ];
+  ].filter(
+    (path): path is string => typeof path === "string" && path.length > 0,
+  );
   const sources = paths
     .map((path) => {
       const source = resolveImage(path, token);
@@ -84,7 +139,7 @@ async function prefetchHomeImages(result: MobileHomeResponse, token: string) {
       (
         item,
       ): item is {
-        path: string | null | undefined;
+        path: string;
         source: { uri: string; headers?: Record<string, string> };
       } => Boolean(item),
     )
@@ -110,6 +165,70 @@ async function prefetchHomeImages(result: MobileHomeResponse, token: string) {
       resolve();
     });
   });
+}
+
+type PraySubject =
+  | { kind: "person"; label: string; person: HomeLovedOne }
+  | { kind: "focus"; label: string; focus: PrayerFocus };
+
+/** People and things share one rail, ordered by name regardless of type. */
+function praySubjects(
+  lovedOnes: HomeLovedOne[],
+  focuses: PrayerFocus[],
+): PraySubject[] {
+  const subjects: PraySubject[] = [
+    ...lovedOnes.map((person) => ({
+      kind: "person" as const,
+      label: person.name,
+      person,
+    })),
+    ...focuses.map((focus) => ({
+      kind: "focus" as const,
+      label: focus.title,
+      focus,
+    })),
+  ];
+  return subjects.sort((a, b) =>
+    a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
+  );
+}
+
+function formatDeckDate(localDate: string) {
+  const [year, month, day] = localDate.split("-").map(Number);
+  if (!year || !month || !day) return localDate;
+  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function MorningIcon({ color, size = 16 }: { color: string; size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx={12} cy={12} r={4} stroke={color} strokeWidth={1.8} />
+      <Path
+        d="M12 3v2.2M12 18.8V21M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M3 12h2.2M18.8 12H21M4.9 19.1l1.6-1.6M17.5 6.5l1.6-1.6"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+function EveningIcon({ color, size = 16 }: { color: string; size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M16.4 14.2A6.4 6.4 0 0 1 9.8 7.6 6.2 6.2 0 1 0 16.4 14.2Z"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
 }
 
 async function hydrateLovedOnePhotos(
@@ -181,10 +300,15 @@ export function HomeScreen() {
   const { getToken } = useAuth();
   const styles = useThemedStyles(createStyles);
   const { colors, setAppearance } = useTheme();
+  const { urls: libraryUrls } = useBackgroundLibrary();
+  const { tracks: musicTracks } = useMusicLibrary();
   const getTokenRef = useRef(getToken);
+  const prayRailRef = useRef<ScrollView>(null);
+  const prayRailHint = useRef(0);
   const { user } = useUser();
   const firstName = user?.firstName || "friend";
   const [response, setResponse] = useState<MobileHomeResponse | null>(null);
+  const responseRef = useRef<MobileHomeResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -195,6 +319,18 @@ export function HomeScreen() {
   >(1);
   const [prayerLoading, setPrayerLoading] = useState(false);
   const [addLovedOneOpen, setAddLovedOneOpen] = useState(false);
+  const [editingLovedOne, setEditingLovedOne] = useState<{
+    id: string;
+    name: string;
+    configurations: LovedOnePrayerConfiguration[];
+    kind?: LovedOneKind;
+  } | null>(null);
+  const [addSubjectOpen, setAddSubjectOpen] = useState(false);
+  const [addLovedOneIntent, setAddLovedOneIntent] =
+    useState<LovedOneKind>("person");
+  const [focusIntent, setFocusIntent] = useState<PrayerFocusIntent>("thing");
+  const [needPrayerOpen, setNeedPrayerOpen] = useState(false);
+  const [needPrayerMode, setNeedPrayerMode] = useState<NeedPrayerMode>("prayer");
   const [photoLovedOne, setPhotoLovedOne] = useState<{
     id: string;
     firstName: string;
@@ -203,6 +339,13 @@ export function HomeScreen() {
     id: string;
     firstName: string;
   } | null>(null);
+  const pendingSubjectRef = useRef<AddSubjectChoice | null>(null);
+  const pendingLovedOnePrayerRef = useRef<HomeLovedOne | null>(null);
+  const pendingPrayerRef = useRef<
+    | { kind: "focus"; focus: PrayerFocus }
+    | { kind: "card"; card: HomePrayerCard }
+    | null
+  >(null);
   const photoModalFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -217,12 +360,17 @@ export function HomeScreen() {
   const [savingLovedOne, setSavingLovedOne] = useState(false);
   const [savingGroup, setSavingGroup] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const [inviteBusyToken, setInviteBusyToken] = useState<string | null>(null);
+  const [setupReady, setSetupReady] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
   const generatingLovedOneRef = useRef(false);
   const showPersonalPrayer = communityAllowsPersonalPrayer(
     response?.community,
     response?.plan,
   );
-  const trialLabel = formatTrialRemaining(response?.plan?.trialEndsAt);
+  const trialLabel = response?.plan?.billingEnabled
+    ? formatTrialRemaining(response.plan.trialEndsAt)
+    : null;
 
   useEffect(() => {
     if (response?.plan?.status !== "trial") return;
@@ -231,6 +379,7 @@ export function HomeScreen() {
   }, [response?.plan?.status]);
 
   useEffect(() => {
+    if (!__DEV__) return;
     console.info("[HomeFeatures]", {
       hasCommunity: Boolean(response?.community),
       communityuuid: response?.community?.communityuuid ?? null,
@@ -258,17 +407,39 @@ export function HomeScreen() {
     setPhotoLovedOne(lovedOne);
   }, []);
 
-  const queuePhotoModal = useCallback(
-    (lovedOne: { id: string; firstName: string }) => {
-      pendingPhotoLovedOneRef.current = lovedOne;
-      if (Platform.OS !== "ios") {
-        if (photoModalFallbackRef.current) {
-          clearTimeout(photoModalFallbackRef.current);
-        }
-        photoModalFallbackRef.current = setTimeout(openQueuedPhotoModal, 400);
-      }
+  const openQueuedProfileAction = useCallback(() => {
+    openQueuedPhotoModal();
+  }, [openQueuedPhotoModal]);
+
+  const openQueuedSubjectModal = useCallback(() => {
+    const choice = pendingSubjectRef.current;
+    if (!choice) return;
+    pendingSubjectRef.current = null;
+    setMutationError(null);
+    if (choice === "person" || choice === "family") {
+      setEditingLovedOne(null);
+      setAddLovedOneIntent(choice);
+      setAddLovedOneOpen(true);
+      return;
+    }
+    if (choice === "situation") {
+      setNeedPrayerMode("situation");
+      setNeedPrayerOpen(true);
+      return;
+    }
+    setSelectedFocus(null);
+    setFocusIntent("thing");
+    setPrayerFocusOpen(true);
+  }, []);
+
+  const handleAddSubject = useCallback(
+    (choice: AddSubjectChoice) => {
+      // The next drawer can only present once this sheet is fully dismissed.
+      pendingSubjectRef.current = choice;
+      setAddSubjectOpen(false);
+      if (Platform.OS !== "ios") openQueuedSubjectModal();
     },
-    [openQueuedPhotoModal],
+    [openQueuedSubjectModal],
   );
 
   useEffect(
@@ -300,20 +471,38 @@ export function HomeScreen() {
           await getMobileHome(token),
           token,
         );
-        console.info("[HomeFeatures] home payload", {
-          hasCommunity: Boolean(result.community),
-          communityuuid: result.community?.communityuuid ?? null,
-          name: result.community?.name ?? null,
-          licenseTier: result.community?.licenseTier ?? null,
-          personalPrayer: result.community?.features?.personalPrayer ?? null,
-          dailyPrayers: result.community?.features?.dailyPrayers ?? null,
-          allowPersonalPrayer: communityAllowsPersonalPrayer(
-            result.community,
-            result.plan,
-          ),
-          planStatus: result.plan?.status ?? null,
-        });
+        if (__DEV__) {
+          console.info("[HomeFeatures] home payload", {
+            hasCommunity: Boolean(result.community),
+            licenseTier: result.community?.licenseTier ?? null,
+            allowPersonalPrayer: communityAllowsPersonalPrayer(
+              result.community,
+              result.plan,
+            ),
+            planStatus: result.plan?.status ?? null,
+          });
+        }
+        responseRef.current = result;
         setResponse(result);
+        if (refresh) {
+          const count = praySubjects(
+            result.home.lovedOnes || [],
+            result.home.prayerFocuses || [],
+          ).length;
+          if (count > 5) {
+            const hint = ++prayRailHint.current;
+            requestAnimationFrame(() => {
+              setTimeout(() => {
+                if (hint !== prayRailHint.current) return;
+                prayRailRef.current?.scrollTo({ x: 52, animated: true });
+                setTimeout(() => {
+                  if (hint !== prayRailHint.current) return;
+                  prayRailRef.current?.scrollTo({ x: 0, animated: true });
+                }, 700);
+              }, 160);
+            });
+          }
+        }
         if (!refresh) await prefetchHomeImages(result, token);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unable to load your home");
@@ -329,12 +518,77 @@ export function HomeScreen() {
     loadHome();
   }, [loadHome]);
 
+  const respondToInvite = useCallback(
+    async (invite: PendingGroupInvite, action: "accept" | "deny") => {
+      if (inviteBusyToken) return;
+      setInviteBusyToken(invite.invitationToken);
+      try {
+        const token = await requireCurrentToken();
+        if (action === "accept") {
+          await acceptGroupInvitation(invite.invitationToken, token);
+          router.push({
+            pathname: "/(app)/groups/[groupuuid]",
+            params: { groupuuid: invite.groupuuid },
+          });
+        } else {
+          await declineGroupInvitation(invite.invitationToken, token);
+        }
+        await loadHome(true);
+      } catch (err) {
+        Alert.alert(
+          action === "accept" ? "Unable to join" : "Unable to decline",
+          err instanceof Error ? err.message : "Please try again.",
+        );
+      } finally {
+        setInviteBusyToken(null);
+      }
+    },
+    [inviteBusyToken, loadHome, requireCurrentToken, router],
+  );
+
   const home: HomeData | null = response?.home || null;
+
+  useEffect(() => {
+    if (setupReady || loading) return;
+    if (error && !home) {
+      setSetupReady(true);
+      return;
+    }
+    if (!home || !user?.id) return;
+    let cancelled = false;
+    void (async () => {
+      const completed = await isSetupOnboardingComplete(user.id);
+      if (cancelled) return;
+      const hasData = hasExistingSetupData(home);
+      if (hasData && !completed) {
+        void markSetupOnboardingComplete(user.id);
+      }
+      const chapters = hasData
+        ? []
+        : remainingSetupChapters(
+            home,
+            response?.community ?? null,
+            response?.plan ?? null,
+          );
+      setSetupOpen(!completed && !hasData && chapters.length > 0);
+      setSetupReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [error, home, loading, response?.community, response?.plan, setupReady, user?.id]);
 
   useEffect(() => {
     if (typeof home?.profile.backgroundMusicEnabled !== "boolean") return;
     setBackgroundMusicEnabled(home.profile.backgroundMusicEnabled);
   }, [home?.profile.backgroundMusicEnabled]);
+
+  useEffect(() => {
+    setBackgroundMusicUrl(
+      resolveLibraryMusicUrl(home?.profile.backgroundMusicId, musicTracks) ||
+        DEFAULT_BACKGROUND_MUSIC,
+    );
+  }, [home?.profile.backgroundMusicId, musicTracks]);
 
   useEffect(() => {
     const theme = home?.profile.appSettings.theme;
@@ -349,9 +603,12 @@ export function HomeScreen() {
             : card === selectedCard,
         )
       : -1;
+  // Anyone who has not picked their own rotates the live library, so admin
+  // edits reach them without an app release.
   const dashboardBackgrounds = selectedDashboardBackgrounds(
     response?.community?.backgroundImage,
     home?.profile.dashboardBackgrounds,
+    libraryUrls,
   );
 
   const showAdjacentRecentPrayer = (direction: -1 | 1) => {
@@ -398,7 +655,7 @@ export function HomeScreen() {
     if (generatingLovedOneRef.current) return;
     generatingLovedOneRef.current = true;
     const images = lovedOneImagePaths(person);
-    const backgroundImage = images[0] || "/cover1.jpg";
+    const backgroundImage = images[0] || FALLBACK_PRAYER_IMAGE;
     const timeOfDayLabel =
       new Date().getHours() < 12 ? "Morning Prayer" : "Evening Prayer";
     setSelectedCard({
@@ -476,24 +733,172 @@ export function HomeScreen() {
     }
   };
 
+  const handleAddLovedOneDismiss = () => {
+    const person = pendingLovedOnePrayerRef.current;
+    if (person) {
+      pendingLovedOnePrayerRef.current = null;
+      void handleLovedOnePress(person);
+      return;
+    }
+    setAddLovedOneIntent("person");
+    openQueuedPhotoModal();
+  };
+
+  // Tapping a familiar face in the add flow means "I already did this" — close
+  // the wizard and pray for them instead of adding a duplicate.
+  const handleSelectExistingLovedOne = (person: HomeLovedOne) => {
+    pendingLovedOnePrayerRef.current = person;
+    setAddLovedOneOpen(false);
+    if (Platform.OS !== "ios") handleAddLovedOneDismiss();
+  };
+
+  const handleSelectExistingFocus = (
+    focus: PrayerFocus,
+    source: "thing" | "situation",
+  ) => {
+    pendingPrayerRef.current = { kind: "focus", focus };
+    if (source === "thing") {
+      setPrayerFocusOpen(false);
+      setSelectedFocus(null);
+    } else {
+      setNeedPrayerOpen(false);
+    }
+    if (Platform.OS !== "ios") handlePendingPrayerDismiss();
+  };
+
+  const handlePrayerFocusPress = async (focus: PrayerFocus) => {
+    if (generatingLovedOneRef.current) return;
+    generatingLovedOneRef.current = true;
+    const images = focusImagePaths(focus);
+    const backgroundImage = images[0] || FALLBACK_PRAYER_IMAGE;
+    const timeOfDayLabel =
+      new Date().getHours() < 12 ? "Morning Prayer" : "Evening Prayer";
+    setSelectedCard({
+      title: focus.title,
+      verse: timeOfDayLabel,
+      text: `Preparing a prayer for ${focus.title}...`,
+      image: backgroundImage,
+      images,
+    });
+    setPrayerLoading(true);
+    try {
+      const token = await requireCurrentToken();
+      const prayer = await generatePrayerFocusPrayer(
+        focus.focusuuid,
+        backgroundImage,
+        token,
+        true,
+      );
+      const pendingPrayer = {
+        ...prayer,
+        image: images[0] || prayer.image,
+        images,
+        audioStatus: "pending" as const,
+      };
+      setSelectedCard(pendingPrayer);
+      setResponse((current) =>
+        current
+          ? {
+              ...current,
+              home: {
+                ...current.home,
+                cards: [
+                  pendingPrayer,
+                  ...current.home.cards.filter(
+                    (card) => card.prayeruuid !== prayer.prayeruuid,
+                  ),
+                ].slice(0, 5),
+              },
+            }
+          : current,
+      );
+      setPrayerLoading(false);
+
+      void generatePrayerCardAudio(prayer.prayeruuid!, token)
+        .then((audio) => {
+          updatePrayerCard(prayer.prayeruuid!, {
+            narrationUrl: audio.narrationUrl,
+            backgroundMusicUrl:
+              audio.backgroundMusicUrl || prayer.backgroundMusicUrl,
+            backgroundMusicVolume: audio.backgroundMusicVolume,
+            audioAvailable: audio.audioStatus === "ready",
+            audioStatus: audio.audioStatus,
+          });
+        })
+        .catch(() => {
+          updatePrayerCard(prayer.prayeruuid!, {
+            audioAvailable: false,
+            audioStatus: "failed",
+          });
+        });
+    } catch (err) {
+      setPrayerLoading(false);
+      setSelectedCard({
+        title: focus.title,
+        verse: timeOfDayLabel,
+        text:
+          err instanceof Error
+            ? err.message
+            : "Unable to generate a prayer. Please try again.",
+        image: backgroundImage,
+        images,
+      });
+    } finally {
+      generatingLovedOneRef.current = false;
+    }
+  };
+
+  const handlePendingPrayerDismiss = () => {
+    const pending = pendingPrayerRef.current;
+    if (!pending) return;
+    pendingPrayerRef.current = null;
+    if (pending.kind === "focus") {
+      void handlePrayerFocusPress(pending.focus);
+      return;
+    }
+    setDetailNavigationDirection(1);
+    setSelectedCard(pending.card);
+  };
+
   const handleAddLovedOne = async (
     name: string,
-    categories: string[],
+    configurations: LovedOnePrayerConfiguration[],
     photoDataUris: string[] = [],
+    gender: LovedOneGender | null,
+    kind: LovedOneKind = "person",
   ) => {
     setSavingLovedOne(true);
     setMutationError(null);
     try {
       const token = await requireCurrentToken();
-      const lovedOne = await addLovedOne(name, token);
-      if (categories.length) {
-        await saveLovedOneConfig(lovedOne.id, categories, token);
+      const lovedOne = await addLovedOne(
+        name,
+        token,
+        gender ?? undefined,
+        kind,
+      );
+      if (configurations.length) {
+        await saveLovedOneConfig(lovedOne.id, configurations, token);
       }
       for (const imageData of photoDataUris) {
         await uploadLovedOnePhoto(lovedOne.id, imageData, token);
       }
       await loadHome(true);
+      pendingLovedOnePrayerRef.current =
+        responseRef.current?.home.lovedOnes.find(
+          (person) => person.id === lovedOne.id,
+        ) || {
+          id: lovedOne.id,
+          name: lovedOne.firstName,
+          avatar: "",
+          intention: "",
+          gender: lovedOne.gender,
+          kind: lovedOne.kind || kind,
+          configurations,
+        };
       setAddLovedOneOpen(false);
+      setEditingLovedOne(null);
+      if (Platform.OS !== "ios") handleAddLovedOneDismiss();
     } catch (err) {
       setMutationError(err instanceof Error ? err.message : "Unable to add loved one");
     } finally {
@@ -501,14 +906,54 @@ export function HomeScreen() {
     }
   };
 
-  const handleCreateGroup = async (name: string) => {
+  const handleUpdateLovedOneReasons = async (
+    id: string,
+    configurations: LovedOnePrayerConfiguration[],
+  ) => {
+    setSavingLovedOne(true);
+    setMutationError(null);
+    try {
+      const token = await requireCurrentToken();
+      await saveLovedOneConfig(id, configurations, token);
+      await loadHome(true);
+      setAddLovedOneOpen(false);
+      setEditingLovedOne(null);
+    } catch (err) {
+      setMutationError(
+        err instanceof Error ? err.message : "Unable to update prayer reasons",
+      );
+    } finally {
+      setSavingLovedOne(false);
+    }
+  };
+
+  const handlePreviewGroup = async (input: GroupPreviewPayload) => {
+    const token = await requireCurrentToken();
+    return previewGroupContent(input, token);
+  };
+
+  const handleCreateGroup = async (input: GroupCreatePayload) => {
     setSavingGroup(true);
     setMutationError(null);
     try {
       const token = await requireCurrentToken();
-      const group = await createGroup(name, token);
+      const group = await createGroup(input, token);
+      try {
+        for (const imageUrl of input.backgroundUrls || []) {
+          await selectGroupBackground(group.groupuuid, imageUrl, token);
+        }
+        for (const imageData of input.backgroundUploads || []) {
+          await uploadGroupBackground(group.groupuuid, imageData, token);
+        }
+        if (input.generateBackground) {
+          await regenerateGroupBackground(group.groupuuid, token);
+        }
+      } catch {
+        // Group exists; background can be set later in group settings.
+      }
       await loadHome(true);
       setCreateGroupOpen(false);
+      setProfileOpen(false);
       router.push({
         pathname: "/(app)/groups/[groupuuid]",
         params: { groupuuid: group.groupuuid },
@@ -547,19 +992,76 @@ export function HomeScreen() {
     }
   };
 
-  const handleSavePrayerFocus = async (input: PrayerFocusInput) => {
+  const handleSaveSituation = async (situation: {
+    title: string;
+    burdenId: string;
+    optionId: string;
+  }) => {
+    const token = await requireCurrentToken();
+    const created = await createPrayerFocus(
+      {
+        title: situation.title,
+        type: "situation",
+        species: null,
+        gender: null,
+        note: null,
+        categories: [situation.burdenId],
+        virtues: ["peace", "grace"],
+        period: "both",
+        active: true,
+        order:
+          Math.max(
+            -1,
+            ...(home?.prayerFocuses.map((focus) => focus.order) || []),
+          ) + 1,
+      },
+      token,
+    );
+    await loadHome(true);
+    pendingPrayerRef.current = {
+      kind: "focus",
+      focus:
+        responseRef.current?.home.prayerFocuses.find(
+          (focus) => focus.focusuuid === created.focusuuid,
+        ) || created,
+    };
+    setNeedPrayerOpen(false);
+    if (Platform.OS !== "ios") handlePendingPrayerDismiss();
+  };
+
+  const handleSavePrayerFocus = async (
+    input: PrayerFocusInput,
+    newPhotos: string[] = [],
+  ) => {
     setSavingLovedOne(true);
     setMutationError(null);
     try {
       const token = await requireCurrentToken();
+      let createdFocus: PrayerFocus | null = null;
       if (selectedFocus) {
         await updatePrayerFocus(selectedFocus.focusuuid, input, token);
       } else {
-        await createPrayerFocus(input, token);
+        const created = await createPrayerFocus(input, token);
+        createdFocus = created;
+        for (const imageData of newPhotos) {
+          await uploadPrayerFocusPhoto(created.focusuuid, imageData, token);
+        }
       }
       await loadHome(true);
+      if (createdFocus) {
+        pendingPrayerRef.current = {
+          kind: "focus",
+          focus:
+            responseRef.current?.home.prayerFocuses.find(
+              (focus) => focus.focusuuid === createdFocus.focusuuid,
+            ) || createdFocus,
+        };
+      }
       setPrayerFocusOpen(false);
       setSelectedFocus(null);
+      if (createdFocus && Platform.OS !== "ios") {
+        handlePendingPrayerDismiss();
+      }
     } catch (err) {
       setMutationError(
         err instanceof Error ? err.message : "Unable to save prayer focus",
@@ -569,7 +1071,7 @@ export function HomeScreen() {
     }
   };
 
-  if (loading) {
+  if (loading || (!error && !setupReady)) {
     return (
       <View style={styles.root}>
         <LoadingChiRhoOverlay
@@ -577,6 +1079,23 @@ export function HomeScreen() {
           visible
         />
       </View>
+    );
+  }
+
+  if (setupOpen && home) {
+    return (
+      <SetupOnboarding
+        firstName={firstName}
+        home={home}
+        community={response?.community ?? null}
+        plan={response?.plan ?? null}
+        onRefresh={() => loadHome(true)}
+        onFinished={async () => {
+          if (user?.id) await markSetupOnboardingComplete(user.id);
+          await loadHome(true);
+          setSetupOpen(false);
+        }}
+      />
     );
   }
 
@@ -593,7 +1112,7 @@ export function HomeScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingTop: insets.top + 24, paddingBottom: 32 + insets.bottom },
+          { paddingTop: insets.top + 24, paddingBottom: HOME_NAV_FAB_RESERVE + insets.bottom },
         ]}
         refreshControl={
           <RefreshControl
@@ -677,7 +1196,7 @@ export function HomeScreen() {
               <>
                 <Text style={styles.section}>Today's Prayer Deck</Text>
                 <Pressable
-                  accessibilityLabel={`Open ${home.dailyDeck.timeOfDay} prayer deck`}
+                  accessibilityLabel={`Open ${home.dailyDeck.timeOfDay} prayer deck for ${formatDeckDate(home.dailyDeck.localDate)}`}
                   accessibilityRole="button"
                   onPress={() =>
                     router.push(
@@ -693,9 +1212,27 @@ export function HomeScreen() {
                     <Text style={styles.deckEyebrow}>
                       {home.dailyDeck.timeOfDay} · {home.dailyDeck.status}
                     </Text>
-                    <Text style={styles.deckTitle}>
-                      {home.dailyDeck.labels.join(" · ") || "Daily prayers"}
-                    </Text>
+                    <View style={styles.deckTitleRow}>
+                      <Text style={styles.deckTitle}>
+                        {formatDeckDate(home.dailyDeck.localDate)}
+                      </Text>
+                      <View style={styles.deckIcons}>
+                        <MorningIcon
+                          color={
+                            home.dailyDeck.timeOfDay === "morning"
+                              ? colors.accentText
+                              : colors.mutedSoft
+                          }
+                        />
+                        <EveningIcon
+                          color={
+                            home.dailyDeck.timeOfDay === "evening"
+                              ? colors.accentText
+                              : colors.mutedSoft
+                          }
+                        />
+                      </View>
+                    </View>
                     <Text style={styles.deckMeta}>
                       {home.dailyDeck.readyCards} of {home.dailyDeck.totalCards} ready
                     </Text>
@@ -732,131 +1269,102 @@ export function HomeScreen() {
               </Text>
             )}
 
-            <View style={styles.sectionRow}>
-              <Text style={styles.section}>Pray for Loved Ones</Text>
-              <Pressable
-                accessibilityLabel="Add a loved one"
-                accessibilityRole="button"
-                onPress={() => setAddLovedOneOpen(true)}
-                style={({ pressed }) => [styles.plus, pressed && styles.pressed]}
-              >
-                <Text style={styles.plusText}>+</Text>
-              </Pressable>
-            </View>
-            {home?.lovedOnes.length ? (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.lovedRail}
-              >
-                {home.lovedOnes.map((person) => (
-                  <LovedOne
-                    key={person.id}
-                    person={person}
-                    compact
-                    showIntention={false}
-                    onPress={() => handleLovedOnePress(person)}
-                  />
-                ))}
-              </ScrollView>
-            ) : (
-              <Text style={styles.empty}>
-                Add someone you would like to pray for.
-              </Text>
-            )}
-
-            <View style={styles.sectionRow}>
-              <Text style={styles.section}>Prayer Focuses</Text>
-              <Pressable
-                accessibilityLabel="Add a prayer focus"
-                accessibilityRole="button"
-                onPress={() => {
-                  setMutationError(null);
-                  setSelectedFocus(null);
-                  setPrayerFocusOpen(true);
-                }}
-                style={({ pressed }) => [styles.plus, pressed && styles.pressed]}
-              >
-                <Text style={styles.plusText}>+</Text>
-              </Pressable>
-            </View>
-            {home.prayerFocuses.length ? (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.focusRail}
-              >
-                {home.prayerFocuses.map((focus) => (
-                  <Pressable
-                    key={focus.focusuuid}
-                    accessibilityLabel={`Edit prayer focus ${focus.title}`}
-                    accessibilityRole="button"
-                    onPress={() => {
-                      setMutationError(null);
-                      setSelectedFocus(focus);
-                      setPrayerFocusOpen(true);
-                    }}
-                    style={({ pressed }) => [
-                      styles.focusCard,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <View style={styles.focusIcon}>
-                      <PrayerFocusTypeIcon
-                        type={focus.type}
-                        color={colors.accent}
-                        size={18}
-                      />
-                    </View>
-                    <Text numberOfLines={1} style={styles.focusTitle}>
-                      {focus.title}
-                    </Text>
-                    <Text style={styles.focusPeriod}>{focus.period}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            ) : (
-              <Text style={styles.empty}>
-                Add a focus to include in your daily prayer deck.
-              </Text>
-            )}
+            <Text style={styles.section}>Pray For</Text>
+            <ScrollView
+              ref={prayRailRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.lovedRail}
+            >
+              {praySubjects(home?.lovedOnes || [], home.prayerFocuses).map(
+                (subject) =>
+                  subject.kind === "person" ? (
+                    <LovedOne
+                      key={subject.person.id}
+                      person={subject.person}
+                      compact
+                      showIntention={false}
+                      onPress={() => handleLovedOnePress(subject.person)}
+                      onLongPress={() => {
+                        setMutationError(null);
+                        setEditingLovedOne({
+                          id: subject.person.id,
+                          name: subject.person.name,
+                          configurations: subject.person.configurations || [],
+                          kind: subject.person.kind,
+                        });
+                        setAddLovedOneIntent(
+                          subject.person.kind === "family" ? "family" : "person",
+                        );
+                        setAddLovedOneOpen(true);
+                      }}
+                    />
+                  ) : (
+                    <PrayerFocusCircle
+                      key={subject.focus.focusuuid}
+                      focus={subject.focus}
+                      photoPath={focusPhotoPath(subject.focus)}
+                      onLongPress={() => {
+                        setMutationError(null);
+                        setSelectedFocus(subject.focus);
+                        setPrayerFocusOpen(true);
+                      }}
+                      onPress={() => handlePrayerFocusPress(subject.focus)}
+                    />
+                  ),
+              )}
+            </ScrollView>
               </>
             ) : null}
 
-            <View style={styles.sectionRow}>
-              <Text style={styles.section}>Prayer Groups</Text>
-              {!response?.community ||
-              response.community.createBlockedReason !== "members" ? (
-                <Pressable
-                  accessibilityLabel="Start a prayer group"
-                  accessibilityRole="button"
-                  accessibilityState={{
-                    disabled: response?.community?.canCreateGroups === false,
-                  }}
-                  onPress={() => {
-                    if (response?.community?.canCreateGroups === false) {
-                      Alert.alert(
-                        "Group limit reached",
-                        response.community.createBlockedReason === "user_limit"
-                          ? "You have reached the group limit for this church."
-                          : "This church’s plan does not include more groups.",
-                      );
-                      return;
-                    }
-                    setMutationError(null);
-                    setCreateGroupOpen(true);
-                  }}
-                  style={({ pressed }) => [
-                    styles.plus,
-                    pressed && styles.pressed,
-                    response?.community?.canCreateGroups === false &&
-                      styles.plusDisabled,
-                  ]}
-                >
-                  <Text style={styles.plusText}>+</Text>
-                </Pressable>
-              ) : null}
-            </View>
+            {response?.pendingInvites?.length ? (
+              <View style={styles.inviteStack}>
+                {response.pendingInvites.map((invite) => {
+                  const busy = inviteBusyToken === invite.invitationToken;
+                  return (
+                    <View key={invite.invitationToken} style={styles.inviteCard}>
+                      <Text style={styles.inviteLabel}>GROUP REQUEST</Text>
+                      <Text style={styles.inviteTitle}>{invite.groupName}</Text>
+                      <Text style={styles.inviteHint}>
+                        {invite.phoneLastFour
+                          ? `Sent to the number ending in ${invite.phoneLastFour}. Accept or decline.`
+                          : "Accept or decline this group invitation."}
+                      </Text>
+                      <View style={styles.inviteActions}>
+                        <Pressable
+                          accessibilityRole="button"
+                          disabled={busy}
+                          onPress={() => respondToInvite(invite, "deny")}
+                          style={({ pressed }) => [
+                            styles.inviteDeny,
+                            pressed && styles.pressed,
+                            busy && styles.plusDisabled,
+                          ]}
+                        >
+                          <Text style={styles.inviteDenyText}>Decline</Text>
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          disabled={busy}
+                          onPress={() => respondToInvite(invite, "accept")}
+                          style={({ pressed }) => [
+                            styles.inviteAccept,
+                            pressed && styles.pressed,
+                            busy && styles.plusDisabled,
+                          ]}
+                        >
+                          <Text style={styles.inviteAcceptText}>
+                            {busy ? "Please wait…" : "Accept"}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            ) : null}
+
+            <Text style={styles.section}>Prayer Groups</Text>
             {home?.groups.length ? (
               <ScrollView
                 horizontal
@@ -918,6 +1426,37 @@ export function HomeScreen() {
         ) : null}
       </ScrollView>
 
+      <HomeNavFab
+        bottom={insets.bottom + 4}
+        onPress={() => setAddSubjectOpen(true)}
+      />
+
+      <NeedPrayerDrawer
+        visible={needPrayerOpen}
+        mode={needPrayerMode}
+        existingSituations={(home?.prayerFocuses || []).filter(
+          (focus) => focus.type === "situation",
+        )}
+        onSelectExisting={(focus) =>
+          handleSelectExistingFocus(focus, "situation")
+        }
+        onSaveSituation={handleSaveSituation}
+        traditionId={home?.profile.traditions.selected || "scripture"}
+        traditionLabel={
+          home?.profile.traditions.options.find(
+            (option) => option.id === home.profile.traditions.selected,
+          )?.label || "Just Scripture"
+        }
+        onClose={() => setNeedPrayerOpen(false)}
+        onDismiss={handlePendingPrayerDismiss}
+        onGenerated={(card) => {
+          pendingPrayerRef.current = { kind: "card", card };
+          setNeedPrayerOpen(false);
+          if (Platform.OS !== "ios") handlePendingPrayerDismiss();
+          void loadHome(true);
+        }}
+      />
+
       <PrayerDetailModal
         card={selectedCard}
         token={sessionToken}
@@ -949,22 +1488,28 @@ export function HomeScreen() {
         visible={addLovedOneOpen}
         saving={savingLovedOne}
         error={mutationError}
-        onClose={() => setAddLovedOneOpen(false)}
-        onDismiss={openQueuedPhotoModal}
+        existingLovedOnes={(home?.lovedOnes || []).filter((person) =>
+          addLovedOneIntent === "family"
+            ? person.kind === "family"
+            : person.kind !== "family",
+        )}
+        editing={editingLovedOne}
+        intent={addLovedOneIntent}
+        onSelectExisting={handleSelectExistingLovedOne}
+        onClose={() => {
+          setAddLovedOneOpen(false);
+          setEditingLovedOne(null);
+          setAddLovedOneIntent("person");
+        }}
+        onDismiss={handleAddLovedOneDismiss}
         onSubmit={handleAddLovedOne}
+        onUpdate={handleUpdateLovedOneReasons}
       />
       <LovedOnePhotosModal
         visible={photoLovedOne !== null}
         lovedOne={photoLovedOne}
         onClose={() => setPhotoLovedOne(null)}
         onChanged={() => loadHome(true)}
-      />
-      <CreateGroupModal
-        visible={createGroupOpen}
-        saving={savingGroup}
-        error={createGroupOpen ? mutationError : null}
-        onClose={() => setCreateGroupOpen(false)}
-        onSubmit={handleCreateGroup}
       />
       <PersonalPlanDrawer
         visible={planOpen}
@@ -982,6 +1527,10 @@ export function HomeScreen() {
         focus={selectedFocus}
         saving={savingLovedOne}
         error={mutationError}
+        intent={focusIntent}
+        existingFocuses={(home?.prayerFocuses || []).filter(
+          (focus) => focus.type !== "situation",
+        )}
         nextOrder={
           Math.max(-1, ...(home?.prayerFocuses.map((focus) => focus.order) || [])) +
           1
@@ -990,7 +1539,15 @@ export function HomeScreen() {
           setPrayerFocusOpen(false);
           setSelectedFocus(null);
         }}
+        onDismiss={handlePendingPrayerDismiss}
+        onSelectExisting={(focus) => handleSelectExistingFocus(focus, "thing")}
         onSubmit={handleSavePrayerFocus}
+      />
+      <AddSubjectSheet
+        visible={addSubjectOpen}
+        onClose={() => setAddSubjectOpen(false)}
+        onDismiss={openQueuedSubjectModal}
+        onSelect={handleAddSubject}
       />
       <ProfileDrawer
         visible={profileOpen}
@@ -1000,16 +1557,28 @@ export function HomeScreen() {
         groups={home?.groups || []}
         community={response?.community || null}
         plan={response?.plan || null}
-        onClose={() => setProfileOpen(false)}
-        onDismiss={openQueuedPhotoModal}
+        onClose={() => {
+          setCreateGroupOpen(false);
+          setProfileOpen(false);
+        }}
+        onDismiss={openQueuedProfileAction}
         onChanged={() => loadHome(true)}
         onOpenPlan={openPersonalPlan}
         onBecameIndependent={openPersonalPlan}
-        onManageLovedOnePhotos={(lovedOne) => {
-          queuePhotoModal(lovedOne);
-          setProfileOpen(false);
+        onCreateGroup={() => {
+          setMutationError(null);
+          setCreateGroupOpen(true);
         }}
-      />
+      >
+        <CreateGroupModal
+          visible={createGroupOpen}
+          saving={savingGroup}
+          error={createGroupOpen ? mutationError : null}
+          onClose={() => setCreateGroupOpen(false)}
+          onGeneratePreview={handlePreviewGroup}
+          onSubmit={handleCreateGroup}
+        />
+      </ProfileDrawer>
     </View>
   );
 }
@@ -1116,11 +1685,22 @@ function createStyles(colors: ColorTokens) {
     letterSpacing: 0.7,
     textTransform: "uppercase",
   },
+  deckTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 5,
+  },
   deckTitle: {
     color: colors.title,
     fontFamily: fonts.displayMedium,
     fontSize: 17,
-    marginTop: 5,
+    flexShrink: 1,
+  },
+  deckIcons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   deckMeta: {
     color: colors.mutedSoft,
@@ -1151,28 +1731,70 @@ function createStyles(colors: ColorTokens) {
     marginBottom: 10,
     marginTop: 8,
   },
-  sectionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 16,
+  plusDisabled: {
+    opacity: 0.35,
   },
-  plus: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  inviteStack: {
+    gap: 10,
+    marginBottom: 8,
+  },
+  inviteCard: {
+    padding: 14,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.glassBorderRow,
+    borderColor: colors.accentBorderMuted,
+    backgroundColor: colors.accentFillMuted,
+    gap: 6,
+  },
+  inviteLabel: {
+    color: colors.accentText,
+    fontFamily: fonts.monoMedium,
+    fontSize: 9,
+    letterSpacing: 0.7,
+  },
+  inviteTitle: {
+    color: colors.title,
+    fontFamily: fonts.displayMedium,
+    fontSize: 18,
+    letterSpacing: -0.3,
+  },
+  inviteHint: {
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  inviteActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+  },
+  inviteDeny: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.glassBorderStrong,
     alignItems: "center",
     justifyContent: "center",
   },
-  plusText: {
-    color: colors.title,
-    fontSize: 16,
-    lineHeight: 18,
+  inviteDenyText: {
+    color: colors.mutedStrong,
+    fontFamily: fonts.bodyMedium,
+    fontSize: 12,
   },
-  plusDisabled: {
-    opacity: 0.35,
+  inviteAccept: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 20,
+    backgroundColor: colors.buttonPrimary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inviteAcceptText: {
+    color: colors.buttonOnPrimary,
+    fontFamily: fonts.displayMedium,
+    fontSize: 12,
   },
   pressed: {
     opacity: 0.7,
@@ -1183,44 +1805,10 @@ function createStyles(colors: ColorTokens) {
     paddingBottom: 8,
   },
   lovedRail: {
-    flexGrow: 1,
-    justifyContent: "center",
-    gap: 8,
+    flexGrow: 0,
+    justifyContent: "flex-start",
+    gap: 4,
     paddingBottom: 8,
-  },
-  focusRail: {
-    gap: 8,
-    paddingBottom: 8,
-  },
-  focusCard: {
-    width: 112,
-    minHeight: 96,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    backgroundColor: colors.cardFill,
-    padding: 12,
-  },
-  focusIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.accentFillMid,
-    marginBottom: 9,
-  },
-  focusTitle: {
-    color: colors.title,
-    fontFamily: fonts.displayMedium,
-    fontSize: 12,
-  },
-  focusPeriod: {
-    color: colors.muted,
-    fontFamily: fonts.mono,
-    fontSize: 8,
-    marginTop: 3,
-    textTransform: "uppercase",
   },
   groupCard: {
     width: 120,
@@ -1298,7 +1886,7 @@ function createStyles(colors: ColorTokens) {
     height: 50,
     borderRadius: 25,
     borderWidth: 1,
-    borderColor: colors.title,
+    borderColor: colors.cardBorder,
     backgroundColor: colors.overlaySoft,
     alignItems: "center",
     justifyContent: "center",
@@ -1310,9 +1898,11 @@ function createStyles(colors: ColorTokens) {
     fontSize: 16,
   },
   profileTriggerAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   });
 }

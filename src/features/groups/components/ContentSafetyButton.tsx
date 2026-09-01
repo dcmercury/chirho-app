@@ -36,7 +36,7 @@ function createStyles(_colors: ColorTokens) {
   });
 }
 
-function presentChoices(
+export function presentChoices(
   title: string,
   items: {
     label: string;

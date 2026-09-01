@@ -1,0 +1,268 @@
+{
+  "version": "1.0.0",
+  "steps": {
+    "step1": {
+      "title": "Create Prayer Group",
+      "subtitle": "Pick the type of group.",
+      "type": "single_select",
+      "options": [
+        {
+          "id": "ministry_group",
+          "label": "Church Group",
+          "examples": [
+            "Men's Group",
+            "Women's Group",
+            "Youth",
+            "Bible Study",
+            "Church Dept"
+          ],
+          "next": "step2_ministry_group"
+        },
+        {
+          "id": "family_friends",
+          "label": "Family & Friends",
+          "examples": ["Family", "Friends", "Couples", "Parents"],
+          "next": "step2_family_friends"
+        },
+        {
+          "id": "support_care",
+          "label": "Support / Care Group",
+          "examples": [
+            "Recovery",
+            "Caregivers",
+            "Grief",
+            "Anxiety",
+            "Counseling Support"
+          ],
+          "next": "step2_support_care"
+        }
+      ]
+    },
+    "step2_ministry_group": {
+      "title": "Ministry Group Type",
+      "subtitle": "Choose the type.",
+      "type": "single_select",
+      "options": [
+        {
+          "id": "family",
+          "label": "Family Ministry",
+          "next": "step3_household"
+        },
+        {
+          "id": "womens_ministry",
+          "label": "Women's Ministry",
+          "next": "step3_women"
+        },
+        {
+          "id": "mens_ministry",
+          "label": "Men's Ministry",
+          "next": "step3_men"
+        },
+        {
+          "id": "missions_ministry",
+          "label": "Missions Ministry",
+          "next": "step3_shared"
+        }
+      ]
+    },
+    "step2_family_friends": {
+      "title": "Group Type",
+      "subtitle": "Choose who's praying together.",
+      "type": "single_select",
+      "options": [
+        {
+          "id": "family_household",
+          "label": "Family Household",
+          "next": "step3_household"
+        },
+        { "id": "mens_group", "label": "Men's Group", "next": "step3_men" },
+        {
+          "id": "womens_group",
+          "label": "Women's Group",
+          "next": "step3_women"
+        },
+        {
+          "id": "mixed_group",
+          "label": "Mixed Group",
+          "next": "step3_mixed"
+        }
+      ]
+    },
+    "step2_support_care": {
+      "title": "Care Type",
+      "subtitle": "Choose care needs.",
+      "type": "multi_select",
+      "options": [
+        {
+          "id": "comfort_healing",
+          "label": "Comfort",
+          "next": "step3_support"
+        },
+        {
+          "id": "strength_endurance",
+          "label": "Strength",
+          "next": "step3_support"
+        },
+        {
+          "id": "anxiety_peace",
+          "label": "Peace",
+          "next": "step3_support"
+        },
+        {
+          "id": "hope_restoration",
+          "label": "Hope",
+          "next": "step3_support"
+        },
+        {
+          "id": "daily_encouragement",
+          "label": "Encouragement",
+          "next": "step3_support"
+        },
+        {
+          "id": "trust_provision",
+          "label": "Trust",
+          "next": "step3_support"
+        }
+      ]
+    },
+    "step3_shared": {
+      "title": "Group Focus",
+      "subtitle": "Pick Scripture themes.",
+      "type": "multi_select",
+      "options": [
+        { "id": "protection", "label": "Protection" },
+        { "id": "wisdom_guidance", "label": "Wisdom" },
+        { "id": "grace_compassion", "label": "Grace" },
+        { "id": "peace_anxiety", "label": "Peace" },
+        { "id": "strength_endurance", "label": "Strength" },
+        { "id": "intercession_loved", "label": "Intercession" }
+      ],
+      "next": "step4_naming"
+    },
+    "step3_men": {
+      "extends": "step3_shared",
+      "additional_focus": [
+        { "id": "character_brotherhood", "label": "Character" },
+        { "id": "purity_temptation", "label": "Purity" },
+        { "id": "family_leadership", "label": "Leadership" }
+      ],
+      "next": "step4_naming"
+    },
+    "step3_dads": {
+      "extends": "step3_shared",
+      "additional_focus": [
+        { "id": "parenting_strength", "label": "Parenting Strength" },
+        { "id": "patience_fathers", "label": "Patience for Fathers" },
+        { "id": "home_protection", "label": "Family Protection" }
+      ],
+      "next": "step4_naming"
+    },
+    "step3_women": {
+      "extends": "step3_shared",
+      "additional_focus": [
+        { "id": "patience_rest", "label": "Patience" },
+        { "id": "encouragement", "label": "Encouragement" },
+        { "id": "calling_purpose", "label": "Calling" }
+      ],
+      "next": "step4_naming"
+    },
+    "step3_moms": {
+      "extends": "step3_shared",
+      "additional_focus": [
+        { "id": "parenting_moms", "label": "Parenting Strength" },
+        { "id": "family_rest", "label": "Grace for Families" }
+      ],
+      "next": "step4_naming"
+    },
+    "step3_mixed": {
+      "extends": "step3_shared",
+      "additional_focus": [
+        { "id": "unity_healing", "label": "Unity" },
+        { "id": "marriage_relationships", "label": "Relationships" },
+        { "id": "conflict_resolution", "label": "Reconciliation" }
+      ],
+      "next": "step4_naming"
+    },
+    "step3_college": {
+      "extends": "step3_shared",
+      "additional_focus": [
+        { "id": "calling_identity", "label": "Calling" },
+        { "id": "stress_exams", "label": "Perseverance" },
+        { "id": "friendships_boundaries", "label": "Friendship" }
+      ],
+      "next": "step4_naming"
+    },
+    "step3_household": {
+      "extends": "step3_shared",
+      "additional_focus": [
+        { "id": "blessing_home", "label": "Blessing" },
+        { "id": "children_faith", "label": "Faith" },
+        { "id": "family_unity", "label": "Unity" }
+      ],
+      "next": "step4_naming"
+    },
+    "step3_support": {
+      "extends": "step3_shared",
+      "additional_focus": [
+        { "id": "comfort_healing", "label": "Comfort" },
+        { "id": "strength_hardship", "label": "Hope" },
+        { "id": "anxiety_peace_support", "label": "Peace" }
+      ],
+      "next": "step4_naming"
+    },
+    "step4_naming": {
+      "title": "Choose Group Name",
+      "subtitle": "Pick one or type your own.",
+      "type": "single_select_or_custom",
+      "auto_suggestions": {
+        "womens_ministry": [
+          "Women of Faith",
+          "Sisters in Prayer",
+          "Women's Ministry"
+        ],
+        "mens_ministry": [
+          "Men of Faith",
+          "Brothers in Prayer",
+          "Men's Ministry"
+        ],
+        "family": ["Family Strength", "Family Prayer", "Family Ministry"],
+        "missions_ministry": [
+          "Missions Prayer",
+          "Global Prayer",
+          "Missions Ministry"
+        ],
+        "mens_group": ["Men of Faith", "Brothers in Prayer", "Men's Group"],
+        "womens_group": [
+          "Women of Faith",
+          "Sisters in Prayer",
+          "Women's Group"
+        ],
+        "mixed_group": [
+          "Prayer Circle",
+          "Faith Together",
+          "Mixed Prayer Group"
+        ],
+        "family_household": [
+          "Family Prayer",
+          "Household of Faith",
+          "Family Prayer Group"
+        ],
+        "support_care": [
+          "Prayer & Support",
+          "Care & Comfort",
+          "Support Prayer Group"
+        ]
+      },
+      "custom_field": {
+        "placeholder": "Enter a custom group name (optional)"
+      },
+      "next": "step6_preview"
+    },
+    "step6_preview": {
+      "title": "Preview Group",
+      "subtitle": "Review and edit purpose and scripture.",
+      "type": "preview",
+      "next": null
+    }
+  }
+}

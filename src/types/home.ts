@@ -21,25 +21,33 @@ export interface HomePrayerCard {
 export type PrayerFocusType =
   | "church"
   | "pet"
+  | "country"
   | "health"
   | "situation"
   | "other";
 
 export type PrayerFocusPeriod = "morning" | "evening" | "both";
 
+export type PrayerFocusSpecies = "cat" | "dog" | "other";
+
 export interface PrayerFocus {
   focusuuid: string;
   title: string;
   type: PrayerFocusType;
+  species?: PrayerFocusSpecies | null;
+  gender?: LovedOneGender | null;
   note?: string | null;
   categories: string[];
   virtues: string[];
   period: PrayerFocusPeriod;
   active: boolean;
   order: number;
+  photos?: MediaPhoto[];
+  /** Catalog still when there is no uploaded photo. */
+  image?: string | null;
 }
 
-export type PrayerFocusInput = Omit<PrayerFocus, "focusuuid">;
+export type PrayerFocusInput = Omit<PrayerFocus, "focusuuid" | "photos" | "image">;
 
 export interface DailyDeckSummary {
   deckuuid: string;
@@ -71,20 +79,28 @@ export interface PrayerDeckCard extends HomePrayerCard {
   deckIndex: number;
 }
 
-export interface LovedOnePhoto {
+export interface MediaPhoto {
   mediauuid: string;
   contentPath: string;
   isPrimary: boolean;
 }
+
+export type LovedOnePhoto = MediaPhoto;
+
+export type LovedOneGender = "male" | "female";
+export type LovedOneKind = "person" | "family";
 
 export interface HomeLovedOne {
   id: string;
   name: string;
   avatar: string;
   intention: string;
+  gender?: LovedOneGender;
+  kind?: LovedOneKind;
   backgroundImage?: string;
   primaryPhoto?: LovedOnePhoto | null;
   photos?: LovedOnePhoto[];
+  configurations?: Array<{ category: string; virtues: string[] }>;
 }
 
 export interface HomeGroup {
@@ -102,6 +118,8 @@ export interface ProfileOption {
   id: string;
   label: string;
 }
+
+export type PrayerLength = "short" | "medium" | "long";
 
 export interface DailyPrayerSettings {
   enabled: boolean;
@@ -122,12 +140,14 @@ export interface HomeProfile {
     lastName: string;
     phone: string;
     email: string;
+    gender?: LovedOneGender;
   };
   traditions: {
     selected: string;
     options: ProfileOption[];
     locked?: boolean;
   };
+  prayerLength: PrayerLength;
   voices: {
     selected: string;
     options: (ProfileOption & { description?: string; accent?: string })[];
@@ -146,14 +166,18 @@ export interface HomeProfile {
   managedLovedOnes: {
     id: string;
     firstName: string;
+    gender?: LovedOneGender;
+    kind?: LovedOneKind;
     hasConfig: boolean;
     categories: string[];
+    configurations?: Array<{ category: string; virtues: string[] }>;
   }[];
   appSettings: {
     theme: string;
     fontSize: string;
   };
   backgroundMusicEnabled?: boolean;
+  backgroundMusicId?: string | null;
   dashboardBackground?: string | null;
   dashboardBackgrounds?: string[];
 }
@@ -201,10 +225,21 @@ export interface HomeCommunity {
   groupsUsed?: number;
 }
 
+export interface PendingGroupInvite {
+  invitationToken: string;
+  groupuuid: string;
+  groupName: string;
+  groupImage?: string | null;
+  firstName?: string | null;
+  phoneLastFour?: string | null;
+  expiresAt: string;
+}
+
 export interface MobileHomeResponse {
   home: HomeData;
   community: HomeCommunity | null;
   plan: PersonalPlan | null;
+  pendingInvites: PendingGroupInvite[];
 }
 
 export type PersonalPlanStatus = "free" | "trial" | "pro" | "sponsored";
@@ -221,26 +256,26 @@ export interface PersonalPlan {
   sponsoredByName: string | null;
   daysLeft: number | null;
   priceLabel: string;
+  billingEnabled: boolean;
+  complimentaryAccess: boolean;
 }
 
 export function communityAllowsPersonalPrayer(
   community: HomeCommunity | null | undefined,
   plan?: PersonalPlan | null,
 ): boolean {
+  if (!community) return true;
   if (plan?.hasPersonalPro) return true;
-  if (community) return community.features?.personalPrayer === true;
-  if (!plan) return true;
-  return false;
+  return community.features?.personalPrayer === true;
 }
 
 export function communityAllowsDailyPrayers(
   community: HomeCommunity | null | undefined,
   plan?: PersonalPlan | null,
 ): boolean {
+  if (!community) return true;
   if (plan?.hasPersonalPro) return true;
-  if (community) return community.features?.dailyPrayers === true;
-  if (!plan) return true;
-  return false;
+  return community.features?.dailyPrayers === true;
 }
 
 export function formatTrialRemaining(trialEndsAt: string | null | undefined) {

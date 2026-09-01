@@ -1,29 +1,57 @@
 import { useEffect, useRef, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
+import type { HomeProfile, LovedOneGender } from "../../../types/home";
+import { CameraIcon } from "../../../features/groups/components/Icons";
 import { useTheme } from "../../../theme/ThemeProvider";
-import type { HomeProfile } from "../../../types/home";
-import { InlineError, ManageAvatar, useProfileStyles } from "./ProfileControls";
+import { GenderCircles } from "../../ui/GenderCircles";
+import { GlassInput } from "../../ui/GlassInput";
+import {
+  InlineError,
+  ManageAvatar,
+  ToggleRow,
+  useProfileStyles,
+} from "./ProfileControls";
 
 export function AccountSection({
   account,
   avatar,
   visible,
   pending,
+  genderPending,
   avatarPending,
+  themePending,
   error,
+  genderError,
   avatarError,
+  themeError,
+  privacy,
+  privacyError,
+  isPrivacyPending,
   onSave,
+  onSaveGender,
   onChangeAvatar,
+  onThemeChange,
+  onChangePrivacy,
 }: {
   account: HomeProfile["account"];
   avatar: string;
   visible: boolean;
   pending: boolean;
+  genderPending: boolean;
   avatarPending: boolean;
+  themePending: boolean;
   error?: string;
+  genderError?: string;
   avatarError?: string;
+  themeError?: string;
+  privacy: HomeProfile["privacy"];
+  privacyError?: string;
+  isPrivacyPending: (key: string) => boolean;
   onSave: (firstName: string, lastName: string) => Promise<boolean>;
+  onSaveGender: (gender: LovedOneGender) => Promise<boolean>;
   onChangeAvatar: () => void;
+  onThemeChange: (light: boolean) => void;
+  onChangePrivacy: (key: string, enabled: boolean) => void;
 }) {
   const styles = useProfileStyles();
   const { appearance, colors } = useTheme();
@@ -33,6 +61,7 @@ export function AccountSection({
   const wasVisible = useRef(false);
   const authoritativeFirstName = account.firstName || "";
   const authoritativeLastName = account.lastName || "";
+  const lockedGender = account.gender;
   const dirty =
     firstName.trim() !== authoritativeFirstName.trim() ||
     lastName.trim() !== authoritativeLastName.trim();
@@ -78,7 +107,9 @@ export function AccountSection({
           ]}
         >
           <ManageAvatar label={fullName} source={avatar} />
-          <View style={styles.accountAvatarEditDot} />
+          <View pointerEvents="none" style={styles.accountAvatarCamera}>
+            <CameraIcon color={colors.cream} size={12} />
+          </View>
         </Pressable>
         <Pressable
           accessibilityLabel={`${expanded ? "Collapse" : "Expand"} account details`}
@@ -107,53 +138,79 @@ export function AccountSection({
       {expanded ? (
         <>
           <View style={styles.nameFields}>
-            <TextInput
+            <GlassInput
               accessibilityLabel="First name"
               editable={!pending}
               onChangeText={setFirstName}
-              keyboardAppearance={appearance === "light" ? "light" : "dark"}
               placeholder="First name"
-              placeholderTextColor={colors.muted}
               style={[styles.input, styles.nameField]}
               value={firstName}
             />
-            <TextInput
+            <GlassInput
               accessibilityLabel="Last name"
               editable={!pending}
               onChangeText={setLastName}
-              keyboardAppearance={appearance === "light" ? "light" : "dark"}
               placeholder="Last name"
-              placeholderTextColor={colors.muted}
               style={[styles.input, styles.nameField]}
               value={lastName}
             />
           </View>
-          <Pressable
-            accessibilityLabel="Save name"
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !canSave }}
-            disabled={!canSave}
-            onPress={() => {
-              void onSave(firstName, lastName);
-            }}
-            style={({ pressed }) => [
-              styles.nameSave,
-              !canSave && styles.nameSaveDisabled,
-              pressed && styles.nameSavePressed,
-            ]}
-          >
-            <Text
-              style={[
-                styles.nameSaveText,
-                !canSave && styles.nameSaveTextDisabled,
+          <View style={styles.nameActions}>
+            <GenderCircles
+              disabled={Boolean(lockedGender) || genderPending}
+              onChange={(gender) => {
+                if (lockedGender) return;
+                void onSaveGender(gender);
+              }}
+              value={lockedGender}
+            />
+            <Pressable
+              accessibilityLabel="Save name"
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !canSave }}
+              disabled={!canSave}
+              onPress={() => {
+                void onSave(firstName, lastName);
+              }}
+              style={({ pressed }) => [
+                styles.nameSave,
+                !canSave && styles.nameSaveDisabled,
+                pressed && styles.nameSavePressed,
               ]}
             >
-              Save name
-            </Text>
-          </Pressable>
+              <Text
+                style={[
+                  styles.nameSaveText,
+                  !canSave && styles.nameSaveTextDisabled,
+                ]}
+              >
+                Save name
+              </Text>
+            </Pressable>
+          </View>
+          <ToggleRow
+            disabled={themePending}
+            label="Light theme"
+            onValueChange={onThemeChange}
+            value={appearance === "light"}
+          />
+          <InlineError message={themeError} />
+          {privacy
+            .filter((item) => !item.adminDisabled)
+            .map((item) => (
+              <ToggleRow
+                key={item.key}
+                disabled={isPrivacyPending(item.key) || item.adminDisabled}
+                label={item.label}
+                onValueChange={(enabled) => onChangePrivacy(item.key, enabled)}
+                value={item.enabled}
+              />
+            ))}
+          <InlineError message={privacyError} />
         </>
       ) : null}
       <InlineError message={error} />
+      <InlineError message={genderError} />
       <InlineError message={avatarError} />
     </View>
   );

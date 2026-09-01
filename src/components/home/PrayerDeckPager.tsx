@@ -6,26 +6,36 @@ import {
 } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, {
-  Easing,
-  Extrapolation,
-  interpolate,
-  runOnJS,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
+import { runOnJS } from "react-native-reanimated";
 import { fonts, type ColorTokens } from "../../theme/tokens";
 import { useThemedStyles } from "../../theme/ThemeProvider";
 import type { PrayerDeckCard } from "../../types/home";
 import { PrayerCard } from "../ui/PrayerCard";
 
-const STAGE_HEIGHT = 330;
-const PAGE_DISTANCE = 286;
+const STAGE_HEIGHT = 448;
+const PAGE_DISTANCE = 400;
 const SWIPE_THRESHOLD = 54;
 const VELOCITY_THRESHOLD = 620;
-const TRANSITION_MS = 360;
+
+function logPagerTransition(
+  phase: string,
+  source: "button" | "swipe",
+  fromIndex: number,
+  toIndex: number,
+  translationY?: number,
+  velocityY?: number,
+) {
+  if (!__DEV__) return;
+  console.log("[PrayerDeck][Transition]", {
+    phase,
+    source,
+    fromIndex,
+    toIndex,
+    ...(translationY === undefined ? {} : { translationY }),
+    ...(velocityY === undefined ? {} : { velocityY }),
+    timestamp: new Date().toISOString(),
+  });
+}
 
 export interface PrayerDeckPagerHandle {
   previous: () => void;
@@ -54,54 +64,28 @@ export const PrayerDeckPager = forwardRef<
   ref,
 ) {
   const styles = useThemedStyles(createStyles);
-  const translateY = useSharedValue(0);
-  const transitioning = useSharedValue(false);
-  const reducedMotion = useReducedMotion();
   const currentCard = cards[currentIndex];
   const previousCard = cards[currentIndex - 1];
   const nextCard = cards[currentIndex + 1];
 
   const commitIndex = useCallback(
-    (nextIndex: number) => {
+    (nextIndex: number, source: "button" | "swipe") => {
+      logPagerTransition("index-commit", source, currentIndex, nextIndex);
       onIndexChange(nextIndex);
     },
-    [onIndexChange],
+    [currentIndex, onIndexChange],
   );
 
   const move = useCallback(
     (direction: -1 | 1) => {
-      if (disabled || transitioning.value) return;
+      if (disabled) return;
       const nextIndex = currentIndex + direction;
       if (nextIndex < 0 || nextIndex >= cards.length) return;
 
-      if (reducedMotion) {
-        commitIndex(nextIndex);
-        return;
-      }
-
-      transitioning.value = true;
-      translateY.value = withTiming(
-        direction === 1 ? -PAGE_DISTANCE : PAGE_DISTANCE,
-        {
-          duration: TRANSITION_MS,
-          easing: Easing.bezier(0.22, 1, 0.36, 1),
-        },
-        (finished) => {
-          translateY.value = 0;
-          transitioning.value = false;
-          if (finished) runOnJS(commitIndex)(nextIndex);
-        },
-      );
+      logPagerTransition("image-swap", "button", currentIndex, nextIndex);
+      commitIndex(nextIndex, "button");
     },
-    [
-      cards.length,
-      commitIndex,
-      currentIndex,
-      disabled,
-      reducedMotion,
-      transitioning,
-      translateY,
-    ],
+    [cards.length, commitIndex, currentIndex, disabled],
   );
 
   useImperativeHandle(
@@ -117,16 +101,7 @@ export const PrayerDeckPager = forwardRef<
     .enabled(!disabled && cards.length > 1)
     .activeOffsetY([-12, 12])
     .failOffsetX([-28, 28])
-    .onUpdate((event) => {
-      if (transitioning.value || reducedMotion) return;
-      const atFirst = currentIndex === 0 && event.translationY > 0;
-      const atLast =
-        currentIndex === cards.length - 1 && event.translationY < 0;
-      translateY.value =
-        atFirst || atLast ? event.translationY * 0.16 : event.translationY;
-    })
     .onEnd((event) => {
-      if (transitioning.value) return;
       const wantsNext =
         event.translationY < -SWIPE_THRESHOLD ||
         event.velocityY < -VELOCITY_THRESHOLD;
@@ -145,72 +120,27 @@ export const PrayerDeckPager = forwardRef<
         (wantsNext && canMoveNext) ||
         (wantsPrevious && canMovePrevious)
       ) {
-        if (reducedMotion) {
-          translateY.value = 0;
-          runOnJS(commitIndex)(nextIndex);
-          return;
-        }
-        transitioning.value = true;
-        translateY.value = withTiming(
-          wantsNext ? -PAGE_DISTANCE : PAGE_DISTANCE,
-          {
-            duration: TRANSITION_MS,
-            easing: Easing.bezier(0.22, 1, 0.36, 1),
-          },
-          (finished) => {
-            translateY.value = 0;
-            transitioning.value = false;
-            if (finished) runOnJS(commitIndex)(nextIndex);
-          },
+        runOnJS(logPagerTransition)(
+          "image-swap",
+          "swipe",
+          currentIndex,
+          nextIndex,
+          event.translationY,
+          event.velocityY,
         );
+        runOnJS(commitIndex)(nextIndex, "swipe");
         return;
       }
 
-      translateY.value = withTiming(0, {
-        duration: 240,
-        easing: Easing.bezier(0.25, 1, 0.5, 1),
-      });
+      runOnJS(logPagerTransition)(
+        "snap-back",
+        "swipe",
+        currentIndex,
+        currentIndex,
+        event.translationY,
+        event.velocityY,
+      );
     });
-
-  const currentStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(
-      Math.abs(translateY.value),
-      [0, PAGE_DISTANCE],
-      [1, 0.12],
-      Extrapolation.CLAMP,
-    ),
-    transform: [
-      { translateY: translateY.value },
-      {
-        scale: interpolate(
-          Math.abs(translateY.value),
-          [0, PAGE_DISTANCE],
-          [1, 0.965],
-          Extrapolation.CLAMP,
-        ),
-      },
-    ],
-  }));
-
-  const previousStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(
-      translateY.value,
-      [0, PAGE_DISTANCE],
-      [0.12, 1],
-      Extrapolation.CLAMP,
-    ),
-    transform: [{ translateY: translateY.value - PAGE_DISTANCE }],
-  }));
-
-  const nextStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(
-      translateY.value,
-      [-PAGE_DISTANCE, 0],
-      [1, 0.12],
-      Extrapolation.CLAMP,
-    ),
-    transform: [{ translateY: translateY.value + PAGE_DISTANCE }],
-  }));
 
   const renderCard = (
     card: PrayerDeckCard | undefined,
@@ -219,7 +149,11 @@ export const PrayerDeckPager = forwardRef<
     interactive: boolean,
   ): ReactNode =>
     card ? (
-      <Animated.View
+      <View
+        key={
+          card.prayeruuid ||
+          `${card.subjectType}:${card.subjectId}:${card.deckIndex}`
+        }
         pointerEvents={interactive ? "auto" : "none"}
         style={[styles.page, animatedStyle]}
       >
@@ -227,9 +161,10 @@ export const PrayerDeckPager = forwardRef<
           card={card}
           index={index}
           variant="deck"
+          contentVisible={interactive}
           onPress={interactive ? () => onOpenCard(card) : undefined}
         />
-      </Animated.View>
+      </View>
     ) : null;
 
   if (!currentCard) return null;
@@ -237,11 +172,11 @@ export const PrayerDeckPager = forwardRef<
   return (
     <View>
       <GestureDetector gesture={pan}>
-        <Animated.View style={styles.stage}>
-          {renderCard(previousCard, currentIndex - 1, previousStyle, false)}
-          {renderCard(currentCard, currentIndex, currentStyle, true)}
-          {renderCard(nextCard, currentIndex + 1, nextStyle, false)}
-        </Animated.View>
+        <View style={styles.stage}>
+          {renderCard(previousCard, currentIndex - 1, styles.previousPage, false)}
+          {renderCard(currentCard, currentIndex, styles.currentPage, true)}
+          {renderCard(nextCard, currentIndex + 1, styles.nextPage, false)}
+        </View>
       </GestureDetector>
       <View style={styles.hintRow}>
         <View style={styles.hintRule} />
@@ -256,14 +191,28 @@ function createStyles(colors: ColorTokens) {
   return StyleSheet.create({
   stage: {
     height: STAGE_HEIGHT,
+    width: "100%",
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
   },
   page: {
     position: "absolute",
-    alignItems: "center",
+    left: 0,
+    right: 0,
+    alignItems: "stretch",
     justifyContent: "center",
+  },
+  currentPage: {
+    opacity: 1,
+  },
+  previousPage: {
+    opacity: 0,
+    transform: [{ translateY: -PAGE_DISTANCE }],
+  },
+  nextPage: {
+    opacity: 0,
+    transform: [{ translateY: PAGE_DISTANCE }],
   },
   hintRow: {
     flexDirection: "row",

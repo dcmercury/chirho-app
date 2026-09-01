@@ -1,22 +1,25 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { fonts, type ColorTokens } from "../../../theme/tokens";
 import { useTheme, useThemedStyles } from "../../../theme/ThemeProvider";
+import { GlassInput } from "../../../components/ui/GlassInput";
 import { SwipeChevron } from "../../../components/ui/SwipeChevron";
 import type {
   GroupMember,
   GroupMessage,
   PrayerCount,
+  PrayerRequestArchiveReason,
+  PrayerRequestEvent,
+  PrayerRequestResolveReason,
   PrayerResponse,
 } from "../types";
 import {
@@ -29,6 +32,7 @@ import { ContentSafetyButton } from "./ContentSafetyButton";
 import type { ReportReasonId } from "./ContentSafetyButton";
 import { GroupAvatar } from "./GroupAvatar";
 import { Stagger } from "./Stagger";
+import { PrayerLifecycleButton } from "./PrayerLifecycleButton";
 
 interface PrayerRequestViewProps {
   groupName: string;
@@ -44,6 +48,7 @@ interface PrayerRequestViewProps {
   hasMoreMessages: boolean;
   loadingOlder: boolean;
   actionError: string | null;
+  lifecycleEvents: PrayerRequestEvent[];
   currentUserId?: string | null;
   onBack: () => void;
   onPrevious: () => void;
@@ -56,6 +61,7 @@ interface PrayerRequestViewProps {
   onDismissGenerated: () => void;
   onNewRequest: () => void;
   canCreatePrayerRequests?: boolean;
+  lifecycleEnabled?: boolean;
   isAdmin?: boolean;
   onDeleteRequest: (message: GroupMessage) => void;
   onReportRequest: (message: GroupMessage, reason: ReportReasonId) => void;
@@ -66,6 +72,22 @@ interface PrayerRequestViewProps {
     reason: ReportReasonId,
   ) => void;
   onBlockMember: (clerkId: string) => void;
+  onPostUpdate: (message: GroupMessage, content: string) => void | Promise<void>;
+  onResolve: (
+    message: GroupMessage,
+    reason: PrayerRequestResolveReason,
+  ) => void | Promise<void>;
+  onArchive: (
+    message: GroupMessage,
+    reason: PrayerRequestArchiveReason,
+  ) => void | Promise<void>;
+  onSuggestArchive: (
+    message: GroupMessage,
+    reason: PrayerRequestArchiveReason,
+  ) => void | Promise<void>;
+  onRestore: (message: GroupMessage) => void | Promise<void>;
+  onKeepActive: (message: GroupMessage) => void | Promise<void>;
+  onRequestUpdate: (message: GroupMessage) => void | Promise<void>;
 }
 
 export function PrayerRequestView({
@@ -82,6 +104,7 @@ export function PrayerRequestView({
   hasMoreMessages,
   loadingOlder,
   actionError,
+  lifecycleEvents,
   currentUserId,
   onBack,
   onPrevious,
@@ -94,16 +117,24 @@ export function PrayerRequestView({
   onDismissGenerated,
   onNewRequest,
   canCreatePrayerRequests = true,
+  lifecycleEnabled = true,
   isAdmin = false,
   onDeleteRequest,
   onReportRequest,
   onDeleteResponse,
   onReportResponse,
   onBlockMember,
+  onPostUpdate,
+  onResolve,
+  onArchive,
+  onSuggestArchive,
+  onRestore,
+  onKeepActive,
+  onRequestUpdate,
 }: PrayerRequestViewProps) {
   const insets = useSafeAreaInsets();
   const styles = useThemedStyles(createStyles);
-  const { colors, appearance } = useTheme();
+  const { colors } = useTheme();
   const safeIndex = Math.min(currentIndex, Math.max(messages.length - 1, 0));
   const message = messages[safeIndex];
   const author = message ? getMember(members, message.userId) : null;
@@ -123,6 +154,14 @@ export function PrayerRequestView({
     canGoPrevious: boolean;
     canGoNext: boolean;
   } | null>(null);
+  const [updateOpen, setUpdateOpen] = useState(false);
+  const [updateText, setUpdateText] = useState("");
+  const [postingUpdate, setPostingUpdate] = useState(false);
+
+  useEffect(() => {
+    setUpdateOpen(false);
+    setUpdateText("");
+  }, [message?.messageId]);
 
   const handleTouchStart = (pageY: number) => {
     const offset = scrollOffsetRef.current;
@@ -211,15 +250,37 @@ export function PrayerRequestView({
                 />
                 <Text style={styles.name}>{authorName}</Text>
                 {currentUserId ? (
-                  <ContentSafetyButton
-                    authorName={authorName}
-                    contentLabel="prayer request"
-                    isAdmin={isAdmin}
-                    isOwn={message.userId === currentUserId}
-                    onBlock={() => onBlockMember(message.userId)}
-                    onDelete={() => onDeleteRequest(message)}
-                    onReport={(reason) => onReportRequest(message, reason)}
-                  />
+                  <>
+                    {lifecycleEnabled ? (
+                      <PrayerLifecycleButton
+                        authorName={authorName}
+                        isAdmin={isAdmin}
+                        isOwn={message.userId === currentUserId}
+                        message={message}
+                        onArchive={(reason) => onArchive(message, reason)}
+                        onKeepActive={() => onKeepActive(message)}
+                        onPostUpdate={() => {
+                          setUpdateText("");
+                          setUpdateOpen(true);
+                        }}
+                        onResolve={(reason) => onResolve(message, reason)}
+                        onRequestUpdate={() => onRequestUpdate(message)}
+                        onRestore={() => onRestore(message)}
+                        onSuggestArchive={(reason) =>
+                          onSuggestArchive(message, reason)
+                        }
+                      />
+                    ) : null}
+                    <ContentSafetyButton
+                      authorName={authorName}
+                      contentLabel="prayer request"
+                      isAdmin={isAdmin}
+                      isOwn={message.userId === currentUserId}
+                      onBlock={() => onBlockMember(message.userId)}
+                      onDelete={() => onDeleteRequest(message)}
+                      onReport={(reason) => onReportRequest(message, reason)}
+                    />
+                  </>
                 ) : null}
               </View>
             </Stagger>
@@ -230,11 +291,10 @@ export function PrayerRequestView({
               {generatedPrayer ? (
                 <View style={styles.generatedBlock}>
                   <Text style={styles.responseLabel}>GENERATED PRAYER</Text>
-                  <TextInput
+                  <GlassInput
                     editable={!sendingPrayer}
                     multiline
                     onChangeText={onChangeGenerated}
-                    keyboardAppearance={appearance === "light" ? "light" : "dark"}
                     style={styles.generatedText}
                     textAlignVertical="top"
                     value={generatedPrayer}
@@ -263,7 +323,93 @@ export function PrayerRequestView({
               )}
             </Stagger>
 
-            {loadingResponses ? (
+            {message.status === "archived" ? (
+              <View style={styles.historyStatus}>
+                <Text style={styles.historyStatusTitle}>
+                  {message.archiveDisposition === "resolved"
+                    ? `Resolved by ${getMemberName(
+                        getMember(members, message.archivedBy || message.userId),
+                        message.archivedBy || message.userId,
+                      )}`
+                    : `Archived by ${getMemberName(
+                        getMember(members, message.archivedBy || ""),
+                        message.archivedBy || "",
+                      )}`}
+                </Text>
+                {message.archiveReason ? (
+                  <Text style={styles.historyStatusReason}>
+                    {formatLifecycleReason(message.archiveReason)}
+                  </Text>
+                ) : null}
+              </View>
+            ) : message.isStale ? (
+              <Text style={styles.staleText}>
+                This prayer has not been updated in 60 days.
+              </Text>
+            ) : null}
+
+            {updateOpen ? (
+              <View style={styles.updateBlock}>
+                <Text style={styles.responseLabel}>POST AN UPDATE</Text>
+                <GlassInput
+                  editable={!postingUpdate}
+                  multiline
+                  onChangeText={setUpdateText}
+                  placeholder="Share what has changed…"
+                  style={styles.updateInput}
+                  textAlignVertical="top"
+                  value={updateText}
+                />
+                <View style={styles.generatedActions}>
+                  <Pressable
+                    disabled={postingUpdate || !updateText.trim()}
+                    onPress={async () => {
+                      setPostingUpdate(true);
+                      try {
+                        await onPostUpdate(message, updateText.trim());
+                        setUpdateOpen(false);
+                        setUpdateText("");
+                      } finally {
+                        setPostingUpdate(false);
+                      }
+                    }}
+                    style={[
+                      styles.send,
+                      (postingUpdate || !updateText.trim()) && styles.disabled,
+                    ]}
+                  >
+                    <Text style={styles.sendText}>
+                      {postingUpdate ? "Posting…" : "Post update"}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    disabled={postingUpdate}
+                    onPress={() => setUpdateOpen(false)}
+                    style={styles.dismiss}
+                  >
+                    <Text style={styles.dismissText}>Cancel</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
+
+            {lifecycleEvents.some((event) => event.type === "updated") ? (
+              <View style={styles.timeline}>
+                <Text style={styles.responseLabel}>UPDATES</Text>
+                {lifecycleEvents
+                  .filter((event) => event.type === "updated")
+                  .map((event) => (
+                    <View key={event.eventId} style={styles.timelineItem}>
+                      <Text style={styles.timelineMeta}>
+                        {formatRelativeTime(event.createdAt)}
+                      </Text>
+                      <Text style={styles.timelineText}>{event.content}</Text>
+                    </View>
+                  ))}
+              </View>
+            ) : null}
+
+            {loadingResponses && !writtenResponses.length ? (
               <ActivityIndicator color={colors.muted} size="small" />
             ) : writtenResponses.length ? (
               <Stagger delay={600}>
@@ -420,8 +566,9 @@ export function PrayerRequestView({
               <Text style={styles.responseLabel}>{prayerState.count} PRAYING</Text>
             ) : null}
 
-            <Stagger delay={750}>
-              <View style={styles.actions}>
+            {message.status === "active" ? (
+              <Stagger delay={750}>
+                <View style={styles.actions}>
                 <Pressable
                   onPress={() => onPray(message)}
                   style={[
@@ -455,8 +602,13 @@ export function PrayerRequestView({
                     <PlusIcon color={colors.accent} />
                   </Pressable>
                 ) : null}
-              </View>
-            </Stagger>
+                </View>
+              </Stagger>
+            ) : (
+              <Text style={styles.historyHint}>
+                This prayer remains available in Prayer History.
+              </Text>
+            )}
             {actionError ? <Text style={styles.error}>{actionError}</Text> : null}
             {canGoPrevious ? (
               <View style={styles.swipeNavigationBottom}>
@@ -555,6 +707,17 @@ function getMemberName(member: GroupMember | null, fallback?: string) {
   return name || fallback?.slice(0, 8) || "Member";
 }
 
+function formatLifecycleReason(reason: string) {
+  return reason
+    .split("_")
+    .map((part, index) =>
+      index === 0
+        ? `${part.charAt(0).toUpperCase()}${part.slice(1)}`
+        : part,
+    )
+    .join(" ");
+}
+
 function formatRelativeTime(value: string) {
   const milliseconds = Date.now() - new Date(value).getTime();
   const minutes = Math.max(0, Math.floor(milliseconds / 60_000));
@@ -624,6 +787,60 @@ function createStyles(colors: ColorTokens) {
     fontSize: 15.2,
     lineHeight: 27.4,
   },
+  historyStatus: {
+    gap: 3,
+    borderLeftWidth: 2,
+    borderLeftColor: colors.mutedStrong,
+    paddingLeft: 12,
+  },
+  historyStatusTitle: {
+    color: colors.subtitle,
+    fontFamily: fonts.bodyMedium,
+    fontSize: 12,
+  },
+  historyStatusReason: {
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: 11,
+  },
+  staleText: {
+    color: colors.accent,
+    fontFamily: fonts.bodyMedium,
+    fontSize: 11,
+  },
+  updateBlock: { gap: 8 },
+  updateInput: {
+    minHeight: 96,
+    padding: 12,
+    borderColor: colors.accentBorderFaint,
+    backgroundColor: colors.accentFillFaint,
+    color: colors.subtitle,
+    lineHeight: 20,
+  },
+  timeline: { gap: 10 },
+  timelineItem: {
+    gap: 4,
+    borderLeftWidth: 1,
+    borderLeftColor: colors.glassBorderRow,
+    paddingLeft: 10,
+  },
+  timelineMeta: {
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: 10,
+  },
+  timelineText: {
+    color: colors.subtitle,
+    fontFamily: fonts.body,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  historyHint: {
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: 11,
+    fontStyle: "italic",
+  },
   responses: { gap: 12, marginTop: 4 },
   responseLabel: {
     color: colors.mutedGhost,
@@ -639,7 +856,7 @@ function createStyles(colors: ColorTokens) {
     borderRadius: 12,
     borderLeftWidth: 1,
     borderLeftColor: colors.glassBorderSoft,
-    backgroundColor: colors.cardFill,
+    backgroundColor: colors.cardFillMuted,
   },
   responseAuthor: { flexDirection: "row", alignItems: "center", gap: 6 },
   responseName: {
@@ -728,14 +945,10 @@ function createStyles(colors: ColorTokens) {
   generatedText: {
     minHeight: 132,
     padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
     borderColor: colors.accentBorderFaint,
     backgroundColor: colors.accentFillFaint,
     color: colors.subtitle,
-    fontFamily: fonts.body,
-    fontSize: 12,
-    lineHeight: 19,
+    lineHeight: 20,
     fontStyle: "italic",
   },
   generatedActions: { flexDirection: "row", gap: 8 },

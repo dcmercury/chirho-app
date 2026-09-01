@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   Easing,
@@ -15,6 +15,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { fonts, type ColorTokens } from "../../../theme/tokens";
 import { useTheme, useThemedStyles } from "../../../theme/ThemeProvider";
+import { GlassInput } from "../../../components/ui/GlassInput";
 import type { PrayerIntensity } from "../types";
 import {
   FamilyIcon,
@@ -100,7 +101,7 @@ export function PrayerRequestForm({
   sending,
 }: PrayerRequestFormProps) {
   const styles = useThemedStyles(createStyles);
-  const { colors, appearance } = useTheme();
+  const { colors } = useTheme();
   const [step, setStep] = useState<0 | 1>(0);
   const introConsumedRef = useRef(false);
   const [intensities, setIntensities] = useState<Record<string, number>>(
@@ -194,13 +195,11 @@ export function PrayerRequestForm({
           Choose at least one prayer area or add a few details first.
         </Text>
       ) : null}
-      <TextInput
+      <GlassInput
         autoFocus
         multiline
         editable={!sending}
         placeholder="What would you like prayer for?"
-        placeholderTextColor={colors.mutedSoft}
-        keyboardAppearance={appearance === "light" ? "light" : "dark"}
         value={value}
         onChangeText={onChange}
         style={styles.input}
@@ -557,14 +556,6 @@ function createStyles(colors: ColorTokens) {
   pillValue: { color: colors.accentText, fontFamily: fonts.monoMedium, fontSize: 9 },
   input: {
     minHeight: 132,
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.glassBorderInput,
-    backgroundColor: colors.cardFillMuted,
-    color: colors.title,
-    fontFamily: fonts.body,
-    fontSize: 13,
     lineHeight: 20,
   },
   tips: { gap: 5, paddingTop: 2 },

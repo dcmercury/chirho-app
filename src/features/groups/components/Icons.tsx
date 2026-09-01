@@ -18,6 +18,19 @@ export function ArrowIcon({ color = "currentColor", size = 16 }: IconProps) {
   );
 }
 
+export function HomeIcon({ color = "currentColor", size = 16 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M3 9.5 12 3l9 6.5V20a1.5 1.5 0 0 1-1.5 1.5h-5.5v-7h-5v7H4.5A1.5 1.5 0 0 1 3 20V9.5Z"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 export function PlusIcon({ color = "currentColor", size = 16 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -102,8 +115,7 @@ export function PlayIcon({ color = "currentColor", size = 16 }: IconProps) {
 export function PauseIcon({ color = "currentColor", size = 16 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Line x1={9} y1={6} x2={9} y2={18} stroke={color} strokeWidth={2.5} strokeLinecap="round" />
-      <Line x1={15} y1={6} x2={15} y2={18} stroke={color} strokeWidth={2.5} strokeLinecap="round" />
+      <Path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" fill={color} />
     </Svg>
   );
 }
@@ -140,6 +152,20 @@ export function CogIcon({ color = "currentColor", size = 16 }: IconProps) {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </Svg>
+  );
+}
+
+export function CameraIcon({ color = "currentColor", size = 16 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinejoin="round"
+      />
+      <Circle cx={12} cy={13} r={3} stroke={color} strokeWidth={1.8} />
     </Svg>
   );
 }

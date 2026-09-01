@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import { ActivityIndicator, Platform, View } from "react-native";
+import { ActivityIndicator, AppState, Platform, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -24,11 +24,12 @@ import {
   JetBrainsMono_500Medium,
 } from "@expo-google-fonts/jetbrains-mono";
 import {
-  applyIncomingNotificationBadge,
+  clearAppIconBadge,
   hrefFromNotificationData,
   registerForPushNotifications,
+  syncAppIconBadge,
 } from "../src/lib/push";
-import { registerPushToken } from "../src/lib/api";
+import { registerPushToken, syncAppBadgeCount } from "../src/lib/api";
 import { ThemeProvider, useTheme } from "../src/theme/ThemeProvider";
 import { colors } from "../src/theme/tokens";
 
@@ -96,9 +97,46 @@ function RootNavigator() {
   }, [isSignedIn]);
 
   useEffect(() => {
-    if (!isSignedIn || Platform.OS === "web" || !Device.isDevice) return;
+    if (!authLoaded || Platform.OS === "web" || !Device.isDevice) return;
+    if (!isSignedIn) {
+      void clearAppIconBadge();
+      return;
+    }
+
     let cancelled = false;
     let remove = () => {};
+    let badgeSync = Promise.resolve();
+    let badgePersistence = Promise.resolve();
+    const handledNotificationIds = new Set<string>();
+
+    const persistBadge = async (count: number) => {
+      const sessionToken = await getTokenRef.current();
+      if (!sessionToken || cancelled) return;
+      try {
+        await syncAppBadgeCount(count, sessionToken);
+      } catch {
+        // Local icon badge is already correct; server sync is best-effort.
+      }
+    };
+
+    const syncBadge = (dismissIdentifier?: string) => {
+      badgeSync = badgeSync
+        .then(async () => {
+          const count = await syncAppIconBadge({ dismissIdentifier });
+          if (cancelled) return;
+          badgePersistence = badgePersistence
+            .then(() => persistBadge(count))
+            .catch((error) => {
+              if (__DEV__) {
+                console.warn("App badge server sync failed", error);
+              }
+            });
+        })
+        .catch((error) => {
+          if (__DEV__) console.warn("App icon badge sync failed", error);
+        });
+      return badgeSync;
+    };
 
     import("expo-notifications").then((Notifications) => {
       if (cancelled) return;
@@ -107,32 +145,50 @@ function RootNavigator() {
           ReturnType<typeof Notifications.getLastNotificationResponseAsync>
         >,
       ) => {
+        if (!response) return;
+        const identifier = response.notification.request.identifier;
+        if (handledNotificationIds.has(identifier)) return;
+        handledNotificationIds.add(identifier);
         const href = hrefFromNotificationData(
-          response?.notification.request.content.data as
+          response.notification.request.content.data as
             | Record<string, unknown>
             | undefined,
+        );
+        void syncBadge(identifier);
+        void Notifications.clearLastNotificationResponseAsync().catch(
+          (error) => {
+            if (__DEV__) {
+              console.warn("Notification response cleanup failed", error);
+            }
+          },
         );
         if (href) router.push(href);
       };
 
-      Notifications.getLastNotificationResponseAsync().then(openNotification);
-      const responseSubscription =
-        Notifications.addNotificationResponseReceivedListener(openNotification);
-      const receivedSubscription =
-        Notifications.addNotificationReceivedListener((notification) => {
-          void applyIncomingNotificationBadge(notification);
+      void Notifications.getLastNotificationResponseAsync()
+        .then(openNotification)
+        .catch((error) => {
+          if (__DEV__) {
+            console.warn("Last notification response lookup failed", error);
+          }
         });
-      remove = () => {
-        responseSubscription.remove();
-        receivedSubscription.remove();
-      };
+      const tapped = Notifications.addNotificationResponseReceivedListener(
+        openNotification,
+      );
+      remove = () => tapped.remove();
     });
+
+    const appState = AppState.addEventListener("change", (state) => {
+      if (state === "active") void syncBadge();
+    });
+    void syncBadge();
 
     return () => {
       cancelled = true;
       remove();
+      appState.remove();
     };
-  }, [isSignedIn, router]);
+  }, [authLoaded, isSignedIn, router]);
 
   if (!fontsReady || !authLoaded) {
     return (
