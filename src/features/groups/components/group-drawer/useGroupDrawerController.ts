@@ -14,6 +14,7 @@ import {
   uploadGroupBackground,
 } from "../../../../lib/api";
 import { prepareLovedOnePhoto } from "../../../../lib/lovedOnePhoto";
+import { isTraditionComingSoon } from "../../../../lib/traditions";
 import type {
   GroupAdminRecord,
   GroupMember,
@@ -280,7 +281,7 @@ export function useGroupDrawerController({
 
   const selectTradition = useCallback(
     (tradition: string) => {
-      if (!group || !isAdmin) return;
+      if (!group || !isAdmin || isTraditionComingSoon(tradition)) return;
       void runAction(
         "settings:tradition",
         async (token, session) => {

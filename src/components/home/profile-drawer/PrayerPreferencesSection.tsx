@@ -17,6 +17,10 @@ import {
   useProfileStyles,
 } from "./ProfileControls";
 import { useVoicePreview } from "./useVoicePreview";
+import {
+  isTraditionComingSoon,
+  traditionChoiceLabel,
+} from "../../../lib/traditions";
 
 type SamplePlaybackState = "idle" | "loading" | "playing";
 
@@ -104,15 +108,21 @@ export function TraditionSection({
         </Text>
       ) : (
         <View style={styles.pills}>
-          {traditions.options.map((option) => (
-            <Pill
-              key={option.id}
-              active={option.id === traditions.selected}
-              disabled={pending}
-              label={option.label}
-              onPress={() => onSelect(option.id)}
-            />
-          ))}
+          {traditions.options.map((option) => {
+            const comingSoon = isTraditionComingSoon(option.id || option.label);
+            return (
+              <Pill
+                key={option.id}
+                active={option.id === traditions.selected}
+                disabled={pending || comingSoon}
+                label={traditionChoiceLabel(option.label, option.id)}
+                onPress={() => {
+                  if (comingSoon) return;
+                  onSelect(option.id);
+                }}
+              />
+            );
+          })}
         </View>
       )}
       <InlineError message={error} />

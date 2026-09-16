@@ -10,12 +10,16 @@ import { fonts, type ColorTokens } from "../../../../theme/tokens";
 import { useThemedStyles } from "../../../../theme/ThemeProvider";
 import type { GroupSettings } from "../../types";
 import {
+  GROUP_TRADITION_OPTIONS,
+  isTraditionComingSoon,
+  normalizeTraditionId,
+  traditionChoiceLabel,
+} from "../../../../lib/traditions";
+import {
   GroupDrawerError,
   GroupDrawerPill,
   GroupDrawerSection,
 } from "./GroupDrawerControls";
-
-const TRADITIONS = ["Anglican", "Catholic", "Lutheran", "Orthodox"] as const;
 
 interface GroupSettingsSectionProps {
   settings: GroupSettings;
@@ -126,18 +130,25 @@ export function GroupSettingsSection({
     <GroupDrawerSection title="Group settings">
       <Text style={styles.label}>Tradition</Text>
       <View style={styles.traditions}>
-        {TRADITIONS.map((tradition) => (
-          <View key={tradition} style={styles.tradition}>
-            <GroupDrawerPill
-              disabled={traditionPending}
-              label={tradition}
-              onPress={() => onSelectTradition(tradition)}
-              selected={
-                settings.tradition?.toLowerCase() === tradition.toLowerCase()
-              }
-            />
-          </View>
-        ))}
+        {GROUP_TRADITION_OPTIONS.map((tradition) => {
+          const comingSoon = isTraditionComingSoon(tradition.id);
+          return (
+            <View key={tradition.id} style={styles.tradition}>
+              <GroupDrawerPill
+                disabled={traditionPending || comingSoon}
+                label={traditionChoiceLabel(tradition.label, tradition.id)}
+                onPress={() => {
+                  if (comingSoon) return;
+                  onSelectTradition(tradition.id);
+                }}
+                selected={
+                  normalizeTraditionId(settings.tradition || "") ===
+                  tradition.id
+                }
+              />
+            </View>
+          );
+        })}
       </View>
       <View style={styles.toggleRow}>
         <View style={styles.toggleCopy}>
