@@ -205,6 +205,7 @@ function createGroupDrawerStyles(colors: ColorTokens) {
     borderWidth: 1,
     borderColor: colors.glassBorder,
     paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   pillSelected: {
     backgroundColor: colors.accentFillPill,
@@ -214,6 +215,7 @@ function createGroupDrawerStyles(colors: ColorTokens) {
     color: colors.mutedSoft,
     fontFamily: fonts.body,
     fontSize: 11,
+    textAlign: "center",
   },
   pillCompact: {
     minHeight: 28,

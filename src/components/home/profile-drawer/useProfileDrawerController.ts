@@ -28,6 +28,7 @@ import { backgroundIdForUrl } from "../../../lib/backgroundLibrary";
 import { registerForPushNotifications } from "../../../lib/push";
 import { setBackgroundMusicEnabled, setBackgroundMusicUrl } from "../../../lib/backgroundMusicPreference";
 import { prepareLovedOnePhoto } from "../../../lib/lovedOnePhoto";
+import { isTraditionComingSoon } from "../../../lib/traditions";
 import { useTheme } from "../../../theme/ThemeProvider";
 import type { Appearance } from "../../../theme/tokens";
 import type {
@@ -166,10 +167,12 @@ export function useProfileDrawerController(
       "Unable to save gender",
     );
 
-  const selectTradition = (tradition: string) =>
-    mutate("tradition", (token) =>
+  const selectTradition = (tradition: string) => {
+    if (isTraditionComingSoon(tradition)) return;
+    return mutate("tradition", (token) =>
       updateProfile({ preferences: { defaultTradition: tradition } }, token),
     );
+  };
 
   const setPrayerLength = (prayerLength: HomeProfile["prayerLength"]) =>
     mutate("prayer-length", (token) =>
