@@ -41,6 +41,10 @@ function createStyles(colors: ColorTokens) {
       borderWidth: 1,
       borderColor: colors.cardBorder,
     },
+    unreadCard: {
+      borderWidth: 2,
+      borderColor: colors.accent,
+    },
     deckCard: {
       width: "100%",
       borderRadius: 18,
@@ -127,12 +131,14 @@ export function PrayerCard({
   onPress,
   variant = "default",
   contentVisible = true,
+  highlighted = false,
 }: {
   card: HomePrayerCard;
   index?: number;
   onPress?: () => void;
   variant?: "default" | "deck";
   contentVisible?: boolean;
+  highlighted?: boolean;
 }) {
   const styles = useThemedStyles(createStyles);
   const isDeckCard = variant === "deck";
@@ -193,6 +199,7 @@ export function PrayerCard({
       style={({ pressed }) => [
         styles.card,
         isDeckCard && styles.deckCard,
+        highlighted && styles.unreadCard,
         pressed && styles.pressed,
       ]}
     >

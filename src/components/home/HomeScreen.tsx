@@ -9,11 +9,11 @@ import {
   View,
   StyleSheet,
 } from "react-native";
-import Svg, { Circle, Path } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image } from "expo-image";
-import { useAuth, useUser } from "@clerk/expo";
-import { useRouter, type Href } from "expo-router";
+import { useAuth, useClerk, useUser } from "@clerk/expo";
+import * as SecureStore from "expo-secure-store";
+import { useRouter } from "expo-router";
 import { fonts, type ColorTokens } from "../../theme/tokens";
 import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
 import {
@@ -193,42 +193,40 @@ function praySubjects(
   );
 }
 
-function formatDeckDate(localDate: string) {
-  const [year, month, day] = localDate.split("-").map(Number);
-  if (!year || !month || !day) return localDate;
-  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-}
-
-function MorningIcon({ color, size = 16 }: { color: string; size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Circle cx={12} cy={12} r={4} stroke={color} strokeWidth={1.8} />
-      <Path
-        d="M12 3v2.2M12 18.8V21M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M3 12h2.2M18.8 12H21M4.9 19.1l1.6-1.6M17.5 6.5l1.6-1.6"
-        stroke={color}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-      />
-    </Svg>
+function isUnreadDailyCard(card: HomePrayerCard, deckuuid?: string | null) {
+  return Boolean(
+    deckuuid && card.deckuuid === deckuuid && card.unread !== false,
   );
 }
 
-function EveningIcon({ color, size = 16 }: { color: string; size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M16.4 14.2A6.4 6.4 0 0 1 9.8 7.6 6.2 6.2 0 1 0 16.4 14.2Z"
-        stroke={color}
-        strokeWidth={1.8}
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
+function unreadDailyDate(timeOfDay: "morning" | "evening") {
+  return `New · ${timeOfDay[0].toUpperCase()}${timeOfDay.slice(1)}`;
+}
+
+function archivedPrayersKey(userId: string) {
+  return `chirho.archivedPrayerCards.${userId}`;
+}
+
+async function loadArchivedPrayerIds(userId: string) {
+  try {
+    const raw = await SecureStore.getItemAsync(archivedPrayersKey(userId));
+    if (!raw) return new Set<string>();
+    const parsed = JSON.parse(raw) as unknown;
+    return new Set(
+      Array.isArray(parsed)
+        ? parsed.filter((id): id is string => typeof id === "string")
+        : [],
+    );
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function persistArchivedPrayerIds(userId: string, ids: Set<string>) {
+  void SecureStore.setItemAsync(
+    archivedPrayersKey(userId),
+    JSON.stringify([...ids]),
+  ).catch(() => undefined);
 }
 
 async function hydrateLovedOnePhotos(
@@ -298,6 +296,7 @@ export function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { getToken } = useAuth();
+  const { signOut } = useClerk();
   const styles = useThemedStyles(createStyles);
   const { colors, setAppearance } = useTheme();
   const { urls: libraryUrls } = useBackgroundLibrary();
@@ -346,6 +345,10 @@ export function HomeScreen() {
     | { kind: "card"; card: HomePrayerCard }
     | null
   >(null);
+  const openedCardIdsRef = useRef<Set<string>>(new Set());
+  const [archivedCardIds, setArchivedCardIds] = useState<Set<string>>(
+    new Set(),
+  );
   const photoModalFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -595,9 +598,39 @@ export function HomeScreen() {
     if (theme !== "light" && theme !== "dark") return;
     setAppearance(parseAppearance(theme));
   }, [home?.profile.appSettings.theme, setAppearance]);
+
+  useEffect(() => {
+    if (selectedCard?.prayeruuid) {
+      openedCardIdsRef.current.add(selectedCard.prayeruuid);
+    }
+  }, [selectedCard?.prayeruuid]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    void loadArchivedPrayerIds(user.id).then((ids) => {
+      if (!cancelled) setArchivedCardIds(ids);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  const railCards = home
+    ? [...home.cards]
+        .filter(
+          (card) => !card.prayeruuid || !archivedCardIds.has(card.prayeruuid),
+        )
+        .sort((left, right) => {
+          const deckuuid = home.dailyDeck?.deckuuid;
+          const leftDaily = left.deckuuid === deckuuid ? 1 : 0;
+          const rightDaily = right.deckuuid === deckuuid ? 1 : 0;
+          return rightDaily - leftDaily;
+        })
+    : [];
   const selectedCardIndex =
-    selectedCard && home
-      ? home.cards.findIndex((card) =>
+    selectedCard && railCards.length
+      ? railCards.findIndex((card) =>
           selectedCard.prayeruuid
             ? card.prayeruuid === selectedCard.prayeruuid
             : card === selectedCard,
@@ -612,8 +645,8 @@ export function HomeScreen() {
   );
 
   const showAdjacentRecentPrayer = (direction: -1 | 1) => {
-    if (!home || selectedCardIndex < 0) return;
-    const nextCard = home.cards[selectedCardIndex + direction];
+    if (selectedCardIndex < 0) return;
+    const nextCard = railCards[selectedCardIndex + direction];
     if (!nextCard) return;
     if (__DEV__) {
       console.info("[PrayerSwipe] Home recent prayer navigation", {
@@ -625,6 +658,9 @@ export function HomeScreen() {
     }
     setDetailNavigationDirection(direction);
     setSelectedCard(nextCard);
+    if (nextCard.prayeruuid) {
+      updatePrayerCard(nextCard.prayeruuid, { unread: false });
+    }
   };
 
   const updatePrayerCard = (
@@ -1164,9 +1200,21 @@ export function HomeScreen() {
           <View style={styles.errorCard}>
             <Text style={styles.errorTitle}>Unable to load your home</Text>
             <Text style={styles.errorText}>{error}</Text>
-            <Pressable onPress={() => loadHome()} style={styles.retry}>
-              <Text style={styles.retryText}>Try again</Text>
-            </Pressable>
+            <View style={styles.errorActions}>
+              <Pressable onPress={() => loadHome()} style={styles.retry}>
+                <Text style={styles.retryText}>Try again</Text>
+              </Pressable>
+              <Pressable
+                accessibilityLabel="Sign out"
+                accessibilityRole="button"
+                onPress={() => {
+                  void signOut();
+                }}
+                style={styles.signOut}
+              >
+                <Text style={styles.signOutText}>Sign out</Text>
+              </Pressable>
+            </View>
           </View>
         ) : home ? (
           <>
@@ -1192,81 +1240,59 @@ export function HomeScreen() {
                 <Text style={styles.deckArrow}>›</Text>
               </Pressable>
             ) : null}
-            {showPersonalPrayer && home.dailyDeck ? (
-              <>
-                <Text style={styles.section}>Today's Prayer Deck</Text>
-                <Pressable
-                  accessibilityLabel={`Open ${home.dailyDeck.timeOfDay} prayer deck for ${formatDeckDate(home.dailyDeck.localDate)}`}
-                  accessibilityRole="button"
-                  onPress={() =>
-                    router.push(
-                      `/(app)/prayer-decks/${home.dailyDeck!.deckuuid}` as Href,
-                    )
-                  }
-                  style={({ pressed }) => [
-                    styles.deckCard,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <View style={styles.deckCopy}>
-                    <Text style={styles.deckEyebrow}>
-                      {home.dailyDeck.timeOfDay} · {home.dailyDeck.status}
-                    </Text>
-                    <View style={styles.deckTitleRow}>
-                      <Text style={styles.deckTitle}>
-                        {formatDeckDate(home.dailyDeck.localDate)}
-                      </Text>
-                      <View style={styles.deckIcons}>
-                        <MorningIcon
-                          color={
-                            home.dailyDeck.timeOfDay === "morning"
-                              ? colors.accentText
-                              : colors.mutedSoft
-                          }
-                        />
-                        <EveningIcon
-                          color={
-                            home.dailyDeck.timeOfDay === "evening"
-                              ? colors.accentText
-                              : colors.mutedSoft
-                          }
-                        />
-                      </View>
-                    </View>
-                    <Text style={styles.deckMeta}>
-                      {home.dailyDeck.readyCards} of {home.dailyDeck.totalCards} ready
-                    </Text>
-                  </View>
-                  <Text style={styles.deckArrow}>→</Text>
-                </Pressable>
-              </>
-            ) : null}
-
             {showPersonalPrayer ? (
               <>
             <Text style={styles.section}>Recent Prayer Cards</Text>
-            {home?.cards.length ? (
+            {railCards.length ? (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.rail}
               >
-                {home.cards.map((card, i) => (
-                  <PrayerCard
-                    key={card.prayeruuid || `${card.title}-${i}`}
-                    card={card}
-                    index={i}
-                    onPress={() => {
-                      setDetailNavigationDirection(1);
-                      setSelectedCard(card);
-                    }}
-                  />
-                ))}
+                {railCards.map((card, i) => {
+                    const unreadDaily = isUnreadDailyCard(
+                      card,
+                      home.dailyDeck?.deckuuid,
+                    );
+                    return (
+                      <PrayerCard
+                        key={card.prayeruuid || `${card.title}-${i}`}
+                        card={
+                          unreadDaily && home.dailyDeck
+                            ? {
+                                ...card,
+                                date: unreadDailyDate(home.dailyDeck.timeOfDay),
+                              }
+                            : card
+                        }
+                        index={i}
+                        highlighted={unreadDaily}
+                        onPress={() => {
+                          setDetailNavigationDirection(1);
+                          setSelectedCard(card);
+                          if (card.prayeruuid) {
+                            updatePrayerCard(card.prayeruuid, { unread: false });
+                          }
+                        }}
+                      />
+                    );
+                  })}
               </ScrollView>
             ) : (
-              <Text style={styles.empty}>
-                Your recent prayers will appear here.
-              </Text>
+              <View style={styles.prayedUp}>
+                <Text style={styles.empty}>You're prayed up!</Text>
+                <Pressable
+                  accessibilityLabel="View Archive"
+                  accessibilityRole="button"
+                  onPress={() => router.push("/(app)/prayers/archive")}
+                  style={({ pressed }) => [
+                    styles.archiveButton,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.archiveButtonText}>View Archive</Text>
+                </Pressable>
+              </View>
             )}
 
             <Text style={styles.section}>Pray For</Text>
@@ -1463,8 +1489,8 @@ export function HomeScreen() {
         visible={selectedCard !== null}
         loading={prayerLoading}
         deckPosition={
-          selectedCardIndex >= 0 && home && home.cards.length > 1
-            ? `${selectedCardIndex + 1} of ${home.cards.length}`
+          selectedCardIndex >= 0 && railCards.length > 1
+            ? `${selectedCardIndex + 1} of ${railCards.length}`
             : undefined
         }
         navigationContext="home-recent-prayers"
@@ -1475,13 +1501,35 @@ export function HomeScreen() {
             : undefined
         }
         onNext={
-          home && selectedCardIndex >= 0 && selectedCardIndex < home.cards.length - 1
+          selectedCardIndex >= 0 && selectedCardIndex < railCards.length - 1
             ? () => showAdjacentRecentPrayer(1)
             : undefined
         }
         onClose={() => {
+          const openedIds = openedCardIdsRef.current;
+          openedCardIdsRef.current = new Set();
           setSelectedCard(null);
           setPrayerLoading(false);
+          if (openedIds.size === 0) return;
+          setArchivedCardIds((current) => {
+            const next = new Set(current);
+            for (const id of openedIds) next.add(id);
+            if (user?.id) persistArchivedPrayerIds(user.id, next);
+            return next;
+          });
+          setResponse((current) => {
+            if (!current) return current;
+            return {
+              ...current,
+              home: {
+                ...current.home,
+                cards: current.home.cards.filter(
+                  (card) =>
+                    !card.prayeruuid || !openedIds.has(card.prayeruuid),
+                ),
+              },
+            };
+          });
         }}
       />
       <AddLovedOneModal
@@ -1652,16 +1700,34 @@ function createStyles(colors: ColorTokens) {
     fontSize: 12,
     lineHeight: 18,
   },
+  errorActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 14,
+  },
   retry: {
     alignSelf: "flex-start",
     borderRadius: 18,
     backgroundColor: colors.buttonPrimary,
     paddingHorizontal: 16,
     paddingVertical: 9,
-    marginTop: 14,
   },
   retryText: {
     color: colors.buttonOnPrimary,
+    fontFamily: fonts.bodyMedium,
+    fontSize: 11,
+  },
+  signOut: {
+    alignSelf: "flex-start",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.glassBorderStrong,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+  },
+  signOutText: {
+    color: colors.title,
     fontFamily: fonts.bodyMedium,
     fontSize: 11,
   },
@@ -1720,6 +1786,21 @@ function createStyles(colors: ColorTokens) {
     fontSize: 12,
     lineHeight: 18,
     paddingVertical: 12,
+  },
+  prayedUp: {
+    marginBottom: 8,
+  },
+  archiveButton: {
+    alignSelf: "flex-start",
+    borderRadius: 18,
+    backgroundColor: colors.accent,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+  },
+  archiveButtonText: {
+    color: colors.white,
+    fontFamily: fonts.bodyMedium,
+    fontSize: 11,
   },
   section: {
     fontFamily: fonts.monoMedium,

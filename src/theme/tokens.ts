@@ -214,5 +214,5 @@ export const motion = {
   stagger: [0, 200, 400, 600] as const,
   overlayFade: 800,
   overlayDelay: 300,
-  videoFade: 1000,
+  videoFade: 1800,
 } as const;

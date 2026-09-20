@@ -30,7 +30,7 @@ import {
   isValidPhone,
   normalizePhone,
 } from "../../lib/phone";
-import { fonts, type ColorTokens } from "../../theme/tokens";
+import { fonts, motion, type ColorTokens } from "../../theme/tokens";
 import { useThemedStyles } from "../../theme/ThemeProvider";
 import { ScreenShell } from "../ui/ScreenShell";
 import { DisplayTitle } from "../ui/DisplayTitle";
@@ -122,6 +122,7 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
   const player = useVideoPlayer(video.intro, (p) => {
     p.muted = true;
     p.loop = false;
+    p.timeUpdateEventInterval = 0.2;
   });
 
   const infoSteps = steps.filter((s) => s.type === "info");
@@ -150,8 +151,17 @@ export function OnboardingScreen({ inviteToken }: { inviteToken?: string }) {
   }, [goAfterAuth, isSignedIn]);
 
   useEffect(() => {
-    const listener = player.addListener("playToEnd", () => setVideoEnded(true));
-    return () => listener.remove();
+    const fadeSec = motion.videoFade / 1000;
+    const onTime = player.addListener("timeUpdate", ({ currentTime }) => {
+      const duration = player.duration;
+      if (!Number.isFinite(duration) || duration <= 0) return;
+      if (currentTime >= duration - fadeSec) setVideoEnded(true);
+    });
+    const onEnd = player.addListener("playToEnd", () => setVideoEnded(true));
+    return () => {
+      onTime.remove();
+      onEnd.remove();
+    };
   }, [player]);
 
   useEffect(() => {

@@ -196,7 +196,7 @@ function RootNavigator() {
         onLayout={hideSplash}
         style={{
           flex: 1,
-          backgroundColor: colors.splash,
+          backgroundColor: colors.loading,
           alignItems: "center",
           justifyContent: "center",
         }}

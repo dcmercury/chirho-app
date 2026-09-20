@@ -1934,6 +1934,17 @@ export async function getPrayer(
   };
 }
 
+export async function trackPrayerView(
+  prayeruuid: string,
+  token: string,
+): Promise<void> {
+  await authenticatedRequest(
+    `/api/prayers/${prayeruuid}/analytics/view`,
+    token,
+    { method: "PUT" },
+  );
+}
+
 export async function trackPrayerShare(
   prayeruuid: string,
   token: string,

@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import { View, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image } from "expo-image";
@@ -7,8 +7,12 @@ import Animated, {
   Easing,
   FadeIn,
   ReduceMotion,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
 } from "react-native-reanimated";
-import { type ColorTokens } from "../../theme/tokens";
+import { motion, type ColorTokens } from "../../theme/tokens";
 import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
 import { GridOverlay } from "./GridOverlay";
 import type { ImageSource } from "expo-image";
@@ -37,6 +41,27 @@ export function ScreenShell({
   const insets = useSafeAreaInsets();
   const { overlayAt } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const reducedMotion = useReducedMotion();
+  const crossfade = useSharedValue(videoVisible && videoFaded ? 1 : 0);
+
+  useEffect(() => {
+    if (!videoVisible || !videoFaded) {
+      crossfade.value = 0;
+      return;
+    }
+    crossfade.value = withTiming(1, {
+      duration: reducedMotion ? 0 : motion.videoFade,
+      easing: Easing.bezier(0.22, 1, 0.36, 1),
+    });
+  }, [crossfade, reducedMotion, videoFaded, videoVisible]);
+
+  const videoStyle = useAnimatedStyle(() => ({
+    opacity: 1 - crossfade.value,
+  }));
+  const stillStyle = useAnimatedStyle(() => ({
+    opacity: crossfade.value,
+  }));
+
   return (
     <View style={styles.slide}>
       <Image source={background} style={StyleSheet.absoluteFill} contentFit="cover" />
@@ -56,28 +81,40 @@ export function ScreenShell({
       ) : null}
 
       {videoVisible && player ? (
-        <VideoView
-          player={player}
-          style={[styles.video, videoFaded && styles.videoFaded]}
-          contentFit="cover"
-          nativeControls={false}
-        />
+        <Animated.View pointerEvents="none" style={[styles.video, videoStyle]}>
+          <VideoView
+            player={player}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            nativeControls={false}
+          />
+        </Animated.View>
       ) : null}
 
-      <GridOverlay />
-      <View style={styles.blurOrb} pointerEvents="none" />
+      {videoVisible ? (
+        <Animated.View pointerEvents="none" style={[styles.videoStill, stillStyle]}>
+          <Image
+            source={background}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+          />
+        </Animated.View>
+      ) : null}
 
-      <Animated.View
-        entering={FadeIn.duration(800)
-          .delay(300)
-          .easing(Easing.bezier(0.22, 1, 0.36, 1))
-          .reduceMotion(ReduceMotion.System)}
-        style={[
-          StyleSheet.absoluteFill,
-          { backgroundColor: overlayAt(overlayOpacity) },
-        ]}
-        pointerEvents="none"
-      />
+      <View style={styles.mediaFx} pointerEvents="none">
+        <GridOverlay />
+        <View style={styles.blurOrb} />
+        <Animated.View
+          entering={FadeIn.duration(800)
+            .delay(300)
+            .easing(Easing.bezier(0.22, 1, 0.36, 1))
+            .reduceMotion(ReduceMotion.System)}
+          style={[
+            StyleSheet.absoluteFill,
+            { backgroundColor: overlayAt(overlayOpacity) },
+          ]}
+        />
+      </View>
 
       {header ? (
         <View
@@ -106,8 +143,13 @@ function createStyles(colors: ColorTokens) {
       ...StyleSheet.absoluteFill,
       zIndex: 2,
     },
-    videoFaded: {
-      opacity: 0,
+    videoStill: {
+      ...StyleSheet.absoluteFill,
+      zIndex: 3,
+    },
+    mediaFx: {
+      ...StyleSheet.absoluteFill,
+      zIndex: 4,
     },
     header: {
       position: "absolute",

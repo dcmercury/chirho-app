@@ -16,6 +16,7 @@ export interface HomePrayerCard {
   backgroundMusicVolume?: number;
   audioAvailable?: boolean;
   audioStatus?: "not_started" | "pending" | "ready" | "failed";
+  unread?: boolean;
 }
 
 export type PrayerFocusType =

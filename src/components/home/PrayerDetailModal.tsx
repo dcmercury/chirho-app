@@ -28,7 +28,7 @@ import {
   DEFAULT_BACKGROUND_MUSIC,
   resolveAudioUrl,
 } from "../../lib/assets";
-import { publishPrayerCard, trackPrayerShare } from "../../lib/api";
+import { publishPrayerCard, trackPrayerShare, trackPrayerView } from "../../lib/api";
 import { fonts, type ColorTokens } from "../../theme/tokens";
 import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
 import type { HomePrayerCard } from "../../types/home";
@@ -233,6 +233,11 @@ export function PrayerDetailModal({
     navigationContext,
     visible,
   ]);
+
+  useEffect(() => {
+    if (!visible || !token || !card?.prayeruuid) return;
+    trackPrayerView(card.prayeruuid, token).catch(() => undefined);
+  }, [card?.prayeruuid, token, visible]);
 
   useEffect(() => {
     if (!visible) return;
