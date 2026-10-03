@@ -174,6 +174,12 @@ export function PrayerDeckScreen({
   };
 
   const currentCard = cards[currentIndex] || null;
+  const openedDirectRef = useRef(false);
+  useEffect(() => {
+    if (openedDirectRef.current || !token || !currentCard) return;
+    openedDirectRef.current = true;
+    prepareIndividualAudio(currentCard);
+  }, [token, currentCard]);
   const failedItems =
     deck?.status === "partial" || deck?.status === "failed"
       ? deck.items.filter((item) => item.status === "failed")
@@ -186,6 +192,36 @@ export function PrayerDeckScreen({
       <View style={styles.center}>
         <ActivityIndicator color={colors.title} size="large" />
         <Text style={styles.loadingText}>Gathering your daily prayers…</Text>
+      </View>
+    );
+  }
+
+  if (currentCard) {
+    return (
+      <View style={styles.root}>
+        <PrayerDetailModal
+          key={
+            selectedCard?.prayeruuid ||
+            selectedCard?.deckIndex ||
+            currentCard.prayeruuid ||
+            currentCard.deckIndex
+          }
+          card={selectedCard || currentCard}
+          token={token}
+          visible
+          deckPosition={
+            cards.length > 1 ? `${currentIndex + 1} of ${cards.length}` : undefined
+          }
+          navigationContext="daily-prayer-deck"
+          navigationDirection={detailNavigationDirection}
+          onPrevious={currentIndex > 0 ? () => showAdjacentCard(-1) : undefined}
+          onNext={
+            currentIndex < cards.length - 1
+              ? () => showAdjacentCard(1)
+              : undefined
+          }
+          onClose={onClose}
+        />
       </View>
     );
   }

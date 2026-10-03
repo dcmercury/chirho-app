@@ -128,6 +128,57 @@ function createStyles(colors: ColorTokens) {
   });
 }
 
+/** The Person, Family, Thing and Situation circles. */
+export function AddSubjectChoices({
+  onSelect,
+  animated = false,
+}: {
+  onSelect: (choice: AddSubjectChoice) => void;
+  animated?: boolean;
+}) {
+  const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
+
+  return (
+    <View style={styles.choiceGroup}>
+      {choices.map((choice, index) => {
+        const button = (
+          <Pressable
+            key={choice.value}
+            accessibilityLabel={choice.label}
+            accessibilityRole="button"
+            onPress={() => onSelect(choice.value)}
+            style={({ pressed }) => [styles.option, pressed && styles.pressed]}
+          >
+            <View style={styles.optionIcon}>
+              {choice.value === "person" ? (
+                <PersonIcon color={colors.accent} size={24} />
+              ) : choice.value === "family" ? (
+                <FamilyIcon color={colors.accent} size={24} />
+              ) : (
+                <PrayerFocusTypeIcon
+                  type={choice.value === "thing" ? "pet" : "situation"}
+                  color={colors.accent}
+                  size={24}
+                />
+              )}
+            </View>
+            <Text style={styles.optionLabel}>{choice.label}</Text>
+          </Pressable>
+        );
+        // Rising delays walk the circles in from left to right.
+        return animated ? (
+          <Stagger key={choice.value} delay={260 + index * 90}>
+            {button}
+          </Stagger>
+        ) : (
+          button
+        );
+      })}
+    </View>
+  );
+}
+
 export function AddSubjectSheet({
   visible,
   onClose,
@@ -140,7 +191,6 @@ export function AddSubjectSheet({
   onSelect: (choice: AddSubjectChoice) => void;
 }) {
   const styles = useThemedStyles(createStyles);
-  const { colors } = useTheme();
 
   return (
     <Modal
@@ -163,37 +213,7 @@ export function AddSubjectSheet({
             <Text style={styles.title}>I want to pray for</Text>
           </Stagger>
           <View style={styles.row}>
-            <View style={styles.choiceGroup}>
-              {choices.map((choice, index) => (
-                // Rising delays walk the circles in from left to right.
-                <Stagger key={choice.value} delay={260 + index * 90}>
-                  <Pressable
-                    accessibilityLabel={choice.label}
-                    accessibilityRole="button"
-                    onPress={() => onSelect(choice.value)}
-                    style={({ pressed }) => [
-                      styles.option,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <View style={styles.optionIcon}>
-                      {choice.value === "person" ? (
-                        <PersonIcon color={colors.accent} size={24} />
-                      ) : choice.value === "family" ? (
-                        <FamilyIcon color={colors.accent} size={24} />
-                      ) : (
-                        <PrayerFocusTypeIcon
-                          type={choice.value === "thing" ? "pet" : "situation"}
-                          color={colors.accent}
-                          size={24}
-                        />
-                      )}
-                    </View>
-                    <Text style={styles.optionLabel}>{choice.label}</Text>
-                  </Pressable>
-                </Stagger>
-              ))}
-            </View>
+            <AddSubjectChoices animated onSelect={onSelect} />
             <Stagger delay={620}>
               <Pressable
                 accessibilityLabel="Cancel"

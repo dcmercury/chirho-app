@@ -78,9 +78,19 @@ import {
 } from "../../lib/prayerFocusImage";
 import { SetupOnboarding } from "../onboarding/SetupOnboarding";
 import { AddLovedOneModal } from "./AddLovedOneModal";
-import { AddSubjectSheet, type AddSubjectChoice } from "./AddSubjectSheet";
+import {
+  AddSubjectChoices,
+  AddSubjectSheet,
+  type AddSubjectChoice,
+} from "./AddSubjectSheet";
 import { PrayerFocusCircle } from "./PrayerFocusCircle";
 import { HomeNavFab, HOME_NAV_FAB_RESERVE } from "./HomeNavFab";
+import { ChurchFooter } from "./ChurchFooter";
+import { openExternalUrl } from "../../lib/openExternalUrl";
+import { MessageDrawer } from "./MessageDrawer";
+import { ChurchRail } from "./ChurchRail";
+import { SermonDrawer } from "./SermonDrawer";
+import { CalendarDrawer } from "./CalendarDrawer";
 import {
   NeedPrayerDrawer,
   type NeedPrayerMode,
@@ -95,6 +105,8 @@ import {
 import { PersonalPlanDrawer } from "./PersonalPlanDrawer";
 import { ProfileDrawer } from "./ProfileDrawer";
 import type {
+  ChurchEvent,
+  ChurchMessage,
   HomeData,
   HomeLovedOne,
   HomePrayerCard,
@@ -357,6 +369,10 @@ export function HomeScreen() {
   const [selectedFocus, setSelectedFocus] = useState<PrayerFocus | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
+  const [messagesOpen, setMessagesOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarFocus, setCalendarFocus] = useState<ChurchEvent | null>(null);
+  const [openMessage, setOpenMessage] = useState<ChurchMessage | null>(null);
   const [planPending, setPlanPending] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
   const [, setTrialTick] = useState(0);
@@ -371,6 +387,12 @@ export function HomeScreen() {
     response?.community,
     response?.plan,
   );
+  const churchFooterCommunity =
+    response?.community?.features?.showMessages ||
+    response?.community?.features?.showCalendar ||
+    response?.community?.donationLink
+      ? response.community
+      : null;
   const trialLabel = response?.plan?.billingEnabled
     ? formatTrialRemaining(response.plan.trialEndsAt)
     : null;
@@ -1240,10 +1262,27 @@ export function HomeScreen() {
                 <Text style={styles.deckArrow}>›</Text>
               </Pressable>
             ) : null}
+            {response?.community &&
+            (response.community.features?.showMessages ||
+              response.community.features?.showCalendar) ? (
+              <ChurchRail
+                communityuuid={response.community.communityuuid}
+                churchName={response.community.name}
+                showMessages={Boolean(response.community.features?.showMessages)}
+                showCalendar={Boolean(response.community.features?.showCalendar)}
+                onOpenMessage={setOpenMessage}
+                onOpenEvent={(event) => {
+                  setCalendarFocus(event);
+                  setCalendarOpen(true);
+                }}
+              />
+            ) : null}
             {showPersonalPrayer ? (
               <>
-            <Text style={styles.section}>Recent Prayer Cards</Text>
-            {railCards.length ? (
+            {home.cards.length ? (
+              <Text style={styles.section}>Recent Prayer Cards</Text>
+            ) : null}
+            {!home.cards.length ? null : railCards.length ? (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -1296,6 +1335,16 @@ export function HomeScreen() {
             )}
 
             <Text style={styles.section}>Pray For</Text>
+            {praySubjects(home?.lovedOnes || [], home.prayerFocuses).length === 0 ? (
+              <View style={styles.prayForChoices}>
+                <AddSubjectChoices
+                  onSelect={(choice) => {
+                    pendingSubjectRef.current = choice;
+                    openQueuedSubjectModal();
+                  }}
+                />
+              </View>
+            ) : null}
             <ScrollView
               ref={prayRailRef}
               horizontal
@@ -1390,7 +1439,9 @@ export function HomeScreen() {
               </View>
             ) : null}
 
-            <Text style={styles.section}>Prayer Groups</Text>
+            {home?.groups.length ? (
+              <Text style={styles.section}>Prayer Groups</Text>
+            ) : null}
             {home?.groups.length ? (
               <ScrollView
                 horizontal
@@ -1443,19 +1494,70 @@ export function HomeScreen() {
                   </Pressable>
                 ))}
               </ScrollView>
-            ) : (
-              <Text style={styles.empty}>
-                Your prayer groups will appear here.
-              </Text>
-            )}
+            ) : null}
           </>
         ) : null}
       </ScrollView>
+
+      {churchFooterCommunity ? (
+        <ChurchFooter
+          bottomInset={insets.bottom}
+          churchName={churchFooterCommunity.name}
+          onOpenMessages={
+            churchFooterCommunity.features?.showMessages
+              ? () => setMessagesOpen(true)
+              : undefined
+          }
+          onOpenCalendar={
+            churchFooterCommunity.features?.showCalendar
+              ? () => {
+                  setCalendarFocus(null);
+                  setCalendarOpen(true);
+                }
+              : undefined
+          }
+          onGive={
+            churchFooterCommunity.donationLink
+              ? () => {
+                  void openExternalUrl(churchFooterCommunity.donationLink as string);
+                }
+              : undefined
+          }
+        />
+      ) : null}
 
       <HomeNavFab
         bottom={insets.bottom + 4}
         onPress={() => setAddSubjectOpen(true)}
       />
+
+      {response?.community?.features?.showMessages ? (
+        <MessageDrawer
+          visible={messagesOpen}
+          communityuuid={response.community.communityuuid}
+          communityName={response.community.name}
+          onClose={() => setMessagesOpen(false)}
+        />
+      ) : null}
+
+      {response?.community?.features?.showMessages ? (
+        <SermonDrawer
+          message={openMessage}
+          communityuuid={response.community.communityuuid}
+          communityName={response.community.name}
+          onClose={() => setOpenMessage(null)}
+        />
+      ) : null}
+
+      {response?.community?.features?.showCalendar ? (
+        <CalendarDrawer
+          visible={calendarOpen}
+          communityuuid={response.community.communityuuid}
+          communityName={response.community.name}
+          initialEvent={calendarFocus}
+          onClose={() => setCalendarOpen(false)}
+        />
+      ) : null}
 
       <NeedPrayerDrawer
         visible={needPrayerOpen}
@@ -1885,6 +1987,7 @@ function createStyles(colors: ColorTokens) {
     gap: 12,
     paddingBottom: 8,
   },
+  prayForChoices: { paddingTop: 4, paddingBottom: 16 },
   lovedRail: {
     flexGrow: 0,
     justifyContent: "flex-start",

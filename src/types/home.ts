@@ -149,6 +149,10 @@ export interface HomeProfile {
     locked?: boolean;
   };
   prayerLength: PrayerLength;
+  bibleTranslations?: {
+    selected: string;
+    options: (ProfileOption & { description?: string })[];
+  };
   voices: {
     selected: string;
     options: (ProfileOption & { description?: string; accent?: string })[];
@@ -212,6 +216,8 @@ export interface HomeCommunity {
     notifyGroupAnnouncements: boolean;
     notifyGroupMemberActivity: boolean;
     showDonation: boolean;
+    showMessages?: boolean;
+    showCalendar?: boolean;
     sharePrayersWithGroups: boolean;
     dailyPrayers: boolean;
     personalPrayer: boolean;
@@ -224,6 +230,81 @@ export interface HomeCommunity {
     maxGroupsPerUser: number | null;
   };
   groupsUsed?: number;
+}
+
+export interface ChurchMessage {
+  videoId: string;
+  title: string;
+  thumbnail: string | null;
+  publishedAt: string | null;
+  durationSeconds?: number | null;
+  speaker?: string | null;
+  primaryScripture?: string | null;
+}
+
+export interface MessageSeries {
+  playlistId: string;
+  title: string;
+  itemCount: number;
+  thumbnail: string | null;
+}
+
+export interface MessageCategory {
+  id: string;
+  label: string;
+  /** Null for "series", which lists playlists instead of videos. */
+  playlistId: string | null;
+  series?: MessageSeries[];
+}
+
+export interface ChurchMessagesPage {
+  channelTitle: string | null;
+  categories: MessageCategory[];
+  videos: ChurchMessage[];
+  nextPageToken: string | null;
+}
+
+export interface ChurchEvent {
+  id: string;
+  title: string;
+  /** ISO timestamp, or YYYY-MM-DD when allDay. */
+  start: string;
+  end: string | null;
+  allDay: boolean;
+  location: string | null;
+  url: string | null;
+  description: string | null;
+}
+
+export interface SermonScripture {
+  reference: string;
+  passageId: string;
+  kind: "cited" | "quoted" | "thematic";
+}
+
+export interface SermonInsights {
+  speaker: string | null;
+  primaryScripture: SermonScripture | null;
+  scriptures: SermonScripture[];
+  themes: string[];
+  summary: string;
+  keyTakeaways: string[];
+  prayerPrompts: string[];
+}
+
+export interface ChurchMessageDetail {
+  message: ChurchMessage & { description: string };
+  analysisStatus: "ready" | "pending" | "none";
+  sermon: SermonInsights | null;
+}
+
+export interface ScripturePassage {
+  passageId: string;
+  reference: string;
+  content: string;
+  copyright: string;
+  translation: string;
+  fums: { token: string; userId: string } | null;
 }
 
 export interface PendingGroupInvite {

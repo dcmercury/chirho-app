@@ -3,6 +3,10 @@ import type { LovedOnePrayerConfiguration } from "./prayerConfig";
 import type { PrayerNeedPath } from "./prayerNeedFlow";
 import { cleanPrayerDisplayText } from "./prayerText";
 import type {
+  ChurchEvent,
+  ChurchMessagesPage,
+  ChurchMessageDetail,
+  ScripturePassage,
   GroupDetail,
   HomeCommunity,
   HomePrayerCard,
@@ -545,6 +549,68 @@ export async function getMobileHome(
       ? data.pendingInvites
       : [],
   };
+}
+
+export async function getChurchMessages(
+  token: string,
+  communityuuid: string,
+  pageToken?: string | null,
+  playlistId?: string | null,
+): Promise<ChurchMessagesPage> {
+  const params = new URLSearchParams();
+  if (playlistId) params.set("playlist", playlistId);
+  if (pageToken) params.set("pageToken", pageToken);
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const data = await authenticatedRequest<Partial<ChurchMessagesPage>>(
+    `/api/mobile/communities/${encodeURIComponent(communityuuid)}/messages${query}`,
+    token,
+  );
+  return {
+    channelTitle: data.channelTitle || null,
+    categories: Array.isArray(data.categories) ? data.categories : [],
+    videos: Array.isArray(data.videos) ? data.videos : [],
+    nextPageToken: data.nextPageToken || null,
+  };
+}
+
+export async function getChurchMessage(
+  token: string,
+  communityuuid: string,
+  videoId: string,
+): Promise<ChurchMessageDetail> {
+  const data = await authenticatedRequest<Partial<ChurchMessageDetail>>(
+    `/api/mobile/communities/${encodeURIComponent(communityuuid)}/messages/${encodeURIComponent(videoId)}`,
+    token,
+  );
+  if (!data.message) throw new Error("Message not found");
+  return {
+    message: data.message,
+    analysisStatus: data.analysisStatus || "none",
+    sermon: data.sermon || null,
+  };
+}
+
+export async function getScripture(
+  token: string,
+  passageId: string,
+): Promise<ScripturePassage> {
+  const data = await authenticatedRequest<{
+    passage?: Omit<ScripturePassage, "fums">;
+    fums?: ScripturePassage["fums"];
+  }>(`/api/mobile/scripture?passage=${encodeURIComponent(passageId)}`, token);
+  if (!data.passage) throw new Error("Scripture not found");
+  return { ...data.passage, fums: data.fums || null };
+}
+
+export async function getChurchCalendar(
+  token: string,
+  communityuuid: string,
+): Promise<ChurchEvent[]> {
+  const data = await authenticatedRequest<{ events?: ChurchEvent[] }>(
+    `/api/mobile/communities/${encodeURIComponent(communityuuid)}/calendar`,
+    token,
+  );
+  return Array.isArray(data.events) ? data.events : [];
 }
 
 export async function getPrayerFocuses(token: string): Promise<PrayerFocus[]> {

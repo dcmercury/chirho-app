@@ -31,6 +31,7 @@ import { NotificationsSection } from "./profile-drawer/NotificationsSection";
 import { PersonalPlanSection } from "./profile-drawer/PersonalPlanSection";
 import { PrayerCardsDrawer } from "./profile-drawer/PrayerCardsDrawer";
 import { PrayerCardsSection } from "./profile-drawer/PrayerCardsSection";
+import { BibleTranslationSection } from "./profile-drawer/BibleTranslationSection";
 import {
   PrayerLengthSection,
   PrayerPreferencesSection,
@@ -175,6 +176,16 @@ export function ProfileDrawer({
               void controller.setPrivacy(key, enabled);
             }}
           />
+          {profile.bibleTranslations?.options.length ? (
+            <BibleTranslationSection
+              translations={profile.bibleTranslations}
+              pending={Boolean(controller.pending["bible-translation"])}
+              error={controller.errors["bible-translation"]}
+              onSelect={(id) => {
+                void controller.setBibleTranslation(id);
+              }}
+            />
+          ) : null}
           {personalPrayer || dailyPrayerAllowed ? (
             <CategoryLabel>Prayer life</CategoryLabel>
           ) : null}

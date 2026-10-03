@@ -179,6 +179,11 @@ export function useProfileDrawerController(
       updateProfile({ preferences: { prayerLength } }, token),
     );
 
+  const setBibleTranslation = (bibleTranslation: string) =>
+    mutate("bible-translation", (token) =>
+      updateProfile({ preferences: { bibleTranslation } }, token),
+    );
+
   const selectVoice = (voice: string) =>
     mutate("voice", (token) =>
       updateProfile(
@@ -497,6 +502,7 @@ export function useProfileDrawerController(
     saveAccountGender,
     selectTradition,
     setPrayerLength,
+    setBibleTranslation,
     selectVoice,
     setBackgroundMusic,
     selectBackgroundMusic,
