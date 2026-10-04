@@ -480,6 +480,8 @@ export async function getMobileHome(
               branding: { logo: string | null } | null;
               activeBackground: { url: string } | null;
               donationLink?: string | null;
+              donationLabel?: string | null;
+              donationImage?: string | null;
               features?: HomeCommunity["features"];
               licenseTier?: string | null;
               canCreateGroups?: boolean;
@@ -529,6 +531,8 @@ export async function getMobileHome(
               ? rawCommunity.activeBackground?.url || null
               : null,
         donationLink: rawCommunity.donationLink || null,
+        donationLabel: rawCommunity.donationLabel || null,
+        donationImage: rawCommunity.donationImage || null,
         features: rawCommunity.features,
         licenseTier:
           "licenseTier" in rawCommunity ? rawCommunity.licenseTier : null,

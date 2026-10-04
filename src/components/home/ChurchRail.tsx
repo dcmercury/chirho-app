@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { useAuth } from "@clerk/expo";
 import { getChurchCalendar, getChurchMessages } from "../../lib/api";
+import { resolveImage } from "../../lib/assets";
 import { fonts, radii, type ColorTokens } from "../../theme/tokens";
 import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
 import { PlayIcon } from "../../features/groups/components/Icons";
@@ -11,6 +12,19 @@ import { dayLabel, eventDate, timeLabel } from "./CalendarDrawer";
 import { formatDate, stillFor } from "./messageMedia";
 
 const DAY_MS = 86_400_000;
+
+function givingWord(value: string | null | undefined): string {
+  const text = (value || "").replace(/\s+/g, " ").trim();
+  return text || "Give";
+}
+
+function givingHost(url: string): string | null {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
 
 function nextEvent(events: ChurchEvent[]): ChurchEvent | null {
   const now = Date.now();
@@ -31,15 +45,23 @@ export function ChurchRail({
   churchName,
   showMessages,
   showCalendar,
+  donationLink,
+  donationLabel,
+  donationImage,
   onOpenMessage,
   onOpenEvent,
+  onOpenDonation,
 }: {
   communityuuid: string;
   churchName: string;
   showMessages: boolean;
   showCalendar: boolean;
+  donationLink?: string | null;
+  donationLabel?: string | null;
+  donationImage?: string | null;
   onOpenMessage: (message: ChurchMessage) => void;
   onOpenEvent: (event: ChurchEvent) => void;
+  onOpenDonation?: () => void;
 }) {
   const styles = useThemedStyles(createStyles);
   const { colors } = useTheme();
@@ -78,7 +100,10 @@ export function ChurchRail({
     };
   }, [communityuuid, showCalendar, showMessages]);
 
-  if (!message && !event) return null;
+  const word = donationLink ? givingWord(donationLabel) : null;
+  const host = donationLink ? givingHost(donationLink) : null;
+
+  if (!message && !event && !word) return null;
 
   const still = message ? stillFor(message) : null;
   const messageMeta = message
@@ -149,6 +174,38 @@ export function ChurchRail({
               </Text>
               <Text style={styles.meta} numberOfLines={1}>
                 {[dayLabel(start), timeLabel(event)].join(" · ")}
+              </Text>
+            </View>
+          </Pressable>
+        ) : null}
+
+        {word ? (
+          <Pressable
+            accessibilityLabel={`Open ${word} page`}
+            accessibilityRole="link"
+            onPress={onOpenDonation}
+            style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+          >
+            {donationImage ? (
+              <View style={styles.media}>
+                <Image contentFit="cover" source={resolveImage(donationImage)} style={styles.image} />
+              </View>
+            ) : (
+              <View style={[styles.media, styles.dateMedia]}>
+                <Text
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.45}
+                  numberOfLines={1}
+                  style={styles.giveWord}
+                >
+                  {word.toUpperCase()}
+                </Text>
+              </View>
+            )}
+            <View style={styles.body}>
+              <Text style={styles.eyebrow}>{word.toUpperCase()}</Text>
+              <Text style={styles.title} numberOfLines={2}>
+                {host || churchName}
               </Text>
             </View>
           </Pressable>
@@ -226,6 +283,15 @@ function createStyles(colors: ColorTokens) {
       fontSize: 8,
       letterSpacing: 0.4,
       color: colors.cardMeta,
+    },
+    giveWord: {
+      fontFamily: fonts.displayMedium,
+      fontSize: 22,
+      lineHeight: 26,
+      color: colors.title,
+      textAlign: "center",
+      width: "100%",
+      paddingHorizontal: 10,
     },
     body: { padding: 10, backgroundColor: colors.cardFill },
     eyebrow: {

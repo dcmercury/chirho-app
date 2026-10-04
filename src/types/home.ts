@@ -205,6 +205,8 @@ export interface HomeCommunity {
   logo?: string | null;
   backgroundImage?: string | null;
   donationLink?: string | null;
+  donationLabel?: string | null;
+  donationImage?: string | null;
   features?: {
     membersCanCreateGroups: boolean;
     membersCanInvite: boolean;

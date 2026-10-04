@@ -1264,17 +1264,28 @@ export function HomeScreen() {
             ) : null}
             {response?.community &&
             (response.community.features?.showMessages ||
-              response.community.features?.showCalendar) ? (
+              response.community.features?.showCalendar ||
+              response.community.donationLink) ? (
               <ChurchRail
                 communityuuid={response.community.communityuuid}
                 churchName={response.community.name}
                 showMessages={Boolean(response.community.features?.showMessages)}
                 showCalendar={Boolean(response.community.features?.showCalendar)}
+                donationLink={response.community.donationLink}
+                donationLabel={response.community.donationLabel}
+                donationImage={response.community.donationImage}
                 onOpenMessage={setOpenMessage}
                 onOpenEvent={(event) => {
                   setCalendarFocus(event);
                   setCalendarOpen(true);
                 }}
+                onOpenDonation={
+                  response.community.donationLink
+                    ? () => {
+                        void openExternalUrl(response.community?.donationLink as string);
+                      }
+                    : undefined
+                }
               />
             ) : null}
             {showPersonalPrayer ? (
