@@ -1,12 +1,27 @@
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import Animated, { FadeOut } from "react-native-reanimated";
 import Svg, { Circle, Path } from "react-native-svg";
 import { fonts, type ColorTokens } from "../../theme/tokens";
 import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
 import { Stagger } from "../../features/groups/components/Stagger";
 import { CloseIcon } from "../../features/groups/components/Icons";
+import type { ScriptureSearchHit, SermonScripture } from "../../types/home";
 import { ChiRhoMark } from "../ui/ChiRhoMark";
+import { LoadingChiRhoOverlay } from "../ui/LoadingChiRhoOverlay";
 import { WizardBackdrop } from "../ui/WizardBackdrop";
 import { PrayerFocusTypeIcon } from "./PrayerFocusTypeIcon";
+import { ScriptureDrawer } from "./ScriptureDrawer";
+import { ScriptureSearchChoices } from "./ScriptureSearchChoices";
 
 export type AddSubjectChoice = "person" | "family" | "thing" | "situation";
 
@@ -62,10 +77,12 @@ function createStyles(colors: ColorTokens) {
       zIndex: 2,
       opacity: 0.14,
     },
+    scroll: { flex: 1 },
     content: {
-      flex: 1,
+      flexGrow: 1,
       justifyContent: "center",
       paddingHorizontal: 26,
+      paddingVertical: 32,
     },
     eyebrow: {
       color: colors.accent,
@@ -118,6 +135,10 @@ function createStyles(colors: ColorTokens) {
       alignItems: "center",
       justifyContent: "center",
     },
+    cancelRow: {
+      alignItems: "center",
+      marginTop: 56,
+    },
     optionLabel: {
       color: colors.title,
       fontFamily: fonts.displayMedium,
@@ -132,9 +153,11 @@ function createStyles(colors: ColorTokens) {
 export function AddSubjectChoices({
   onSelect,
   animated = false,
+  enterDelay = 260,
 }: {
   onSelect: (choice: AddSubjectChoice) => void;
   animated?: boolean;
+  enterDelay?: number;
 }) {
   const styles = useThemedStyles(createStyles);
   const { colors } = useTheme();
@@ -168,7 +191,7 @@ export function AddSubjectChoices({
         );
         // Rising delays walk the circles in from left to right.
         return animated ? (
-          <Stagger key={choice.value} delay={260 + index * 90}>
+          <Stagger key={choice.value} delay={enterDelay + index * 90}>
             {button}
           </Stagger>
         ) : (
@@ -191,6 +214,31 @@ export function AddSubjectSheet({
   onSelect: (choice: AddSubjectChoice) => void;
 }) {
   const styles = useThemedStyles(createStyles);
+  const [searching, setSearching] = useState(false);
+  const [searchStep, setSearchStep] = useState(false);
+  const [returnedFromSearch, setReturnedFromSearch] = useState(false);
+  const [scripture, setScripture] = useState<SermonScripture | null>(null);
+
+  useEffect(() => {
+    if (visible) return;
+    setSearching(false);
+    setSearchStep(false);
+    setReturnedFromSearch(false);
+    setScripture(null);
+  }, [visible]);
+
+  const onSearchStep = (active: boolean) => {
+    if (active) setReturnedFromSearch(true);
+    setSearchStep(active);
+  };
+
+  const openPassage = (hit: ScriptureSearchHit) => {
+    setScripture({
+      reference: hit.reference,
+      passageId: hit.passageId,
+      kind: "cited",
+    });
+  };
 
   return (
     <Modal
@@ -200,39 +248,74 @@ export function AddSubjectSheet({
       onDismiss={onDismiss}
       onRequestClose={onClose}
     >
-      <View style={styles.root}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.root}
+      >
         <WizardBackdrop />
         <View pointerEvents="none" style={styles.watermark}>
           <ChiRhoMark width={76} height={101} />
         </View>
-        <View style={styles.content}>
-          <Stagger delay={60}>
-            <Text style={styles.eyebrow}>DAILY PRAYER DECK</Text>
-          </Stagger>
-          <Stagger delay={140}>
-            <Text style={styles.title}>I want to pray for</Text>
-          </Stagger>
-          <View style={styles.row}>
-            <AddSubjectChoices animated onSelect={onSelect} />
-            <Stagger delay={620}>
-              <Pressable
-                accessibilityLabel="Cancel"
-                accessibilityRole="button"
-                onPress={onClose}
-                style={({ pressed }) => [
-                  styles.option,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <View style={styles.cancelIcon}>
-                  <CloseIcon color="#FFFFFF" size={20} />
-                </View>
-                <Text style={styles.optionLabel}>Cancel</Text>
-              </Pressable>
-            </Stagger>
-          </View>
-        </View>
-      </View>
+        <ScrollView
+          key={visible ? "open" : "closed"}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          style={styles.scroll}
+        >
+          {searchStep ? null : (
+            <Animated.View exiting={FadeOut.duration(280)}>
+              <Stagger delay={returnedFromSearch ? 0 : 280}>
+                <Text style={styles.eyebrow}>DAILY PRAYER DECK</Text>
+              </Stagger>
+              <Stagger delay={returnedFromSearch ? 40 : 420}>
+                <Text style={styles.title}>I want to pray for</Text>
+              </Stagger>
+              <View style={styles.row}>
+                <AddSubjectChoices
+                  animated
+                  enterDelay={returnedFromSearch ? 80 : 560}
+                  onSelect={onSelect}
+                />
+              </View>
+            </Animated.View>
+          )}
+          <ScriptureSearchChoices
+            animated={!returnedFromSearch}
+            visible={visible}
+            onOpenPassage={openPassage}
+            onSearchingChange={setSearching}
+            onStepChange={onSearchStep}
+          />
+          {searchStep ? null : (
+            <Animated.View exiting={FadeOut.duration(280)} style={styles.cancelRow}>
+              <Stagger delay={returnedFromSearch ? 200 : 1040}>
+                <Pressable
+                  accessibilityLabel="Cancel"
+                  accessibilityRole="button"
+                  onPress={onClose}
+                  style={({ pressed }) => [
+                    styles.option,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <View style={styles.cancelIcon}>
+                    <CloseIcon color="#FFFFFF" size={20} />
+                  </View>
+                  <Text style={styles.optionLabel}>Cancel</Text>
+                </Pressable>
+              </Stagger>
+            </Animated.View>
+          )}
+        </ScrollView>
+        <LoadingChiRhoOverlay
+          label="Searching Scripture…"
+          visible={searching}
+        />
+        <ScriptureDrawer
+          scripture={scripture}
+          onClose={() => setScripture(null)}
+        />
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

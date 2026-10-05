@@ -15,17 +15,8 @@ import { fonts, type as typography, type ColorTokens } from "../../theme/tokens"
 import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
 import { CloseIcon } from "../../features/groups/components/Icons";
 import type { SermonScripture, ScripturePassage } from "../../types/home";
-
-/** API.Bible text marks verses as "[16] For God so loved…". */
-function verses(content: string): { number: string | null; text: string }[] {
-  const parts = content.split(/\[(\d+)\]\s*/);
-  const result: { number: string | null; text: string }[] = [];
-  if (parts[0].trim()) result.push({ number: null, text: parts[0].trim() });
-  for (let index = 1; index < parts.length; index += 2) {
-    result.push({ number: parts[index], text: (parts[index + 1] || "").trim() });
-  }
-  return result;
-}
+import { ScriptureListenButton } from "./ScriptureListenButton";
+import { ScriptureText } from "./ScriptureText";
 
 export function ScriptureDrawer({
   scripture,
@@ -42,6 +33,7 @@ export function ScriptureDrawer({
   const [passage, setPassage] = useState<ScripturePassage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const passageId = scripture?.passageId || null;
+  const reference = passage?.reference || scripture?.reference || "";
 
   useEffect(() => {
     setPassage(null);
@@ -79,12 +71,8 @@ export function ScriptureDrawer({
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.handle} />
           <View style={styles.headerRow}>
-            <View style={styles.headerCopy}>
-              <Text style={styles.eyebrow}>
-                {(passage?.reference || scripture?.reference || "").toUpperCase()}
-              </Text>
-              <Text style={styles.heading}>A moment in Scripture</Text>
-            </View>
+            <Text style={styles.heading}>{reference}</Text>
+            {passageId ? <ScriptureListenButton passageId={passageId} /> : null}
             <Pressable
               accessibilityLabel="Close Scripture"
               accessibilityRole="button"
@@ -98,17 +86,10 @@ export function ScriptureDrawer({
 
           {passage ? (
             <>
-              <Text style={styles.passage}>
-                {verses(passage.content).map((verse, index) => (
-                  <Text key={`${verse.number ?? "intro"}-${index}`}>
-                    {verse.number ? (
-                      <Text style={styles.verseNumber}>{verse.number} </Text>
-                    ) : null}
-                    {verse.text}
-                    {" "}
-                  </Text>
-                ))}
-              </Text>
+              <ScriptureText
+                content={passage.content}
+                reference={passage.reference || scripture?.reference}
+              />
               <Text style={styles.translation}>{passage.translation}</Text>
               {passage.copyright ? (
                 <Text style={styles.copyright}>{passage.copyright}</Text>
@@ -145,16 +126,13 @@ function createStyles(colors: ColorTokens) {
       gap: 12,
       marginBottom: 24,
     },
-    headerCopy: { flex: 1, minWidth: 0 },
-    eyebrow: {
-      ...typography.labelSm,
-      color: colors.accent,
-      marginBottom: 6,
-    },
     heading: {
+      flex: 1,
       color: colors.title,
       fontFamily: fonts.displayMedium,
-      fontSize: 22,
+      fontSize: 32,
+      letterSpacing: -0.8,
+      lineHeight: 38,
     },
     circle: {
       width: 36,
@@ -167,17 +145,6 @@ function createStyles(colors: ColorTokens) {
       justifyContent: "center",
     },
     state: { paddingVertical: 48, alignItems: "center" },
-    passage: {
-      color: colors.title,
-      fontFamily: fonts.body,
-      fontSize: 17,
-      lineHeight: 28,
-    },
-    verseNumber: {
-      color: colors.accent,
-      fontFamily: fonts.mono,
-      fontSize: 11,
-    },
     translation: {
       ...typography.labelSm,
       color: colors.muted,

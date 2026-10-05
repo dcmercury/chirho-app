@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -9,19 +9,16 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import Svg, { Circle, Defs, RadialGradient, Stop } from "react-native-svg";
-import { fonts } from "../../theme/tokens";
 import { ChiRhoMark } from "../ui/ChiRhoMark";
 
-export const HOME_NAV_FAB_SIZE = 76;
-const LABEL_SPACE = 18;
-const MARK_W = 38;
-const MARK_H = 50;
+export const HOME_NAV_FAB_SIZE = 92;
+const MARK_W = 46;
+const MARK_H = 60;
 const GLOW_COLORS = ["#f97316", "#ffffff"];
-const GLOW_SIZE = 126;
+const GLOW_SIZE = 176;
 const GLOW_BLOOM = (GLOW_SIZE - HOME_NAV_FAB_SIZE) / 2;
 
-export const HOME_NAV_FAB_RESERVE =
-  HOME_NAV_FAB_SIZE + LABEL_SPACE + 16 + GLOW_BLOOM;
+export const HOME_NAV_FAB_RESERVE = HOME_NAV_FAB_SIZE + 16 + GLOW_BLOOM;
 
 type Blob = {
   color: string;
@@ -32,9 +29,9 @@ type Blob = {
 
 // Uneven placement so the mix reads as light, not a concentric ring.
 const BLOBS: Blob[] = [
-  { color: GLOW_COLORS[0], cx: 58, cy: 56, r: 42 },
-  { color: GLOW_COLORS[1], cx: 72, cy: 61, r: 38 },
-  { color: GLOW_COLORS[0], cx: 68, cy: 72, r: 40 },
+  { color: GLOW_COLORS[0], cx: 81, cy: 79, r: 59 },
+  { color: GLOW_COLORS[1], cx: 101, cy: 86, r: 53 },
+  { color: GLOW_COLORS[0], cx: 95, cy: 101, r: 56 },
 ];
 
 function GlowAura() {
@@ -136,9 +133,6 @@ export function HomeNavFab({
           </View>
         </Pressable>
       </View>
-      <Text numberOfLines={1} style={styles.label}>
-        pray
-      </Text>
     </View>
   );
 }
@@ -161,8 +155,12 @@ const styles = StyleSheet.create({
     position: "absolute",
     width: GLOW_SIZE,
     height: GLOW_SIZE,
+    left: (HOME_NAV_FAB_SIZE - GLOW_SIZE) / 2,
+    top: (HOME_NAV_FAB_SIZE - GLOW_SIZE) / 2,
+    zIndex: 0,
   },
   orb: {
+    zIndex: 1,
     width: HOME_NAV_FAB_SIZE,
     height: HOME_NAV_FAB_SIZE,
     borderRadius: HOME_NAV_FAB_SIZE / 2,
@@ -178,14 +176,5 @@ const styles = StyleSheet.create({
     backgroundColor: "#000000",
     alignItems: "center",
     justifyContent: "center",
-  },
-  label: {
-    marginTop: 4,
-    color: "#FFFFFF",
-    fontFamily: fonts.monoMedium,
-    fontSize: 10,
-    letterSpacing: 0.6,
-    textAlign: "center",
-    textTransform: "uppercase",
   },
 });

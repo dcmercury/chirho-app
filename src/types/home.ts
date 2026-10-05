@@ -309,6 +309,14 @@ export interface ScripturePassage {
   fums: { token: string; userId: string } | null;
 }
 
+export type ScriptureSearchMode = "reference" | "topic";
+
+export interface ScriptureSearchHit {
+  passageId: string;
+  reference: string;
+  reason: string;
+}
+
 export interface PendingGroupInvite {
   invitationToken: string;
   groupuuid: string;

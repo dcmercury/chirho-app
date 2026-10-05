@@ -7,6 +7,8 @@ import type {
   ChurchMessagesPage,
   ChurchMessageDetail,
   ScripturePassage,
+  ScriptureSearchHit,
+  ScriptureSearchMode,
   GroupDetail,
   HomeCommunity,
   HomePrayerCard,
@@ -604,6 +606,52 @@ export async function getScripture(
   }>(`/api/mobile/scripture?passage=${encodeURIComponent(passageId)}`, token);
   if (!data.passage) throw new Error("Scripture not found");
   return { ...data.passage, fums: data.fums || null };
+}
+
+export async function searchScripture(
+  token: string,
+  query: string,
+  mode: ScriptureSearchMode,
+): Promise<ScriptureSearchHit[]> {
+  const data = await authenticatedRequest<{ hits?: unknown }>(
+    "/api/mobile/scripture/search",
+    token,
+    {
+      method: "POST",
+      body: JSON.stringify({ query, mode }),
+    },
+  );
+  return normalizeScriptureSearchHits(data.hits);
+}
+
+export async function narrateScripture(
+  token: string,
+  passageId: string,
+): Promise<string> {
+  const data = await authenticatedRequest<{ audioUrl?: string }>(
+    "/api/mobile/scripture/narrate",
+    token,
+    {
+      method: "POST",
+      body: JSON.stringify({ passageId }),
+    },
+  );
+  const audioUrl = optionalString(data.audioUrl)?.trim();
+  if (!audioUrl) throw new Error("Narration could not be prepared.");
+  return audioUrl;
+}
+
+function normalizeScriptureSearchHits(value: unknown): ScriptureSearchHit[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const hit = asRecord(item);
+    if (!hit) return [];
+    const passageId = optionalString(hit.passageId)?.trim() || "";
+    const reference = optionalString(hit.reference)?.trim() || "";
+    const reason = optionalString(hit.reason)?.trim() || "";
+    if (!passageId || !reference) return [];
+    return [{ passageId, reference, reason }];
+  });
 }
 
 export async function getChurchCalendar(
