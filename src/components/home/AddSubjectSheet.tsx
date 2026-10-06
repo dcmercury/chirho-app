@@ -218,6 +218,7 @@ export function AddSubjectSheet({
   const [searchStep, setSearchStep] = useState(false);
   const [returnedFromSearch, setReturnedFromSearch] = useState(false);
   const [scripture, setScripture] = useState<SermonScripture | null>(null);
+  const [topic, setTopic] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible) return;
@@ -225,6 +226,7 @@ export function AddSubjectSheet({
     setSearchStep(false);
     setReturnedFromSearch(false);
     setScripture(null);
+    setTopic(null);
   }, [visible]);
 
   const onSearchStep = (active: boolean) => {
@@ -232,7 +234,8 @@ export function AddSubjectSheet({
     setSearchStep(active);
   };
 
-  const openPassage = (hit: ScriptureSearchHit) => {
+  const openPassage = (hit: ScriptureSearchHit, nextTopic?: string) => {
+    setTopic(nextTopic ?? null);
     setScripture({
       reference: hit.reference,
       passageId: hit.passageId,
@@ -313,6 +316,7 @@ export function AddSubjectSheet({
         />
         <ScriptureDrawer
           scripture={scripture}
+          topic={topic}
           onClose={() => setScripture(null)}
         />
       </KeyboardAvoidingView>

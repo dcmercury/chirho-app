@@ -15,14 +15,17 @@ import { fonts, type as typography, type ColorTokens } from "../../theme/tokens"
 import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
 import { CloseIcon } from "../../features/groups/components/Icons";
 import type { SermonScripture, ScripturePassage } from "../../types/home";
+import { EncourageButton } from "./EncourageButton";
 import { ScriptureListenButton } from "./ScriptureListenButton";
 import { ScriptureText } from "./ScriptureText";
 
 export function ScriptureDrawer({
   scripture,
+  topic,
   onClose,
 }: {
   scripture: SermonScripture | null;
+  topic?: string | null;
   onClose: () => void;
 }) {
   const styles = useThemedStyles(createStyles);
@@ -71,7 +74,17 @@ export function ScriptureDrawer({
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.handle} />
           <View style={styles.headerRow}>
-            <Text style={styles.heading}>{reference}</Text>
+            <View style={styles.headingBlock}>
+              {topic ? <Text style={styles.heading}>{topic}</Text> : null}
+              <Text style={topic ? styles.reference : styles.heading}>{reference}</Text>
+            </View>
+            {passageId ? (
+              <EncourageButton
+                passageId={passageId}
+                topic={topic}
+                ready={Boolean(passage)}
+              />
+            ) : null}
             {passageId ? <ScriptureListenButton passageId={passageId} /> : null}
             <Pressable
               accessibilityLabel="Close Scripture"
@@ -126,13 +139,19 @@ function createStyles(colors: ColorTokens) {
       gap: 12,
       marginBottom: 24,
     },
+    headingBlock: { flex: 1, gap: 4 },
     heading: {
-      flex: 1,
       color: colors.title,
       fontFamily: fonts.displayMedium,
       fontSize: 32,
       letterSpacing: -0.8,
       lineHeight: 38,
+    },
+    reference: {
+      color: colors.mutedStrong,
+      fontFamily: fonts.displayMedium,
+      fontSize: 16,
+      lineHeight: 22,
     },
     circle: {
       width: 36,

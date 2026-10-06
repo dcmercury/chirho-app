@@ -26,8 +26,75 @@ import { fonts, type as typography, type ColorTokens } from "../../theme/tokens"
 import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
 import { Stagger } from "../../features/groups/components/Stagger";
 import { CloseIcon } from "../../features/groups/components/Icons";
+import { Pill, useProfileStyles } from "./profile-drawer/ProfileControls";
 import { ScriptureListenButton } from "./ScriptureListenButton";
 import { ScriptureText } from "./ScriptureText";
+
+const TOPIC_GROUPS = [
+  {
+    title: "Carrying",
+    labels: ["Anxiety", "Grief", "Shame", "Loneliness", "Anger"],
+  },
+  {
+    title: "Looking for",
+    labels: ["Grace", "Peace", "Hope", "Courage", "Gratitude"],
+  },
+] as const;
+
+function topicQuery(label: string): string {
+  return `verses about ${label.toLowerCase()}`;
+}
+
+function selectedTopic(query: string): string | null {
+  const trimmed = query.trim().toLowerCase();
+  for (const group of TOPIC_GROUPS) {
+    const match = group.labels.find((label) => topicQuery(label) === trimmed);
+    if (match) return match;
+  }
+  return null;
+}
+
+function topicTitle(query: string): string {
+  const chip = selectedTopic(query);
+  if (chip) return chip;
+  const trimmed = query.trim().replace(/[.?]+$/, "");
+  const about = trimmed.match(/^verses about\s+(.+)$/i);
+  const raw = (about?.[1] ?? trimmed).trim();
+  if (!raw) return "I want to search for";
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+function TopicChips({
+  disabled,
+  onSelect,
+  selected,
+}: {
+  disabled: boolean;
+  onSelect: (label: string) => void;
+  selected: string | null;
+}) {
+  const styles = useProfileStyles();
+  return (
+    <View style={{ gap: 16 }}>
+      {TOPIC_GROUPS.map((group) => (
+        <View key={group.title} style={{ gap: 7 }}>
+          <Text style={styles.sectionTitle}>{group.title}</Text>
+          <View style={styles.pills}>
+            {group.labels.map((label) => (
+              <Pill
+                key={label}
+                active={selected === label}
+                disabled={disabled}
+                label={label}
+                onPress={() => onSelect(label)}
+              />
+            ))}
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
 
 const modes: { value: ScriptureSearchMode; label: string }[] = [
   { value: "reference", label: "Reference" },
@@ -217,7 +284,7 @@ export function ScriptureSearchChoices({
 }: {
   visible: boolean;
   animated?: boolean;
-  onOpenPassage: (hit: ScriptureSearchHit) => void;
+  onOpenPassage: (hit: ScriptureSearchHit, topic?: string) => void;
   onSearchingChange?: (searching: boolean) => void;
   onStepChange?: (active: boolean) => void;
 }) {
@@ -263,9 +330,9 @@ export function ScriptureSearchChoices({
     setError(null);
   };
 
-  const submit = async () => {
+  const submit = async (raw?: string) => {
     if (!mode || busy) return;
-    const trimmed = query.trim();
+    const trimmed = (raw ?? query).trim();
     if (!trimmed) {
       setHits([]);
       setError(
@@ -305,8 +372,22 @@ export function ScriptureSearchChoices({
     }
   };
 
+  const chooseTopic = (label: string) => {
+    if (selectedTopic(query) === label) {
+      setQuery("");
+      setError(null);
+      return;
+    }
+    const next = topicQuery(label);
+    setQuery(next);
+    void submit(next);
+  };
+
+  const activeTopic = mode === "topic" && hits.length > 0 ? topicTitle(query) : null;
   const eyebrow = <Text style={styles.eyebrow}>SCRIPTURE SEARCH</Text>;
-  const title = <Text style={styles.title}>I want to search for</Text>;
+  const title = (
+    <Text style={styles.title}>{activeTopic ?? "I want to search for"}</Text>
+  );
 
   const motion = FadeInDown.duration(420)
     .easing(Easing.bezier(0.22, 1, 0.36, 1))
@@ -351,41 +432,50 @@ export function ScriptureSearchChoices({
               ) : null}
             </View>
           ) : hits.length === 0 ? (
-            <View style={styles.fieldWrap}>
-              <TextInput
-                accessibilityLabel={
-                  mode === "reference" ? "Scripture reference" : "Scripture topic"
-                }
-                editable={!busy}
-                onChangeText={setQuery}
-                onSubmitEditing={() => {
-                  void submit();
-                }}
-                placeholder={
-                  mode === "reference" ? "John 3:16" : "verses about anxiety"
-                }
-                placeholderTextColor={colors.muted}
-                returnKeyType="search"
-                style={styles.field}
-                value={query}
-              />
-              <Pressable
-                accessibilityLabel="Search Scripture"
-                accessibilityRole="button"
-                disabled={busy}
-                hitSlop={6}
-                onPress={() => {
-                  void submit();
-                }}
-                style={({ pressed }) => [
-                  styles.fieldSearch,
-                  pressed && styles.pressed,
-                  busy && styles.disabled,
-                ]}
-              >
-                <TopicIcon color={colors.accent} size={20} />
-              </Pressable>
-            </View>
+            <>
+              <View style={styles.fieldWrap}>
+                <TextInput
+                  accessibilityLabel={
+                    mode === "reference" ? "Scripture reference" : "Scripture topic"
+                  }
+                  editable={!busy}
+                  onChangeText={setQuery}
+                  onSubmitEditing={() => {
+                    void submit();
+                  }}
+                  placeholder={
+                    mode === "reference" ? "John 3:16" : "verses about anxiety"
+                  }
+                  placeholderTextColor={colors.muted}
+                  returnKeyType="search"
+                  style={styles.field}
+                  value={query}
+                />
+                <Pressable
+                  accessibilityLabel="Search Scripture"
+                  accessibilityRole="button"
+                  disabled={busy}
+                  hitSlop={6}
+                  onPress={() => {
+                    void submit();
+                  }}
+                  style={({ pressed }) => [
+                    styles.fieldSearch,
+                    pressed && styles.pressed,
+                    busy && styles.disabled,
+                  ]}
+                >
+                  <TopicIcon color={colors.accent} size={20} />
+                </Pressable>
+              </View>
+              {mode === "topic" ? (
+                <TopicChips
+                  disabled={busy}
+                  onSelect={chooseTopic}
+                  selected={selectedTopic(query)}
+                />
+              ) : null}
+            </>
           ) : (
             <View style={styles.hits}>
               {hits.map((hit) => (
@@ -393,7 +483,7 @@ export function ScriptureSearchChoices({
                   key={hit.passageId}
                   accessibilityLabel={hit.reference}
                   accessibilityRole="button"
-                  onPress={() => onOpenPassage(hit)}
+                  onPress={() => onOpenPassage(hit, activeTopic ?? undefined)}
                   style={({ pressed }) => [styles.hit, pressed && styles.pressed]}
                 >
                   <Text style={styles.hitReference}>{hit.reference}</Text>

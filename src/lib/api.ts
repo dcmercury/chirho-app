@@ -624,6 +624,28 @@ export async function searchScripture(
   return normalizeScriptureSearchHits(data.hits);
 }
 
+export async function encourageScripture(
+  token: string,
+  passageId: string,
+  topic?: string | null,
+): Promise<string> {
+  const trimmedTopic = topic?.trim();
+  const data = await authenticatedRequest<{ text?: string }>(
+    "/api/mobile/scripture/encourage",
+    token,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        passageId,
+        ...(trimmedTopic ? { topic: trimmedTopic } : {}),
+      }),
+    },
+  );
+  const text = optionalString(data.text)?.trim();
+  if (!text) throw new Error("Encouragement could not be prepared.");
+  return text;
+}
+
 export async function narrateScripture(
   token: string,
   passageId: string,
