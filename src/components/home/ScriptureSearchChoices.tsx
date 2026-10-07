@@ -54,16 +54,6 @@ function selectedTopic(query: string): string | null {
   return null;
 }
 
-function topicTitle(query: string): string {
-  const chip = selectedTopic(query);
-  if (chip) return chip;
-  const trimmed = query.trim().replace(/[.?]+$/, "");
-  const about = trimmed.match(/^verses about\s+(.+)$/i);
-  const raw = (about?.[1] ?? trimmed).trim();
-  if (!raw) return "I want to search for";
-  return raw.charAt(0).toUpperCase() + raw.slice(1);
-}
-
 function TopicChips({
   disabled,
   onSelect,
@@ -297,6 +287,7 @@ export function ScriptureSearchChoices({
   const [passage, setPassage] = useState<ScripturePassage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [topicLabel, setTopicLabel] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible) return;
@@ -306,6 +297,7 @@ export function ScriptureSearchChoices({
     setPassage(null);
     setError(null);
     setBusy(false);
+    setTopicLabel(null);
     onSearchingChange?.(false);
     onStepChange?.(false);
   }, [onSearchingChange, onStepChange, visible]);
@@ -319,6 +311,7 @@ export function ScriptureSearchChoices({
     setHits([]);
     setPassage(null);
     setError(null);
+    setTopicLabel(null);
   };
 
   const cancelSearch = () => {
@@ -328,6 +321,7 @@ export function ScriptureSearchChoices({
     setHits([]);
     setPassage(null);
     setError(null);
+    setTopicLabel(null);
   };
 
   const submit = async (raw?: string) => {
@@ -346,22 +340,24 @@ export function ScriptureSearchChoices({
     setError(null);
     setHits([]);
     setPassage(null);
+    setTopicLabel(null);
     onSearchingChange?.(true);
     try {
       const token = await getToken();
       if (!token) throw new Error("Your session expired. Please sign in again.");
       const next = await searchScripture(token, trimmed, mode);
-      if (next.length === 0) {
+      if (next.hits.length === 0) {
         setError("No passages found for that search.");
         return;
       }
-      if (mode === "reference" && next.length === 1) {
-        const loaded = await getScripture(token, next[0].passageId);
+      if (mode === "reference" && next.hits.length === 1) {
+        const loaded = await getScripture(token, next.hits[0].passageId);
         if (loaded.fums) void reportScriptureView(loaded.fums);
         setPassage(loaded);
         return;
       }
-      setHits(next);
+      if (mode === "topic") setTopicLabel(next.title ?? selectedTopic(trimmed));
+      setHits(next.hits);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Scripture search failed.",
@@ -383,7 +379,7 @@ export function ScriptureSearchChoices({
     void submit(next);
   };
 
-  const activeTopic = mode === "topic" && hits.length > 0 ? topicTitle(query) : null;
+  const activeTopic = mode === "topic" && hits.length > 0 ? topicLabel : null;
   const eyebrow = <Text style={styles.eyebrow}>SCRIPTURE SEARCH</Text>;
   const title = (
     <Text style={styles.title}>{activeTopic ?? "I want to search for"}</Text>

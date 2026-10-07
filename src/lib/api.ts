@@ -612,8 +612,8 @@ export async function searchScripture(
   token: string,
   query: string,
   mode: ScriptureSearchMode,
-): Promise<ScriptureSearchHit[]> {
-  const data = await authenticatedRequest<{ hits?: unknown }>(
+): Promise<{ hits: ScriptureSearchHit[]; title: string | null }> {
+  const data = await authenticatedRequest<{ hits?: unknown; title?: unknown }>(
     "/api/mobile/scripture/search",
     token,
     {
@@ -621,7 +621,8 @@ export async function searchScripture(
       body: JSON.stringify({ query, mode }),
     },
   );
-  return normalizeScriptureSearchHits(data.hits);
+  const title = optionalString(data.title)?.trim() || null;
+  return { hits: normalizeScriptureSearchHits(data.hits), title };
 }
 
 export async function encourageScripture(
